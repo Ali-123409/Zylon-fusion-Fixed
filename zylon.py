@@ -145,6 +145,7 @@ from core.advanced_web import AdvancedWebAttacks
 from core.bounty_workflow import BugBountyWorkflow
 from core.v2_recon import V2ReconEngine
 from core.v2_vuln import V2VulnEngine
+from core.origin_ip import OriginIPEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -266,6 +267,13 @@ class ZylonUI:
             ("47", "Email Enumeration"),
             ("48", "Broken Link Hijacker"),
             ("49", "Tech Version + CVE Lookup"),
+            # Origin IP Finder
+            ("50", "Origin IP Finder (Quick - Top Techniques)"),
+            ("51", "Origin IP Finder (Full - All 22 Techniques)"),
+            ("52", "CDN/WAF Detection & Fingerprinting"),
+            ("53", "DNS History + Cert Transparency IP Hunt"),
+            ("54", "Subdomain Resolution + CDN IP Filter"),
+            ("55", "Direct IP Verification (Host Header)"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
@@ -343,6 +351,9 @@ class ZylonFusion:
         # V2.0 Engines
         self.v2_recon = V2ReconEngine(self.session)
         self.v2_vuln = V2VulnEngine(self.session)
+        
+        # Origin IP Finder Engine
+        self.origin_ip = OriginIPEngine(self.session)
     
     def set_target(self, target):
         """Validate and set target"""
@@ -419,6 +430,13 @@ class ZylonFusion:
             '47': self._scan_email_enum,
             '48': self._scan_broken_links,
             '49': self._scan_tech_cve,
+            # Origin IP Finder
+            '50': self._scan_origin_ip_quick,
+            '51': self._scan_origin_ip_full,
+            '52': self._scan_cdn_detection,
+            '53': self._scan_dns_cert_hunt,
+            '54': self._scan_subdomain_origin,
+            '55': self._scan_ip_verify,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -1274,6 +1292,353 @@ class ZylonFusion:
             sev = f.get('severity', 'Medium')
             console.print(f"  [{'red' if sev == 'Critical' else 'yellow'}]*[/{'red' if sev == 'Critical' else 'yellow'}] {f.get('type', '')}: {f.get('note', '')}")
     
+    # ========================================================================
+    # ORIGIN IP FINDER SCAN IMPLEMENTATIONS
+    # ========================================================================
+    
+    def _scan_origin_ip_quick(self):
+        """Origin IP Finder - Quick scan with top techniques"""
+        console.print(f"\n[bold magenta][*] Origin IP Finder (Quick) on {self.target}[/bold magenta]")
+        console.print("[dim]Running top 7 techniques: DNS Mining, Subdomain Resolve, Cert Transparency, DNS History, Error Page Leak, CNAME Chain, CDN Detection[/dim]")
+        
+        with console.status("[bold magenta]Hunting for origin IP behind CDN/WAF...[/bold magenta]"):
+            result = self.origin_ip.quick_find(self.target)
+        
+        self.results['findings']['origin_ip'] = result
+        
+        # Display CDN detection
+        cdn = result.get('cdn_detection', {})
+        if cdn.get('behind_cdn'):
+            console.print(f"\n[bold yellow][*] CDN Detected: {cdn.get('cdn_provider', 'Unknown')}[/bold yellow]")
+            for evidence in cdn.get('evidence', []):
+                console.print(f"  [yellow]*[/yellow] {evidence}")
+        else:
+            console.print("\n[bold green][+] Target does not appear to be behind a CDN[/bold green]")
+        
+        # Display found origin IPs
+        origin_ips = result.get('origin_ips', [])
+        if origin_ips:
+            ip_table = Table(
+                title=f"[bold]Origin IP Candidates: {len(origin_ips)}[/bold]",
+                box=box.HEAVY, border_style="bold magenta"
+            )
+            ip_table.add_column("IP", style="bold red")
+            ip_table.add_column("Confidence", style="yellow")
+            ip_table.add_column("Sources", style="cyan")
+            ip_table.add_column("Verified", style="green")
+            
+            for candidate in origin_ips[:20]:
+                confidence = candidate.get('confidence', 'low')
+                conf_color = "green" if confidence == 'high' else "yellow" if confidence == 'medium' else "red"
+                sources = ', '.join(candidate.get('sources', [])[:3])
+                verified = candidate.get('verification', {}).get('verified', False)
+                ver_str = "[green]YES[/green]" if verified else "[dim]Not tested[/dim]"
+                ip_table.add_row(
+                    candidate.get('ip', ''),
+                    f"[{conf_color}]{confidence}[/{conf_color}]",
+                    sources[:60],
+                    ver_str
+                )
+            console.print(ip_table)
+        else:
+            console.print("[bold yellow][!] No non-CDN origin IPs found[/bold yellow]")
+    
+    def _scan_origin_ip_full(self):
+        """Origin IP Finder - Full scan with all 22 techniques"""
+        console.print(f"\n[bold magenta][*] Origin IP Finder (Full - 22 Techniques) on {self.target}[/bold magenta]")
+        console.print("[dim]Running all 22 advanced origin IP discovery techniques...[/dim]")
+        
+        with console.status("[bold magenta]Running all 22 origin IP techniques... (this may take a minute)[/bold magenta]"):
+            result = self.origin_ip.find_origin_ip(self.target)
+        
+        self.results['findings']['origin_ip'] = result
+        
+        # Display CDN detection
+        cdn = result.get('cdn_detection', {})
+        if cdn.get('behind_cdn'):
+            console.print(f"\n[bold yellow][*] CDN Detected: {cdn.get('cdn_provider', 'Unknown')}[/bold yellow]")
+            for evidence in cdn.get('evidence', []):
+                console.print(f"  [yellow]*[/yellow] {evidence}")
+        else:
+            console.print("\n[bold green][+] Target does not appear to be behind a CDN[/bold green]")
+        
+        # Display technique results summary
+        techniques = result.get('all_techniques', {})
+        tech_table = Table(
+            title="[bold]Technique Results Summary[/bold]",
+            box=box.ROUNDED, border_style="cyan"
+        )
+        tech_table.add_column("Technique", style="yellow")
+        tech_table.add_column("Status", style="green")
+        tech_table.add_column("Findings", style="cyan")
+        
+        technique_names = {
+            'dns_mining': 'DNS Record Mining',
+            'cname_chain': 'CNAME Chain Following',
+            'multi_resolver': 'Multi-Resolver Validation',
+            'spf_dkim_dmarc': 'SPF/DKIM/DMARC Extract',
+            'zone_transfer': 'DNS Zone Transfer (AXFR)',
+            'dns_history': 'DNS Historical Records',
+            'cert_transparency': 'Certificate Transparency',
+            'subdomain_resolution': 'Subdomain Resolution',
+            'web_archive': 'Web Archive History',
+            'shodan': 'Shodan Search',
+            'censys': 'Censys Search',
+            'favicon_hash': 'Favicon Hash',
+            'email_headers': 'Email Header IP Extract',
+            'error_page_leak': 'Error Page IP Leak',
+            'server_status': 'Server Status Mining',
+            'sitemap_parse': 'Sitemap IP Parsing',
+            'resource_leak': 'Resource IP Leak',
+            'cloud_metadata': 'Cloud Metadata Detection',
+            'asn_prefix': 'ASN/Prefix Lookup',
+        }
+        
+        for tech_key, tech_name in technique_names.items():
+            tech_data = techniques.get(tech_key, {})
+            if isinstance(tech_data, dict) and 'error' in tech_data:
+                status = "[red]Failed[/red]"
+                findings = tech_data['error']
+            elif isinstance(tech_data, list):
+                status = "[green]Complete[/green]"
+                findings = f"{len(tech_data)} results"
+            elif isinstance(tech_data, dict):
+                status = "[green]Complete[/green]"
+                ip_count = len(tech_data.get('ips', tech_data.get('found_ips', tech_data.get('matching_hosts', []))))
+                findings = f"{ip_count} IPs found" if ip_count > 0 else "No IPs found"
+            else:
+                status = "[dim]N/A[/dim]"
+                findings = "-"
+            tech_table.add_row(tech_name, status, str(findings)[:50])
+        
+        console.print(tech_table)
+        
+        # Display CDN IPs found
+        cdn_ips = result.get('cdn_ips', [])
+        if cdn_ips:
+            console.print(f"\n[bold yellow]CDN/Proxy IPs Found: {len(cdn_ips)}[/bold yellow]")
+            for cdn_ip in cdn_ips[:5]:
+                console.print(f"  [yellow]*[/yellow] {cdn_ip.get('ip', '')} -> {cdn_ip.get('cdn_provider', 'Unknown')}")
+        
+        # Display verified origin IPs
+        origin_ips = result.get('origin_ips', [])
+        if origin_ips:
+            ip_table = Table(
+                title=f"[bold red]VERIFIED ORIGIN IP CANDIDATES: {len(origin_ips)}[/bold red]",
+                box=box.HEAVY, border_style="bold red"
+            )
+            ip_table.add_column("IP", style="bold red")
+            ip_table.add_column("Confidence", style="yellow")
+            ip_table.add_column("Sources", style="cyan")
+            ip_table.add_column("Source Count", style="green")
+            ip_table.add_column("Verified", style="bold green")
+            ip_table.add_column("Match Score", style="magenta")
+            
+            for candidate in origin_ips[:20]:
+                confidence = candidate.get('confidence', 'low')
+                conf_color = "green" if confidence == 'high' else "yellow" if confidence == 'medium' else "red"
+                sources = ', '.join(candidate.get('sources', [])[:4])
+                verified = candidate.get('verification', {}).get('verified', False)
+                ver_str = "[bold green]VERIFIED[/bold green]" if verified else "[dim]Unverified[/dim]"
+                match_score = candidate.get('verification', {}).get('response_similarity', 0)
+                score_str = f"{match_score}%" if match_score else "N/A"
+                ip_table.add_row(
+                    candidate.get('ip', ''),
+                    f"[{conf_color}]{confidence}[/{conf_color}]",
+                    sources[:60],
+                    str(candidate.get('source_count', 0)),
+                    ver_str,
+                    score_str
+                )
+            console.print(ip_table)
+        else:
+            console.print("[bold yellow][!] No non-CDN origin IPs discovered[/bold yellow]")
+        
+        # Display header fingerprint matches
+        fp = result.get('header_fingerprint', {})
+        if fp.get('ip_matches'):
+            console.print(f"\n[bold cyan]Header Fingerprint Matches: {len(fp['ip_matches'])}[/bold cyan]")
+            for match in fp['ip_matches']:
+                console.print(f"  [cyan]*[/cyan] IP: {match.get('ip', '')} | Score: {match.get('match_score', 0)} | Details: {', '.join(match.get('details', []))}")
+        
+        # Display all candidate IPs
+        all_candidates = result.get('all_candidate_ips', [])
+        if all_candidates and len(all_candidates) > len(origin_ips):
+            console.print(f"\n[bold dim]All Non-CDN IP Candidates: {len(all_candidates)} (showing top 10)[/bold dim]")
+            for candidate in all_candidates[:10]:
+                console.print(f"  [dim]*[/dim] {candidate.get('ip', '')} | {candidate.get('confidence', '')} | {len(candidate.get('sources', []))} sources")
+    
+    def _scan_cdn_detection(self):
+        """CDN/WAF Detection & Fingerprinting"""
+        console.print(f"\n[bold yellow][*] CDN/WAF Detection on {self.target}[/bold yellow]")
+        
+        with console.status("[bold yellow]Detecting CDN/WAF protection...[/bold yellow]"):
+            result = self.origin_ip.detect_cdn(self.target)
+        
+        self.results['findings']['cdn_detection'] = result
+        
+        cdn_table = Table(
+            title="CDN/WAF Detection Results",
+            box=box.ROUNDED, border_style="yellow"
+        )
+        cdn_table.add_column("Property", style="yellow")
+        cdn_table.add_column("Value", style="cyan")
+        
+        cdn_table.add_row("Behind CDN", "[red]YES[/red]" if result.get('behind_cdn') else "[green]NO[/green]")
+        cdn_table.add_row("CDN Provider", result.get('cdn_provider', 'None detected'))
+        cdn_table.add_row("Current IP", str(result.get('current_ip', 'Unknown')))
+        
+        console.print(cdn_table)
+        
+        if result.get('evidence'):
+            console.print("\n[bold yellow]Evidence:[/bold yellow]")
+            for evidence in result['evidence']:
+                console.print(f"  [yellow]*[/yellow] {evidence}")
+        
+        if not result.get('behind_cdn'):
+            console.print("\n[bold green][+] Target is NOT behind a CDN - the resolved IP is likely the origin[/bold green]")
+        else:
+            console.print("\n[bold red][!] Target IS behind CDN - use scan 50/51 to find the real origin IP[/bold red]")
+    
+    def _scan_dns_cert_hunt(self):
+        """DNS History + Certificate Transparency IP Hunt"""
+        console.print(f"\n[bold magenta][*] DNS History + Cert Transparency Hunt on {self.target}[/bold magenta]")
+        
+        with console.status("[bold magenta]Querying DNS history and certificate transparency logs...[/bold magenta]"):
+            dns_history = self.origin_ip.dns_history_lookup(self.target)
+            cert_results = self.origin_ip.cert_transparency_search(self.target)
+        
+        self.results['findings']['dns_cert_hunt'] = {
+            'dns_history': dns_history,
+            'cert_transparency': cert_results
+        }
+        
+        # DNS History results
+        if dns_history:
+            h_table = Table(
+                title="DNS History - Previous IPs",
+                box=box.ROUNDED, border_style="magenta"
+            )
+            h_table.add_column("IP", style="red")
+            h_table.add_column("Source", style="cyan")
+            h_table.add_column("Details", style="yellow")
+            for entry in dns_history[:20]:
+                ip = entry.get('ip', '')
+                source = entry.get('source', '')
+                details = entry.get('first_seen', '') or entry.get('hostname', '')
+                cdn = self.origin_ip._is_cdn_ip(ip)
+                ip_display = f"{ip} [dim](CDN: {cdn})[/dim]" if cdn else f"[bold red]{ip}[/bold red]"
+                h_table.add_row(ip_display, source, str(details)[:40])
+            console.print(h_table)
+        else:
+            console.print("[bold yellow][!] No historical DNS records found[/bold yellow]")
+        
+        # Certificate Transparency results
+        non_cdn_cert = [r for r in cert_results if not self.origin_ip._is_cdn_ip(r.get('ip', ''))]
+        if non_cdn_cert:
+            c_table = Table(
+                title="Cert Transparency - Non-CDN IPs",
+                box=box.ROUNDED, border_style="magenta"
+            )
+            c_table.add_column("IP", style="red")
+            c_table.add_column("Hostname", style="cyan")
+            c_table.add_column("Source", style="yellow")
+            for entry in non_cdn_cert[:20]:
+                c_table.add_row(
+                    entry.get('ip', ''),
+                    entry.get('hostname', ''),
+                    entry.get('source', '')
+                )
+            console.print(c_table)
+        else:
+            console.print("[bold yellow][!] No non-CDN IPs found via certificate transparency[/bold yellow]")
+    
+    def _scan_subdomain_origin(self):
+        """Subdomain Resolution + CDN IP Filtering"""
+        console.print(f"\n[bold magenta][*] Subdomain Origin IP Hunt on {self.target}[/bold magenta]")
+        
+        with console.status("[bold magenta]Resolving subdomains and filtering CDN IPs...[/bold magenta]"):
+            result = self.origin_ip.subdomain_resolution(self.target)
+        
+        self.results['findings']['subdomain_origin'] = result
+        
+        console.print(f"\n[bold cyan]Total subdomains discovered: {result.get('total_subdomains', 0)}[/bold cyan]")
+        
+        # Display non-CDN IPs (likely origin)
+        non_cdn = result.get('non_cdn_ips', [])
+        if non_cdn:
+            s_table = Table(
+                title=f"Non-CDN Origin IP Candidates: {len(non_cdn)}",
+                box=box.HEAVY, border_style="bold magenta"
+            )
+            s_table.add_column("Subdomain", style="cyan")
+            s_table.add_column("IP", style="bold red")
+            for entry in non_cdn[:30]:
+                s_table.add_row(entry.get('subdomain', ''), entry.get('ip', ''))
+            console.print(s_table)
+        else:
+            console.print("[bold yellow][!] All resolved subdomains point to CDN IPs[/bold yellow]")
+    
+    def _scan_ip_verify(self):
+        """Direct IP Verification with Host Header"""
+        console.print(f"\n[bold magenta][*] Direct IP Verification on {self.target}[/bold magenta]")
+        
+        # First, get any known non-CDN IPs
+        with console.status("[bold magenta]Quick scanning for candidate IPs first...[/bold magenta]"):
+            quick = self.origin_ip.quick_find(self.target)
+        
+        candidates = quick.get('origin_ips', [])
+        if not candidates:
+            console.print("[bold yellow][!] No candidate IPs found to verify. Run scan 50 first.[/bold yellow]")
+            return
+        
+        # Verify top candidates
+        verified_results = []
+        for candidate in candidates[:10]:
+            ip = candidate.get('ip', '')
+            if not ip:
+                continue
+            console.print(f"  [cyan]*[/cyan] Verifying {ip}...")
+            verification = self.origin_ip.verify_origin_ip(self.target, ip)
+            verified_results.append(verification)
+        
+        self.results['findings']['ip_verification'] = verified_results
+        
+        # Display results
+        v_table = Table(
+            title="IP Verification Results",
+            box=box.ROUNDED, border_style="magenta"
+        )
+        v_table.add_column("IP", style="bold red")
+        v_table.add_column("Verified", style="bold green")
+        v_table.add_column("Match Score", style="yellow")
+        v_table.add_column("Methods", style="cyan")
+        v_table.add_column("Evidence", style="dim")
+        
+        for v in verified_results:
+            verified = v.get('verified', False)
+            ver_str = "[bold green]YES[/bold green]" if verified else "[red]NO[/red]"
+            score = v.get('response_similarity', 0)
+            methods = ', '.join(v.get('methods', []))
+            evidence = '; '.join(v.get('evidence', []))[:60]
+            v_table.add_row(
+                v.get('ip', ''),
+                ver_str,
+                f"{score}%",
+                methods,
+                evidence
+            )
+        
+        console.print(v_table)
+        
+        verified = [v for v in verified_results if v.get('verified')]
+        if verified:
+            console.print(f"\n[bold green][+] {len(verified)} VERIFIED ORIGIN IP(S) FOUND![/bold green]")
+            for v in verified:
+                console.print(f"  [bold green]*[/bold green] {v.get('ip', '')} (Match: {v.get('response_similarity', 0)}%)")
+        else:
+            console.print("[bold yellow][!] No IPs could be verified as origin[/bold yellow]")
+    
     def _scan_bounty_recon(self):
         """Bug Bounty Full Recon Pipeline - All recon modules"""
         console.print(f"\n[bold yellow][*] BUG BOUNTY RECON PIPELINE on {self.target}[/bold yellow]")
@@ -1646,6 +2011,8 @@ class ZylonFusion:
         self._scan_email_enum()
         self._scan_broken_links()
         self._scan_tech_cve()
+        # Origin IP Finder
+        self._scan_origin_ip_quick()
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")

@@ -651,3 +651,65 @@ NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 # ============================================================================
 
 BROKEN_LINK_CODES = [404, 410, 500, 502, 503]
+
+# ============================================================================
+# ORIGIN IP FINDER - CDN IP RANGES (for filtering CDN IPs from results)
+# ============================================================================
+
+CDN_IP_RANGES = {
+    'Cloudflare': [
+        '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22',
+        '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18',
+        '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22',
+        '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+        '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+    ],
+    'Akamai': [
+        '23.0.0.0/12', '23.32.0.0/11', '23.64.0.0/14',
+        '23.72.0.0/13', '72.246.0.0/15', '95.100.0.0/14',
+        '184.24.0.0/13', '184.84.0.0/14',
+    ],
+    'AWS CloudFront': [
+        '13.224.0.0/14', '13.249.0.0/16', '18.154.0.0/15',
+        '18.64.0.0/14', '52.46.0.0/17', '54.192.0.0/16',
+        '54.230.0.0/16', '99.84.0.0/16', '204.246.160.0/19',
+    ],
+    'Sucuri': [
+        '192.124.249.0/24', '192.88.134.0/23',
+    ],
+    'Incapsula': [
+        '199.83.128.0/21', '198.177.120.0/21',
+        '45.60.0.0/18', '45.60.64.0/18',
+    ],
+    'Fastly': [
+        '23.235.32.0/20', '151.101.0.0/16', '199.27.72.0/21',
+        '199.232.0.0/16', '104.156.80.0/20',
+    ],
+}
+
+# Public DNS resolvers for multi-resolver cross-validation
+PUBLIC_DNS_RESOLVERS = [
+    '8.8.8.8',       # Google
+    '8.8.4.4',       # Google
+    '1.1.1.1',       # Cloudflare
+    '1.0.0.1',       # Cloudflare
+    '9.9.9.9',       # Quad9
+    '208.67.222.222', # OpenDNS
+    '208.67.220.220', # OpenDNS
+]
+
+# Paths that may trigger error pages leaking internal IPs
+ERROR_TRIGGER_PATHS = [
+    '/.%2e/.', '/..%252f', '/..;/', '/..%c0%af',
+    '/cgi-bin/', '/.env', '/debug', '/trace',
+    '/status', '/health', '/metrics', '/info',
+    '/phpinfo.php', '/server-status', '/server-info',
+    '/.git/config', '/.svn/entries', '/.DS_Store',
+]
+
+# Common subdomains to check for CNAME/origin leaks
+ORIGIN_CHECK_SUBDOMAINS = [
+    'www', 'mail', 'ftp', 'admin', 'webmail', 'dev', 'staging', 'api',
+    'app', 'portal', 'test', 'old', 'beta', 'blog', 'shop', 'cdn',
+    'ns1', 'ns2', 'mx', 'smtp', 'pop', 'imap', 'vpn', 'remote',
+]
