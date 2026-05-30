@@ -175,6 +175,8 @@ class V2ReconEngine:
         def check_link(link):
             try:
                 r = self.session.head(link, timeout=8, allow_redirects=True)
+                if r.status_code in [405, 501, 503]:
+                    r = self.session.get(link, timeout=8, allow_redirects=True)
                 return (link, r.status_code, r.headers.get('server', ''))
             except requests.exceptions.ConnectionError:
                 return (link, 0, 'connection_failed')
@@ -197,10 +199,19 @@ class V2ReconEngine:
                     # Check if domain is available for registration
                     try:
                         domain = urlparse(link).netloc
-                        socket.gethostbyname(domain)
-                    except socket.gaierror:
-                        broken_info['hijackable'] = True
-                        results['hijackable'].append(broken_info)
+                        old_timeout = socket.getdefaulttimeout()
+                        socket.setdefaulttimeout(5)
+                        try:
+                            socket.gethostbyname(domain)
+                        except socket.gaierror:
+                            broken_info['hijackable'] = True
+                            results['hijackable'].append(broken_info)
+                        except socket.timeout:
+                            pass  # DNS timeout ≠ available
+                        finally:
+                            socket.setdefaulttimeout(old_timeout)
+                    except Exception:
+                        pass
 
                     results['broken_links'].append(broken_info)
 

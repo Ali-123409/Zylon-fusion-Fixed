@@ -8,7 +8,9 @@ import re
 import json
 import socket
 import ssl
+import random
 import requests
+import dns.resolver
 from urllib.parse import urlparse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,7 +19,12 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, DEFAULT_PORTS,
     QUICK_PORTS, MAX_THREADS
 )
-import random
+
+# DNS resolver compatibility (dnspython < 2.0 uses query, >= 2.0 uses resolve)
+try:
+    _dns_resolve = dns.resolver.resolve
+except AttributeError:
+    _dns_resolve = dns.resolver.query
 
 
 class NetworkEngine:
@@ -53,7 +60,7 @@ class NetworkEngine:
 
         for rtype in record_types:
             try:
-                answers = dns.resolver.resolve(domain, rtype)
+                answers = _dns_resolve(domain, rtype)
                 records[rtype] = [str(rdata) for rdata in answers]
             except dns.resolver.NoAnswer:
                 pass
@@ -65,7 +72,7 @@ class NetworkEngine:
         # Additional checks
         try:
             # DMARC
-            dmarc = dns.resolver.resolve(f'_dmarc.{domain}', 'TXT')
+            dmarc = _dns_resolve(f'_dmarc.{domain}', 'TXT')
             records['DMARC'] = [str(rdata) for rdata in dmarc]
         except Exception:
             pass
@@ -155,14 +162,14 @@ class NetworkEngine:
 
             # Send HTTP request for web ports
             if port in [80, 8080, 8443, 8888, 9090]:
-                sock.send(b"HEAD / HTTP/1.0\r\nHost: {}\r\n\r\n".format(host.encode()))
+                sock.send(f"HEAD / HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
             elif port in [443]:
                 # SSL banner grab
                 context = ssl.create_default_context()
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
                 ssock = context.wrap_socket(sock, server_hostname=host)
-                ssock.send(b"HEAD / HTTP/1.0\r\nHost: {}\r\n\r\n".format(host.encode()))
+                ssock.send(f"HEAD / HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
                 banner = ssock.recv(1024).decode('utf-8', errors='ignore').strip()
                 ssock.close()
                 return banner[:200]
@@ -220,7 +227,7 @@ class NetworkEngine:
         try:
             context = ssl.create_default_context()
             context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+            context.verify_mode = ssl.CERT_REQUIRED
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(DEFAULT_TIMEOUT)
@@ -228,7 +235,23 @@ class NetworkEngine:
             conn.connect((domain, 443))
 
             # Get certificate
-            cert = conn.getpeercert(binary_form=False)
+            cert = None
+            try:
+                cert = conn.getpeercert(binary_form=False)
+            except ssl.SSLError:
+                # If cert validation fails, try with CERT_NONE and binary form
+                try:
+                    conn.close()
+                    sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock2.settimeout(DEFAULT_TIMEOUT)
+                    context2 = ssl.create_default_context()
+                    context2.check_hostname = False
+                    context2.verify_mode = ssl.CERT_NONE
+                    conn = context2.wrap_socket(sock2, server_hostname=domain)
+                    conn.connect((domain, 443))
+                    cert = conn.getpeercert(binary_form=False)
+                except Exception:
+                    cert = None
             if cert:
                 result['valid'] = True
 
@@ -305,7 +328,7 @@ class NetworkEngine:
                     result['hsts'] = hsts
                 else:
                     result['issues'].append("HSTS header not set")
-            except:
+            except Exception:
                 pass
 
         except ssl.SSLError as e:
@@ -341,7 +364,7 @@ class NetworkEngine:
         domain = domain.replace('www.', '').split('/')[0]
 
         try:
-            mx_records = dns.resolver.resolve(domain, 'MX')
+            mx_records = _dns_resolve(domain, 'MX')
             for mx in mx_records:
                 host = str(mx.exchange).rstrip('.')
                 try:
@@ -358,7 +381,7 @@ class NetworkEngine:
 
         # SPF
         try:
-            txt_records = dns.resolver.resolve(domain, 'TXT')
+            txt_records = _dns_resolve(domain, 'TXT')
             for txt in txt_records:
                 txt_str = str(txt).strip('"')
                 if 'v=spf1' in txt_str:
@@ -372,7 +395,7 @@ class NetworkEngine:
 
         # DMARC
         try:
-            dmarc_records = dns.resolver.resolve(f'_dmarc.{domain}', 'TXT')
+            dmarc_records = _dns_resolve(f'_dmarc.{domain}', 'TXT')
             for dmarc in dmarc_records:
                 dmarc_str = str(dmarc).strip('"')
                 if 'v=DMARC1' in dmarc_str:
@@ -385,5 +408,3 @@ class NetworkEngine:
         return result
 
 
-# Required imports
-import dns.resolver

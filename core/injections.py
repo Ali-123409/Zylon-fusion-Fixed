@@ -7,14 +7,15 @@ Bug Bounty Hunter Edition - Termux Non-Root Compatible
 import re
 import json
 import time
+import random
 import socket
 import requests
 import threading
 from urllib.parse import urlparse, urljoin, parse_qs, urlencode, quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from bs4 import BeautifulSoup
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, MAX_THREADS
-import random
 
 
 class InjectionArsenal:
@@ -93,6 +94,7 @@ class InjectionArsenal:
         base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
         # Get baseline
+        baseline = None
         try:
             baseline = self.session.get(url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             baseline_len = len(baseline.text)
@@ -128,7 +130,7 @@ class InjectionArsenal:
                     ]
 
                     for indicator in ssrf_indicators:
-                        if indicator.lower() in resp.text.lower() and indicator.lower() not in baseline.text.lower():
+                        if indicator.lower() in resp.text.lower() and (baseline is None or indicator.lower() not in baseline.text.lower()):
                             result['vulnerable'] = True
                             result['findings'].append({
                                 'parameter': param,
@@ -144,7 +146,7 @@ class InjectionArsenal:
                     # If internal IP responds faster than baseline, likely SSRF
 
                     # Status code differences
-                    if resp.status_code != baseline_status and resp.status_code == 200:
+                    if baseline is not None and resp.status_code != baseline_status and resp.status_code == 200:
                         if abs(len(resp.text) - baseline_len) > 200:
                             result['findings'].append({
                                 'parameter': param,

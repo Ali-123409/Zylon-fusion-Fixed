@@ -226,7 +226,7 @@ class VulnEngine:
         test_origins = [
             "https://evil.com",
             "https://attacker.com",
-            "https://null",
+            "null",
             f"https://evil.{domain}",
             f"https://{domain}.evil.com",
             "https://evil.com" + f".{domain}",

@@ -103,13 +103,20 @@ class ReconEngine:
         except Exception:
             return 'Unknown'
 
-    def check_cloudflare(self, ip=None):
+    def check_cloudflare(self, ip=None, url=None):
         """Check if target is behind Cloudflare"""
         try:
-            resp = self.session.get("https://www.cloudflare.com/cdn-cgi/trace", timeout=5)
-            # Alternative: check headers
-            url = self.session.get("http://example.com", timeout=5)
-            # Check via DNS
+            # Check target's headers for Cloudflare indicators
+            if url:
+                try:
+                    resp = self.session.get(url, timeout=5, verify=VERIFY_SSL)
+                    if any(h in resp.headers for h in ['cf-ray', 'cf-cache-status']):
+                        return True
+                    if 'cloudflare' in resp.headers.get('server', '').lower():
+                        return True
+                except Exception:
+                    pass
+            # Check via DNS IP ranges
             if ip:
                 # Cloudflare IP ranges
                 cf_ranges = [
@@ -675,5 +682,3 @@ class ReconEngine:
             return {'error': str(e)[:100]}
 
 
-# Required import for detect_cloud_buckets
-import os

@@ -6,6 +6,7 @@ Termux Non-Root Compatible
 
 import os
 import json
+import re
 from datetime import datetime
 from core.var import ZYLON_VERSION, ZYLON_CODENAME, HOME_DIR
 
@@ -20,7 +21,8 @@ class ReportEngine:
     def save_json(self, results, target):
         """Save scan results as JSON"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"zylon_{target}_{timestamp}.json"
+        safe_target = re.sub(r'[^\w\-.]', '_', target)
+        filename = f"zylon_{safe_target}_{timestamp}.json"
         filepath = os.path.join(self.reports_dir, filename)
 
         with open(filepath, 'w') as f:
@@ -31,7 +33,8 @@ class ReportEngine:
     def generate_html_report(self, results, target):
         """Generate comprehensive HTML report"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"zylon_{target}_{timestamp}.html"
+        safe_target = re.sub(r'[^\w\-.]', '_', target)
+        filename = f"zylon_{safe_target}_{timestamp}.html"
         filepath = os.path.join(self.reports_dir, filename)
 
         html = f"""<!DOCTYPE html>

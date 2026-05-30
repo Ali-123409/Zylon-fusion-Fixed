@@ -71,7 +71,7 @@ DEFAULT_PORTS = {
     8888: 'sun-answerbook', 9090: 'zeus-admin', 27017: 'mongodb',
 }
 
-FULL_PORT_RANGE = list(range(1, 65536))
+FULL_PORT_RANGE = range(1, 65536)
 QUICK_PORTS = [21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445,
                993, 995, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 8888, 9090, 27017]
 
@@ -185,7 +185,7 @@ XSS_PAYLOADS = [
 CORS_TEST_ORIGINS = [
     "https://evil.com",
     "https://attacker.com",
-    "https://null", 
+    "null", 
     "https://evil.{target}",
     "https://{target}.evil.com",
 ]
@@ -275,18 +275,21 @@ TECH_SIGNATURES = {
         'files': ['wp-content', 'wp-includes', 'wp-login.php'],
         'headers': {},
         'cookies': ['wordpress'],
+        'js_patterns': [],
     },
     'Joomla': {
         'meta': ['generator', 'Joomla'],
         'files': ['/administrator/'],
         'headers': {},
         'cookies': [],
+        'js_patterns': [],
     },
     'Drupal': {
         'meta': ['generator', 'Drupal'],
         'files': ['/misc/drupal.js', '/sites/default/'],
         'headers': {'X-Drupal-Cache': ''},
         'cookies': ['Drupal.visitor'],
+        'js_patterns': [],
     },
     'React': {
         'meta': [],
@@ -321,42 +324,49 @@ TECH_SIGNATURES = {
         'files': [],
         'headers': {'Server': 'nginx'},
         'cookies': [],
+        'js_patterns': [],
     },
     'Apache': {
         'meta': [],
         'files': [],
         'headers': {'Server': 'Apache'},
         'cookies': [],
+        'js_patterns': [],
     },
     'Cloudflare': {
         'meta': [],
         'files': [],
         'headers': {'cf-ray': ''},
         'cookies': ['__cfduid'],
+        'js_patterns': [],
     },
     'Laravel': {
         'meta': [],
         'files': [],
         'headers': {},
         'cookies': ['laravel_session'],
+        'js_patterns': [],
     },
     'Django': {
         'meta': [],
         'files': [],
         'headers': {},
         'cookies': ['csrftoken'],
+        'js_patterns': [],
     },
     'Express.js': {
         'meta': [],
         'files': [],
         'headers': {'X-Powered-By': 'Express'},
         'cookies': [],
+        'js_patterns': [],
     },
     'PHP': {
         'meta': [],
         'files': [],
         'headers': {'X-Powered-By': 'PHP'},
         'cookies': ['PHPSESSID'],
+        'js_patterns': [],
     },
     'Next.js': {
         'meta': [],
@@ -602,7 +612,7 @@ TECH_VERSION_SIGNATURES = {
     },
     "Drupal": {
         "meta": "generator",
-        "regex": r"Drupal\s+([\d]+)",
+        "regex": r"Drupal\s+([\d.]+)",
     },
     "OpenSSL": {
         "header": "Server",
@@ -640,4 +650,4 @@ NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 # V2.0 - BROKEN LINK STATUS CODES
 # ============================================================================
 
-BROKEN_LINK_CODES = [404, 410, 500, 502, 503, 0]
+BROKEN_LINK_CODES = [404, 410, 500, 502, 503]

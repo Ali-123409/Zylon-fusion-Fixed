@@ -89,6 +89,8 @@ install_requirements()
 # ============================================================================
 
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -194,7 +196,11 @@ class ZylonUI:
         info.add_row(" Environment", "Termux" if is_termux() else f"{platform.system()} {platform.release()}")
         info.add_row(" Python", platform.python_version())
         info.add_row(" Date", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        info.add_row(" Root Access", "No (Non-Root Mode)" if os.geteuid() != 0 else "Yes")
+        try:
+            is_root = os.geteuid() == 0
+        except AttributeError:
+            is_root = False
+        info.add_row(" Root Access", "No (Non-Root Mode)" if not is_root else "Yes")
         console.print(info)
         console.print()
     
@@ -232,7 +238,7 @@ class ZylonUI:
             ("19", "WAF Detector & Fingerprinter"),
             ("20", "Technology Stack Fingerprinter"),
             ("21", "Full Vulnerability Assessment"),
-            ("22", "Nuclear Scan (All Modules Combined)"),
+            ("22", "Nuclear Scan (Core Modules)"),
             # === BUG BOUNTY ARSENAL ===
             ("23", "Deep Web Crawler (URL Discovery)"),
             ("24", "Parameter Miner (Hidden Params)"),
@@ -446,7 +452,7 @@ class ZylonFusion:
             ip = self.network.resolve_ip(self.target)
             geo = self.network.get_geolocation(ip) if ip else None
             cms = self.recon.detect_cms(url)
-            cloudflare = self.recon.check_cloudflare(ip) if ip else False
+            cloudflare = self.recon.check_cloudflare(ip, url) if ip else False
             robots = self.recon.analyze_robots(url)
             headers = self.web.analyze_security_headers(url)
             dns_records = self.network.dns_lookup(self.target)
@@ -480,13 +486,14 @@ class ZylonFusion:
         console.print(recon_table)
         
         # DNS Records
-        if dns_records:
+        if dns_records and 'error' not in dns_records:
             dns_table = Table(title="DNS Records", box=box.ROUNDED, border_style="cyan")
             dns_table.add_column("Type", style="yellow")
             dns_table.add_column("Value", style="green")
             for rtype, values in dns_records.items():
-                for val in values[:5]:
-                    dns_table.add_row(rtype, val)
+                if isinstance(values, list):
+                    for val in values[:5]:
+                        dns_table.add_row(rtype, val)
             console.print(dns_table)
         
         # Security Headers
@@ -558,13 +565,14 @@ class ZylonFusion:
         
         self.results['findings']['dns'] = dns_records
         
-        if dns_records:
+        if dns_records and 'error' not in dns_records:
             d_table = Table(title="DNS Records", box=box.DOUBLE, border_style="bright_cyan")
             d_table.add_column("Type", style="bold yellow")
             d_table.add_column("Value", style="green")
             for rtype, values in dns_records.items():
-                for val in values:
-                    d_table.add_row(rtype, val)
+                if isinstance(values, list):
+                    for val in values:
+                        d_table.add_row(rtype, val)
             console.print(d_table)
     
     def _scan_subdomains(self):
@@ -1031,7 +1039,10 @@ class ZylonFusion:
         with console.status("[bold cyan]Mining hidden parameters...[/bold cyan]"):
             result = self.adv_recon.mine_parameters(url)
         self.results['findings']['param_mining'] = result
-        console.print(f"[green][+] Tested {result['tested']} parameters, found {len(result.get('discovered', {}))} active, {len(result.get('reflected', []))} reflected")
+        if 'error' in result:
+            console.print(f"[bold red][!] {result['error']}[/bold red]")
+            return
+        console.print(f"[green][+] Tested {result.get('tested', 0)} parameters, found {len(result.get('discovered', {}))} active, {len(result.get('reflected', []))} reflected")
         if result.get('discovered'):
             d_table = Table(title="Active Parameters", box=box.ROUNDED, border_style="yellow")
             d_table.add_column("Parameter", style="yellow")
@@ -1709,7 +1720,7 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-22)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-49, 99)[/bold yellow]",
                             default="0"
                         )
                         if scan_type.isdigit() and 0 <= int(scan_type) <= 99:
@@ -1737,7 +1748,7 @@ class ZylonFusion:
         
         keys = ['shodan_api_key', 'virustotal_api_key', 'hunter_api_key', 
                 'securitytrails_api_key', 'censys_api_id', 'censys_api_secret',
-                'ai_api_key']
+                'github_api_key', 'ai_api_key']
         
         k_table = Table(box=box.ROUNDED, border_style="cyan")
         k_table.add_column("API Key", style="yellow")
