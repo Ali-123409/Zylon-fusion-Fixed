@@ -38,9 +38,14 @@ import base64
 import ssl
 import requests
 import dns.resolver
+import dns.zone
+import dns.query
+import dns.rdatatype
+import dns.xfr
 from urllib.parse import urlparse, urljoin
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter
 from bs4 import BeautifulSoup
 
 from core.var import (
@@ -54,70 +59,37 @@ except AttributeError:
     _dns_resolve = dns.resolver.query
 
 
-# ============================================================================
-# CDN IP RANGES - Used to filter out CDN/proxy IPs from results
-# ============================================================================
+# Use CDN_IP_RANGES, PUBLIC_DNS_RESOLVERS, and ERROR_TRIGGER_PATHS from var.py for consistency
+from core.var import CDN_IP_RANGES, PUBLIC_DNS_RESOLVERS, ERROR_TRIGGER_PATHS
 
-CDN_IP_RANGES = {
-    'Cloudflare': [
-        '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22',
-        '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18',
-        '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22',
-        '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
-        '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
-    ],
-    'Akamai': [
-        '23.0.0.0/12', '23.32.0.0/11', '23.64.0.0/14',
-        '23.72.0.0/13', '72.246.0.0/15', '95.100.0.0/14',
-        '184.24.0.0/13', '184.84.0.0/14',
-    ],
-    'AWS CloudFront': [
-        '13.224.0.0/14', '13.249.0.0/16', '18.154.0.0/15',
-        '18.64.0.0/14', '52.46.0.0/17', '52.82.128.0/19',
-        '54.192.0.0/16', '54.230.0.0/16', '54.239.128.0/18',
-        '99.84.0.0/16', '204.246.160.0/19', '205.251.192.0/19',
-    ],
-    'Sucuri': [
-        '192.124.249.0/24', '192.88.134.0/23',
-    ],
-    'Incapsula': [
-        '199.83.128.0/21', '198.177.120.0/21',
-        '45.60.0.0/18', '45.60.64.0/18',
-    ],
-    'Fastly': [
-        '23.235.32.0/20', '43.249.72.0/22', '103.244.50.0/24',
-        '103.245.222.0/23', '103.245.224.0/24', '104.156.80.0/20',
-        '151.101.0.0/16', '157.52.64.0/18', '172.111.64.0/18',
-        '199.27.72.0/21', '199.232.0.0/16',
-    ],
+# Additional CDN ranges not in var.py (IPv4 only - no IPv6 to avoid type comparison crashes)
+_CDN_EXTRA_RANGES = {
     'StackPath': [
         '151.139.0.0/16', '209.107.0.0/17',
     ],
     'Microsoft Azure CDN': [
-        '13.107.0.0/16', '2620:1ec::/36',
+        '13.107.0.0/16',  # IPv4 only; IPv6 range excluded for ipaddress compatibility
     ],
 }
 
-# Public DNS resolvers for cross-validation
-PUBLIC_DNS_RESOLVERS = [
-    '8.8.8.8',       # Google
-    '8.8.4.4',       # Google
-    '1.1.1.1',       # Cloudflare
-    '1.0.0.1',       # Cloudflare
-    '9.9.9.9',       # Quad9
-    '208.67.222.222', # OpenDNS
-    '208.67.220.220', # OpenDNS
-]
+# Merge extra ranges into CDN_IP_RANGES (only IPv4-safe entries)
+for _cdn_name, _ranges in _CDN_EXTRA_RANGES.items():
+    CDN_IP_RANGES[_cdn_name] = _ranges
 
-# Error pages that may leak internal IPs
-ERROR_TRIGGER_PATHS = [
-    '/.%2e/.' , '/..%252f', '/..;/', '/..%c0%af',
-    '/cgi-bin/', '/.env', '/debug', '/trace',
-    '/status', '/health', '/metrics', '/info',
-    '/phpinfo.php', '/server-status', '/server-info',
-    '/.git/config', '/.svn/entries', '/.DS_Store',
-    '/wp-config.php~', '/backup.tar.gz', '/.env.bak',
-]
+
+import threading
+
+# Thread-local storage for per-thread requests sessions (requests.Session is NOT thread-safe)
+_thread_local = threading.local()
+
+
+def _get_thread_session():
+    """Get or create a thread-local requests session for thread safety"""
+    if not hasattr(_thread_local, 'session'):
+        _thread_local.session = requests.Session()
+        _thread_local.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        _thread_local.session.verify = VERIFY_SSL
+    return _thread_local.session
 
 
 class OriginIPEngine:
@@ -144,26 +116,52 @@ class OriginIPEngine:
             for cdn_name, ranges in CDN_IP_RANGES.items():
                 for cidr in ranges:
                     try:
-                        if target_ip in ipaddress.ip_network(cidr):
+                        network = ipaddress.ip_network(cidr, strict=False)
+                        # Skip IPv6 networks when checking IPv4 addresses (avoids TypeError)
+                        if target_ip.version != network.version:
+                            continue
+                        if target_ip in network:
                             return cdn_name
-                    except ValueError:
+                    except (ValueError, TypeError):
                         continue
-        except ValueError:
+        except (ValueError, TypeError):
             pass
         return None
+
+    @staticmethod
+    def _clean_domain(domain):
+        """Clean domain: strip protocol, path, port, and leading www. only"""
+        domain = domain.strip()
+        # Strip protocol
+        for proto in ('https://', 'http://'):
+            if domain.lower().startswith(proto):
+                domain = domain[len(proto):]
+        # Strip path
+        domain = domain.split('/')[0]
+        # Strip port
+        domain = domain.split(':')[0]
+        # Strip leading www. only (not embedded)
+        if domain.lower().startswith('www.'):
+            domain = domain[4:]
+        return domain
 
     def _resolve_domain(self, domain, resolver=None):
         """Resolve domain to IP using optional specific DNS resolver"""
         try:
+            clean = self._clean_domain(domain)
             if resolver:
                 custom_resolver = dns.resolver.Resolver()
                 custom_resolver.nameservers = [resolver]
                 custom_resolver.timeout = 5
                 custom_resolver.lifetime = 5
-                answers = custom_resolver.resolve(domain, 'A')
+                # Use compatible resolver call (dnspython <2.0 uses query, >=2.0 uses resolve)
+                try:
+                    answers = custom_resolver.resolve(clean, 'A')
+                except AttributeError:
+                    answers = custom_resolver.query(clean, 'A')
                 return str(answers[0])
             else:
-                return socket.gethostbyname(domain.replace('www.', '').split(':')[0])
+                return socket.gethostbyname(clean)
         except Exception:
             return None
 
@@ -203,13 +201,18 @@ class OriginIPEngine:
 
     def _is_valid_public_ip(self, ip):
         """Validate that an IP is a valid public IPv4 address"""
+        if not isinstance(ip, str) or not ip or ip.startswith('range:'):
+            return False
         try:
             import ipaddress
             addr = ipaddress.ip_address(ip)
-            if addr.is_private or addr.is_loopback or addr.is_reserved or addr.is_multicast:
+            # Only accept IPv4 for consistency
+            if addr.version != 4:
+                return False
+            if addr.is_private or addr.is_loopback or addr.is_reserved or addr.is_multicast or addr.is_link_local:
                 return False
             return True
-        except ValueError:
+        except (ValueError, TypeError):
             return False
 
     def _load_config(self):
@@ -237,7 +240,7 @@ class OriginIPEngine:
             'current_ip': None,
         }
 
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
 
         # Resolve current IP
         current_ip = self._resolve_domain(domain)
@@ -256,32 +259,37 @@ class OriginIPEngine:
             resp = self.session.get(f"https://{domain}", timeout=DEFAULT_TIMEOUT, verify=False, allow_redirects=True)
             headers = dict(resp.headers)
 
+            # Only use highly specific, unique header indicators to avoid false positives
+            # Generic headers like 'x-cache' are excluded since they match multiple CDNs
             cdn_header_indicators = {
                 'Cloudflare': ['cf-ray', 'cf-cache-status', 'server=cloudflare'],
-                'Akamai': ['x-akamai-transformed', 'x-cache', 'akamai'],
+                'Akamai': ['x-akamai-transformed', 'x-akamai-staging', 'akamai'],
                 'AWS CloudFront': ['x-amz-cf-id', 'x-amz-requestid', 'x-cache-hits'],
                 'Sucuri': ['x-sucuri-id', 'x-sucuri-cache'],
                 'Incapsula': ['x-iinfo', 'x-cdn', 'incap_ses'],
                 'Fastly': ['x-fastly-request-id', 'x-served-by'],
                 'StackPath': ['x-stackpath-requestid'],
-                'Microsoft Azure CDN': ['x-azure-ref', 'x-cache'],
+                'Microsoft Azure CDN': ['x-azure-ref'],
                 'CDN77': ['x-77'],
-                'KeyCDN': ['x-cache', 'x-edge-location'],
+                'KeyCDN': ['x-edge-location'],
             }
+
+            header_keys_lower = [k.lower() for k in headers.keys()]
 
             for cdn_name, indicators in cdn_header_indicators.items():
                 for indicator in indicators:
                     # Check header names and values
                     if '=' in indicator:
                         hname, hval = indicator.split('=', 1)
-                        if hname.lower() in ' '.join(headers.keys()).lower():
+                        if hname.lower() in header_keys_lower:
                             if hval.lower() in str(headers.get(hname, '')).lower():
                                 result['behind_cdn'] = True
                                 if result['cdn_provider'] is None:
                                     result['cdn_provider'] = cdn_name
                                 result['evidence'].append(f'Header match: {hname}={headers.get(hname, "")}')
                     else:
-                        if indicator.lower() in ' '.join(headers.keys()).lower():
+                        # Use exact header name match instead of substring
+                        if indicator.lower() in header_keys_lower:
                             result['behind_cdn'] = True
                             if result['cdn_provider'] is None:
                                 result['cdn_provider'] = cdn_name
@@ -316,7 +324,7 @@ class OriginIPEngine:
 
     def dns_history_lookup(self, domain):
         """Query historical DNS records - IPs before CDN was enabled"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         historical_ips = []
 
         # Method 1: SecurityTrails API (requires API key)
@@ -398,7 +406,7 @@ class OriginIPEngine:
 
     def cert_transparency_search(self, domain):
         """Search Certificate Transparency logs for IPs via crt.sh and Censys"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         # Method 1: crt.sh - Extract IPs from certificate data
@@ -469,7 +477,7 @@ class OriginIPEngine:
 
     def subdomain_resolution(self, domain):
         """Find subdomains and resolve them - many subdomains bypass CDN"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
         non_cdn_subs = []
 
@@ -570,13 +578,25 @@ class OriginIPEngine:
             except Exception:
                 return sub, None
 
-        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            futures = {executor.submit(resolve_sub, sub): sub for sub in all_subdomains}
-            for future in as_completed(futures):
-                sub, ip = future.result()
+        # Use thread-local session for subdomain resolution to avoid thread-safety issues
+        def resolve_sub_cdn(sub):
+            try:
+                ip = socket.gethostbyname(sub)
                 if ip and self._is_valid_public_ip(ip):
                     cdn = self._is_cdn_ip(ip)
                     if not cdn:
+                        return sub, ip, False
+                    return sub, ip, True
+            except Exception:
+                pass
+            return sub, None, False
+
+        with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+            futures = {executor.submit(resolve_sub_cdn, sub): sub for sub in all_subdomains}
+            for future in as_completed(futures):
+                sub, ip, is_cdn = future.result()
+                if ip and self._is_valid_public_ip(ip):
+                    if not is_cdn:
                         non_cdn_subs.append({'subdomain': sub, 'ip': ip})
                         self._add_ip(ip, f'subdomain-resolve({sub})', 'high', {'hostname': sub})
                         found_ips.append({'ip': ip, 'hostname': sub, 'source': 'subdomain-resolve'})
@@ -590,7 +610,7 @@ class OriginIPEngine:
 
     def dns_record_mining(self, domain):
         """Mine DNS records for origin IP leaks - MX, TXT, SPF, NS, SOA"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         # MX Records - Mail servers often resolve to origin infrastructure
@@ -622,8 +642,8 @@ class OriginIPEngine:
                         if '/' in ip_range:
                             # CIDR range - extract individual IPs or record the range
                             found_ips.append({'ip_range': ip_range, 'source': 'SPF-TXT', 'record': txt_str})
-                            self._add_ip(f'range:{ip_range}', f'SPF-TXT', 'low',
-                                       {'spf_record': txt_str, 'type': 'range'})
+                            # Store the range info but don't call _add_ip with 'range:' prefix
+                            # since _is_valid_public_ip will reject it
                         else:
                             if self._is_valid_public_ip(ip_range):
                                 self._add_ip(ip_range, 'SPF-TXT', 'medium', {'spf_record': txt_str})
@@ -689,7 +709,7 @@ class OriginIPEngine:
 
     def cname_chain_follow(self, domain):
         """Follow CNAME records to find origin - CNAME may point to origin before CDN"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         cname_chain = []
         found_ips = []
 
@@ -761,7 +781,7 @@ class OriginIPEngine:
 
     def web_archive_history(self, domain):
         """Check Wayback Machine for historical records that may contain pre-CDN IPs"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         # Wayback Machine CDX API - get historical snapshots
@@ -821,7 +841,7 @@ class OriginIPEngine:
 
     def shodan_search(self, domain):
         """Search Shodan for the domain - may find origin IP directly"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         config = self._load_config()
@@ -885,7 +905,7 @@ class OriginIPEngine:
 
     def censys_search(self, domain):
         """Search Censys for certificate and host data"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         config = self._load_config()
@@ -925,7 +945,7 @@ class OriginIPEngine:
 
     def favicon_hash_search(self, domain):
         """Compute favicon hash and search Shodan for matching servers"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         result = {'favicon_hash': None, 'matching_hosts': []}
 
         # Step 1: Fetch favicon and compute mmh3 hash
@@ -980,7 +1000,7 @@ class OriginIPEngine:
 
     def email_header_ip_extract(self, domain):
         """Extract IPs from SPF/DKIM records that may reveal mail server origin"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         # Parse SPF record for IP ranges and include directives
@@ -1080,14 +1100,15 @@ class OriginIPEngine:
 
     def error_page_ip_leak(self, domain):
         """Trigger error pages that may expose internal/origin IPs"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         def check_path(path):
             try:
-                self._rotate_ua()
+                session = _get_thread_session()
+                session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
                 url = f"https://{domain}{path}"
-                resp = self.session.get(url, timeout=8, verify=False, allow_redirects=False)
+                resp = session.get(url, timeout=8, verify=False, allow_redirects=False)
                 if resp.status_code in [200, 301, 302, 403, 404, 500, 502, 503]:
                     # Search for IP addresses in the response
                     body = resp.text
@@ -1124,7 +1145,7 @@ class OriginIPEngine:
 
     def server_status_mining(self, domain):
         """Check for server-status, phpinfo, and other info pages"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         info_paths = [
@@ -1138,9 +1159,10 @@ class OriginIPEngine:
 
         def check_info_path(path):
             try:
-                self._rotate_ua()
+                session = _get_thread_session()
+                session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
                 url = f"https://{domain}{path}"
-                resp = self.session.get(url, timeout=8, verify=False)
+                resp = session.get(url, timeout=8, verify=False)
                 if resp.status_code == 200:
                     body = resp.text
                     # Search for internal/private IPs that may be in the page
@@ -1188,7 +1210,7 @@ class OriginIPEngine:
 
     def sitemap_ip_parse(self, domain):
         """Parse sitemap.xml and robots.txt for internal IP references"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         # Parse sitemap.xml
@@ -1236,7 +1258,7 @@ class OriginIPEngine:
 
     def resource_ip_leak(self, domain):
         """Check JavaScript, CSS, and image resources for direct IP references"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
 
         try:
@@ -1274,8 +1296,9 @@ class OriginIPEngine:
             # Check each resource file for IP references
             def check_resource(res_url):
                 try:
-                    self._rotate_ua()
-                    r = self.session.get(res_url, timeout=8, verify=False)
+                    session = _get_thread_session()
+                    session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+                    r = session.get(res_url, timeout=8, verify=False)
                     if r.status_code == 200:
                         # Search for IP addresses in the resource
                         ips = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', r.text)
@@ -1309,7 +1332,7 @@ class OriginIPEngine:
 
     def dns_zone_transfer(self, domain):
         """Attempt DNS zone transfer against nameservers - may reveal all records"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         found_ips = []
         zone_data = []
 
@@ -1365,7 +1388,7 @@ class OriginIPEngine:
 
     def cloud_metadata_detect(self, domain):
         """Check if origin is hosted on cloud providers (AWS, Azure, GCP)"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         result = {'cloud_provider': None, 'evidence': [], 'found_ips': []}
 
         # Check if any found IPs belong to cloud provider ranges
@@ -1395,22 +1418,27 @@ class OriginIPEngine:
 
         try:
             import ipaddress
-            for ip_data in self.found_ips:
-                ip = ip_data if isinstance(ip_data, str) else ip_data
-                if ip and self._is_valid_public_ip(ip):
-                    try:
-                        addr = ipaddress.ip_address(ip)
-                        for provider, ranges in cloud_ranges.items():
-                            for cidr in ranges:
-                                try:
-                                    if addr in ipaddress.ip_network(cidr):
-                                        result['cloud_provider'] = provider
-                                        result['evidence'].append(f'IP {ip} belongs to {provider} range {cidr}')
-                                        break
-                                except ValueError:
+            for ip, info in self.found_ips.items():
+                if not ip or info.get('is_cdn') or ip.startswith('range:'):
+                    continue
+                if not self._is_valid_public_ip(ip):
+                    continue
+                try:
+                    addr = ipaddress.ip_address(ip)
+                    for provider, ranges in cloud_ranges.items():
+                        for cidr in ranges:
+                            try:
+                                network = ipaddress.ip_network(cidr, strict=False)
+                                if addr.version != network.version:
                                     continue
-                    except ValueError:
-                        continue
+                                if addr in network:
+                                    result['cloud_provider'] = provider
+                                    result['evidence'].append(f'IP {ip} belongs to {provider} range {cidr}')
+                                    break
+                            except (ValueError, TypeError):
+                                continue
+                except (ValueError, TypeError):
+                    continue
         except Exception:
             pass
 
@@ -1439,7 +1467,7 @@ class OriginIPEngine:
 
     def asn_prefix_lookup(self, domain):
         """Find organization's ASN and IP ranges - origin may be in the same range"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         result = {'asn': None, 'org': None, 'ip_ranges': [], 'found_ips': []}
 
         # Get current IP info
@@ -1490,7 +1518,7 @@ class OriginIPEngine:
 
     def verify_origin_ip(self, domain, ip):
         """Verify a found IP actually serves the target domain by connecting with Host header"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         verification = {
             'ip': ip,
             'verified': False,
@@ -1524,7 +1552,7 @@ class OriginIPEngine:
                         domain_title = domain_soup.title.string if domain_soup.title else ''
 
                         ip_soup = BeautifulSoup(resp.text, 'html.parser')
-                        ip_title = ip_soup.string if ip_soup.title else ''
+                        ip_title = ip_soup.title.string if ip_soup.title else ''
 
                         if domain_title and ip_title and domain_title.strip() == ip_title.strip():
                             verification['response_similarity'] += 40
@@ -1583,7 +1611,7 @@ class OriginIPEngine:
 
     def header_fingerprint(self, domain):
         """Compare HTTP response headers between domain and found IPs"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         result = {'domain_fingerprint': None, 'ip_matches': []}
 
         # Get domain's response fingerprint
@@ -1661,7 +1689,7 @@ class OriginIPEngine:
 
     def multi_resolver_validation(self, domain):
         """Resolve domain across multiple DNS resolvers to catch inconsistent CDN routing"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         result = {'resolver_results': {}, 'unique_ips': [], 'suspicious_ips': []}
 
         for resolver in PUBLIC_DNS_RESOLVERS:
@@ -1677,7 +1705,6 @@ class OriginIPEngine:
                 result['resolver_results'][resolver] = ['error']
 
         # IPs that appear from some resolvers but not all might be origin
-        from collections import Counter
         ip_counts = Counter()
         for resolver, ips in result['resolver_results'].items():
             for ip in ips:
@@ -1707,7 +1734,7 @@ class OriginIPEngine:
 
     def spf_dkim_dmarc_extract(self, domain):
         """Deep extraction of IP ranges from SPF, DKIM, and DMARC records"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         result = {'spf_ips': [], 'dkim_hosts': [], 'dmarc_info': {}, 'found_ips': []}
 
         # SPF deep extraction - follow all includes recursively
@@ -1766,7 +1793,7 @@ class OriginIPEngine:
 
     def find_origin_ip(self, domain):
         """Run all 22 origin IP finding techniques and compile results"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         self.found_ips = {}
 
         results = {
@@ -1898,7 +1925,7 @@ class OriginIPEngine:
 
     def quick_find(self, domain):
         """Run quick origin IP scan with only the most effective techniques"""
-        domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+        domain = self._clean_domain(domain)
         self.found_ips = {}
 
         results = {
