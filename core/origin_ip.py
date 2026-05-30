@@ -62,19 +62,99 @@ except AttributeError:
 # Use CDN_IP_RANGES, PUBLIC_DNS_RESOLVERS, and ERROR_TRIGGER_PATHS from var.py for consistency
 from core.var import CDN_IP_RANGES, PUBLIC_DNS_RESOLVERS, ERROR_TRIGGER_PATHS
 
-# Additional CDN ranges not in var.py (IPv4 only - no IPv6 to avoid type comparison crashes)
+# Additional CDN/Cloud ranges not in var.py (IPv4 only - no IPv6 to avoid type comparison crashes)
 _CDN_EXTRA_RANGES = {
     'StackPath': [
         '151.139.0.0/16', '209.107.0.0/17',
     ],
     'Microsoft Azure CDN': [
-        '13.107.0.0/16',  # IPv4 only; IPv6 range excluded for ipaddress compatibility
+        '13.107.0.0/16',
+    ],
+    # AWS Global Accelerator & additional CloudFront ranges
+    'AWS Cloud': [
+        '13.248.0.0/16',   # AWS Global Accelerator
+        '75.2.0.0/16',     # AWS Global Accelerator
+        '76.223.0.0/17',   # AWS Global Accelerator
+        '76.223.128.0/17', # AWS Global Accelerator
+        '99.79.0.0/16',    # AWS
+        '52.0.0.0/11',     # AWS EC2 (wide range)
+        '54.0.0.0/8',      # AWS (partial)
+        '3.0.0.0/8',       # AWS EC2
+        '18.0.0.0/8',      # AWS EC2
+        '35.0.0.0/8',      # AWS/GCP overlap
+    ],
+    # Google Cloud / Google Infrastructure
+    'Google Cloud': [
+        '35.192.0.0/12',   # Google Cloud
+        '35.208.0.0/12',   # Google Cloud
+        '35.224.0.0/12',   # Google Cloud
+        '35.240.0.0/13',   # Google Cloud
+        '34.0.0.0/9',      # Google Cloud
+        '34.128.0.0/10',   # Google Cloud
+        '104.154.0.0/16',  # Google Cloud
+        '104.196.0.0/14',  # Google Cloud
+        '130.211.0.0/16',  # Google Cloud Load Balancer
+        '35.199.0.0/16',   # Google Cloud DNS
+        '173.194.0.0/16',  # Google Infrastructure (Mail, etc.)
+        '172.217.0.0/16',  # Google Infrastructure
+        '142.250.0.0/15',  # Google Infrastructure
+        '192.178.0.0/15',  # Google Infrastructure
+        '64.233.160.0/19', # Google Infrastructure
+        '66.102.0.0/20',   # Google Infrastructure
+        '66.249.64.0/19',  # Google Infrastructure
+        '72.14.192.0/18',  # Google Infrastructure
+        '74.125.0.0/16',   # Google Infrastructure
+        '209.85.128.0/17', # Google Infrastructure
+        '216.58.192.0/19', # Google Infrastructure
+        '216.239.32.0/19', # Google Infrastructure
+    ],
+    # Azure Hosting
+    'Azure Hosting': [
+        '20.0.0.0/8',      # Azure (wide range)
+        '40.64.0.0/10',    # Azure
+        '40.112.0.0/13',   # Azure
+        '52.96.0.0/12',    # Azure/Office 365
+        '52.224.0.0/11',   # Azure
+        '104.40.0.0/13',   # Azure
+        '137.116.0.0/15',  # Azure
+        '138.91.0.0/16',   # Azure
+        '157.55.0.0/16',   # Azure/Office 365
+        '191.232.0.0/13',  # Azure
+    ],
+    # DigitalOcean
+    'DigitalOcean': [
+        '104.131.0.0/16', '104.236.0.0/16', '128.199.0.0/16',
+        '138.68.0.0/16',  '138.197.0.0/16', '159.65.0.0/16',
+        '159.89.0.0/16',  '165.227.0.0/16', '167.99.0.0/16',
+        '206.189.0.0/16',
+    ],
+    # Cloudflare WARP/VPN
+    'Cloudflare Additional': [
+        '162.159.192.0/24', '172.86.96.0/20',
     ],
 }
 
 # Merge extra ranges into CDN_IP_RANGES (only IPv4-safe entries)
 for _cdn_name, _ranges in _CDN_EXTRA_RANGES.items():
     CDN_IP_RANGES[_cdn_name] = _ranges
+
+# Known mail/infrastructure hostnames that should NEVER be treated as origin IPs
+_MAIL_HOST_PATTERNS = [
+    'google.com', 'googlemail.com', 'googlemail.l.google.com',
+    '1e100.net',  # Google infrastructure
+    'mcsv.net', 'rsgsv.net',  # Mailchimp
+    'sendgrid.net', 'sendgrid.com',  # SendGrid
+    'mailgun.org', 'mailgun.com',  # Mailgun
+    'hubspotemail.net',  # HubSpot
+    'mail.zendesk.com',  # Zendesk
+    'icpbounce.com',  # Adobe/Marketo
+    'outlook.com', 'hotmail.com', 'office365.us',  # Microsoft
+    'amazonses.com',  # Amazon SES
+    'sparkpostmail.com',  # SparkPost
+    'postmarkapp.com',  # Postmark
+    'yahooinc.com', 'yahoo.com',  # Yahoo
+    'zoho.com',  # Zoho Mail
+]
 
 
 import threading
@@ -109,7 +189,7 @@ class OriginIPEngine:
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
 
     def _is_cdn_ip(self, ip):
-        """Check if an IP belongs to a known CDN/proxy provider"""
+        """Check if an IP belongs to a known CDN/proxy/cloud provider"""
         try:
             import ipaddress
             target_ip = ipaddress.ip_address(ip)
@@ -127,6 +207,36 @@ class OriginIPEngine:
         except (ValueError, TypeError):
             pass
         return None
+
+    def _is_mail_infrastructure(self, hostname):
+        """Check if a hostname belongs to a known mail/infrastructure provider"""
+        if not hostname:
+            return False
+        hostname_lower = hostname.lower().rstrip('.')
+        for pattern in _MAIL_HOST_PATTERNS:
+            if hostname_lower == pattern or hostname_lower.endswith('.' + pattern):
+                return True
+        return False
+
+    def _classify_ip_source(self, source_str):
+        """Classify the type of IP source for confidence adjustment
+        Returns: 'origin' (likely real origin), 'mail' (email infra),
+                 'dns' (DNS infra), 'spf' (SPF/mail sender), 'generic'
+        """
+        source_lower = source_str.lower()
+        if 'mx-record' in source_lower or 'mx' in source_lower:
+            return 'mail'
+        if 'spf' in source_lower or 'dkim' in source_lower:
+            return 'spf'
+        if 'ns-record' in source_lower or 'soa' in source_lower or 'nameserver' in source_lower:
+            return 'dns'
+        if 'subdomain' in source_lower or 'crt.sh' in source_lower or 'censys' in source_lower:
+            return 'origin'
+        if 'cname' in source_lower or 'history' in source_lower or 'wayback' in source_lower:
+            return 'origin'
+        if 'shodan' in source_lower or 'viewdns' in source_lower or 'hackertarget' in source_lower:
+            return 'origin'
+        return 'generic'
 
     @staticmethod
     def _clean_domain(domain):
@@ -165,39 +275,78 @@ class OriginIPEngine:
         except Exception:
             return None
 
-    def _add_ip(self, ip, source, confidence='medium', details=None):
-        """Add a discovered IP to the results with metadata"""
+    def _add_ip(self, ip, source, confidence='medium', details=None, ip_type='origin'):
+        """Add a discovered IP to the results with metadata
+        ip_type: 'origin' (possible origin IP), 'mail' (email infrastructure),
+                 'dns' (DNS infrastructure), 'spf' (SPF/mail sender), 'cdn' (CDN/proxy)
+        """
         if not ip or not self._is_valid_public_ip(ip):
             return
         cdn_name = self._is_cdn_ip(ip)
         if cdn_name:
-            # Still record CDN IPs but mark them
+            # CDN/cloud IPs - record but always mark as CDN
             if ip not in self.found_ips:
                 self.found_ips[ip] = {
                     'sources': [],
                     'confidence': 'low',
                     'is_cdn': True,
                     'cdn_provider': cdn_name,
+                    'ip_type': 'cdn',
                     'details': {}
                 }
             self.found_ips[ip]['sources'].append(source)
         else:
-            if ip not in self.found_ips:
-                self.found_ips[ip] = {
-                    'sources': [],
-                    'confidence': confidence,
-                    'is_cdn': False,
-                    'cdn_provider': None,
-                    'details': {}
-                }
-            self.found_ips[ip]['sources'].append(source)
-            if details:
-                self.found_ips[ip]['details'].update(details)
-            # Upgrade confidence if found by multiple sources
-            if len(self.found_ips[ip]['sources']) >= 3:
-                self.found_ips[ip]['confidence'] = 'high'
-            elif len(self.found_ips[ip]['sources']) >= 2:
-                self.found_ips[ip]['confidence'] = 'medium'
+            # Check if hostname is mail infrastructure
+            hostname = details.get('hostname', details.get('mx_hostname', details.get('spf_include', ''))) if details else ''
+            if self._is_mail_infrastructure(hostname) or ip_type in ('mail', 'spf'):
+                # Mail/SPF infrastructure - record separately, NOT as origin candidate
+                if ip not in self.found_ips:
+                    self.found_ips[ip] = {
+                        'sources': [],
+                        'confidence': 'very_low',
+                        'is_cdn': False,
+                        'cdn_provider': None,
+                        'ip_type': ip_type if ip_type in ('mail', 'spf') else 'mail',
+                        'details': {}
+                    }
+                self.found_ips[ip]['sources'].append(source)
+                if details:
+                    self.found_ips[ip]['details'].update(details)
+                return  # Never upgrade confidence for mail IPs
+            elif ip_type == 'dns':
+                # DNS infrastructure - record but NOT as origin candidate
+                if ip not in self.found_ips:
+                    self.found_ips[ip] = {
+                        'sources': [],
+                        'confidence': 'very_low',
+                        'is_cdn': False,
+                        'cdn_provider': None,
+                        'ip_type': 'dns',
+                        'details': {}
+                    }
+                self.found_ips[ip]['sources'].append(source)
+                if details:
+                    self.found_ips[ip]['details'].update(details)
+                return  # Never upgrade confidence for DNS IPs
+            else:
+                # Possible origin IP
+                if ip not in self.found_ips:
+                    self.found_ips[ip] = {
+                        'sources': [],
+                        'confidence': confidence,
+                        'is_cdn': False,
+                        'cdn_provider': None,
+                        'ip_type': 'origin',
+                        'details': {}
+                    }
+                self.found_ips[ip]['sources'].append(source)
+                if details:
+                    self.found_ips[ip]['details'].update(details)
+                # Upgrade confidence if found by multiple sources
+                if len(self.found_ips[ip]['sources']) >= 3:
+                    self.found_ips[ip]['confidence'] = 'high'
+                elif len(self.found_ips[ip]['sources']) >= 2:
+                    self.found_ips[ip]['confidence'] = 'medium'
 
     def _is_valid_public_ip(self, ip):
         """Validate that an IP is a valid public IPv4 address"""
@@ -609,11 +758,16 @@ class OriginIPEngine:
     # ========================================================================
 
     def dns_record_mining(self, domain):
-        """Mine DNS records for origin IP leaks - MX, TXT, SPF, NS, SOA"""
+        """Mine DNS records for origin IP leaks - MX, TXT, SPF, NS, SOA
+        Note: MX/SPF/NS/SOA IPs are classified as infrastructure, NOT origin IPs,
+        since they belong to mail/DNS providers (Google, Cloudflare, etc.)
+        Only direct ip4: entries in SPF and non-mail TXT IPs are potential origin leaks."""
         domain = self._clean_domain(domain)
         found_ips = []
 
-        # MX Records - Mail servers often resolve to origin infrastructure
+        # MX Records - Record for reference but classify as mail infrastructure
+        # MX records almost always point to third-party mail providers (Google, Microsoft, etc.)
+        # NOT the website's origin server
         try:
             mx_records = _dns_resolve(domain, 'MX')
             for mx in mx_records:
@@ -621,9 +775,11 @@ class OriginIPEngine:
                 try:
                     mx_ip = socket.gethostbyname(mx_host)
                     if self._is_valid_public_ip(mx_ip):
-                        self._add_ip(mx_ip, f'MX-Record({mx_host})', 'medium',
-                                   {'mx_hostname': mx_host, 'preference': mx.preference})
-                        found_ips.append({'ip': mx_ip, 'hostname': mx_host, 'source': 'MX-Record'})
+                        self._add_ip(mx_ip, f'MX-Record({mx_host})', 'very_low',
+                                   {'mx_hostname': mx_host, 'preference': mx.preference},
+                                   ip_type='mail')
+                        found_ips.append({'ip': mx_ip, 'hostname': mx_host, 'source': 'MX-Record',
+                                        'ip_type': 'mail', 'note': 'Mail server - NOT origin IP'})
                 except Exception:
                     pass
         except Exception:
@@ -636,39 +792,45 @@ class OriginIPEngine:
                 txt_str = str(txt).strip('"')
                 # Extract IPs from SPF records
                 if 'v=spf1' in txt_str:
-                    # ip4: and ip6: directives
+                    # ip4: and ip6: directives - these MAY reveal origin IP
+                    # if the site sends mail from the same server
                     ip4_matches = re.findall(r'ip4:([\d./]+)', txt_str)
                     for ip_range in ip4_matches:
                         if '/' in ip_range:
-                            # CIDR range - extract individual IPs or record the range
+                            # CIDR range - record the range info
                             found_ips.append({'ip_range': ip_range, 'source': 'SPF-TXT', 'record': txt_str})
-                            # Store the range info but don't call _add_ip with 'range:' prefix
-                            # since _is_valid_public_ip will reject it
                         else:
                             if self._is_valid_public_ip(ip_range):
-                                self._add_ip(ip_range, 'SPF-TXT', 'medium', {'spf_record': txt_str})
-                                found_ips.append({'ip': ip_range, 'source': 'SPF-TXT'})
-                # Include/redirect directives that may reveal other hosts
+                                # SPF ip4 entries MIGHT be origin (if mail server = web server)
+                                # But usually they're mail providers - classify as 'spf'
+                                self._add_ip(ip_range, 'SPF-TXT', 'low', {'spf_record': txt_str},
+                                           ip_type='spf')
+                                found_ips.append({'ip': ip_range, 'source': 'SPF-TXT',
+                                                'ip_type': 'spf', 'note': 'Mail sender IP - unlikely origin'})
+                # Include/redirect directives - these are ALWAYS third-party mail providers
                 include_matches = re.findall(r'include:([a-zA-Z0-9._-]+)', txt_str)
                 for inc_host in include_matches:
                     try:
                         inc_ip = socket.gethostbyname(inc_host)
                         if self._is_valid_public_ip(inc_ip):
-                            self._add_ip(inc_ip, f'SPF-Include({inc_host})', 'low',
-                                       {'spf_include': inc_host})
-                            found_ips.append({'ip': inc_ip, 'hostname': inc_host, 'source': 'SPF-Include'})
+                            self._add_ip(inc_ip, f'SPF-Include({inc_host})', 'very_low',
+                                       {'spf_include': inc_host}, ip_type='spf')
+                            found_ips.append({'ip': inc_ip, 'hostname': inc_host, 'source': 'SPF-Include',
+                                            'ip_type': 'spf', 'note': 'Mail provider - NOT origin IP'})
                     except Exception:
                         pass
-                # Look for any IP addresses in TXT records
-                all_ips = re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', txt_str)
-                for ip in all_ips:
-                    if self._is_valid_public_ip(ip):
-                        self._add_ip(ip, 'TXT-Record', 'low', {'txt_record': txt_str[:100]})
-                        found_ips.append({'ip': ip, 'source': 'TXT-Record'})
+                # Look for any IP addresses in TXT records (not SPF)
+                if 'v=spf1' not in txt_str:
+                    all_ips = re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', txt_str)
+                    for ip in all_ips:
+                        if self._is_valid_public_ip(ip):
+                            self._add_ip(ip, 'TXT-Record', 'low', {'txt_record': txt_str[:100]})
+                            found_ips.append({'ip': ip, 'source': 'TXT-Record'})
         except Exception:
             pass
 
-        # NS Records - Name servers may share infrastructure
+        # NS Records - These are DNS hosting provider IPs, NOT the origin
+        # (e.g., Cloudflare nameservers, Route53, etc.)
         try:
             ns_records = _dns_resolve(domain, 'NS')
             for ns in ns_records:
@@ -676,14 +838,16 @@ class OriginIPEngine:
                 try:
                     ns_ip = socket.gethostbyname(ns_host)
                     if self._is_valid_public_ip(ns_ip):
-                        found_ips.append({'ip': ns_ip, 'hostname': ns_host, 'source': 'NS-Record'})
-                        # NS IPs are usually not the origin, but worth noting
+                        self._add_ip(ns_ip, f'NS-Record({ns_host})', 'very_low',
+                                   {'ns_hostname': ns_host}, ip_type='dns')
+                        found_ips.append({'ip': ns_ip, 'hostname': ns_host, 'source': 'NS-Record',
+                                        'ip_type': 'dns', 'note': 'DNS nameserver - NOT origin IP'})
                 except Exception:
                     pass
         except Exception:
             pass
 
-        # SOA Record - May contain primary nameserver info
+        # SOA Record - Contains primary nameserver info, also DNS infrastructure
         try:
             soa_records = _dns_resolve(domain, 'SOA')
             for soa in soa_records:
@@ -695,7 +859,10 @@ class OriginIPEngine:
                     try:
                         ns_ip = socket.gethostbyname(primary_ns)
                         if self._is_valid_public_ip(ns_ip):
-                            found_ips.append({'ip': ns_ip, 'hostname': primary_ns, 'source': 'SOA-Record'})
+                            self._add_ip(ns_ip, f'SOA-Record({primary_ns})', 'very_low',
+                                       {'soa_mname': primary_ns}, ip_type='dns')
+                            found_ips.append({'ip': ns_ip, 'hostname': primary_ns, 'source': 'SOA-Record',
+                                            'ip_type': 'dns', 'note': 'DNS primary NS - NOT origin IP'})
                     except Exception:
                         pass
         except Exception:
@@ -1540,7 +1707,7 @@ class OriginIPEngine:
                 }
                 resp = self.session.get(url, headers=headers, timeout=8, verify=False, allow_redirects=False)
 
-                if resp.status_code in [200, 301, 302, 403]:
+                if resp.status_code in [200, 301, 302]:
                     verification['verified'] = True
                     verification['methods'].append(f'HTTP-{port}')
 
@@ -1751,11 +1918,12 @@ class OriginIPEngine:
                     if 'v=spf1' in txt_str:
                         result['spf_ips'].append({'domain': spf_domain, 'record': txt_str})
 
-                        # Extract direct IPs
+                        # Extract direct IPs - classify as SPF (mail infrastructure)
                         for match in re.finditer(r'ip4:([\d./]+)', txt_str):
                             ip_or_range = match.group(1)
                             if '/' not in ip_or_range and self._is_valid_public_ip(ip_or_range):
-                                self._add_ip(ip_or_range, f'SPF-Deep({spf_domain})', 'medium')
+                                self._add_ip(ip_or_range, f'SPF-Deep({spf_domain})', 'low',
+                                           ip_type='spf')
                                 result['found_ips'].append(ip_or_range)
 
                         # Follow includes recursively
@@ -1879,19 +2047,34 @@ class OriginIPEngine:
         results['header_fingerprint'] = self.header_fingerprint(domain)
 
         # Phase 4: Compile final origin IP list
-        # Filter to non-CDN IPs with medium or high confidence
+        # Filter by IP type: only 'origin' type IPs are real candidates
+        # mail/spf/dns IPs are infrastructure, not origin servers
         origin_candidates = []
+        infra_ips = []
         for ip, info in self.found_ips.items():
             if isinstance(ip, str) and ip.startswith('range:'):
                 continue  # Skip IP ranges for now
+            ip_type = info.get('ip_type', 'origin')
             if info.get('is_cdn'):
                 continue
+            if ip_type in ('mail', 'spf', 'dns'):
+                infra_ips.append({
+                    'ip': ip,
+                    'confidence': info['confidence'],
+                    'sources': info['sources'],
+                    'ip_type': ip_type,
+                    'details': info.get('details', {}),
+                    'note': 'Infrastructure - NOT origin IP',
+                })
+                continue
+            # Only include origin-type IPs with medium or high confidence
             if info.get('confidence') in ['medium', 'high']:
                 origin_candidates.append({
                     'ip': ip,
                     'confidence': info['confidence'],
                     'sources': info['sources'],
                     'source_count': len(info['sources']),
+                    'ip_type': ip_type,
                     'details': info.get('details', {}),
                 })
 
@@ -1901,16 +2084,18 @@ class OriginIPEngine:
             x['source_count']
         ), reverse=True)
 
-        # Phase 5: Verify top candidates
+        # Phase 5: Verify ALL origin candidates (not just top 5)
         verified_origins = []
-        for candidate in origin_candidates[:5]:  # Verify top 5
+        for candidate in origin_candidates:
             verification = self.verify_origin_ip(domain, candidate['ip'])
             candidate['verification'] = verification
             if verification['verified']:
+                candidate['confidence'] = 'high'  # Verified = high confidence
                 verified_origins.append(candidate)
 
         results['origin_ips'] = verified_origins if verified_origins else origin_candidates
         results['all_candidate_ips'] = origin_candidates
+        results['infrastructure_ips'] = infra_ips
         results['cdn_ips'] = [
             {'ip': ip, 'cdn_provider': info.get('cdn_provider')}
             for ip, info in self.found_ips.items()
@@ -1933,6 +2118,8 @@ class OriginIPEngine:
             'timestamp': datetime.now().isoformat(),
             'cdn_detection': None,
             'origin_ips': [],
+            'infrastructure_ips': [],  # Mail/DNS/SPF IPs (not origin)
+            'cdn_ips': [],             # CDN/proxy IPs
         }
 
         # CDN Detection
@@ -1941,7 +2128,8 @@ class OriginIPEngine:
         if not results['cdn_detection']['behind_cdn']:
             current_ip = self._resolve_domain(domain)
             if current_ip:
-                results['origin_ips'] = [{'ip': current_ip, 'confidence': 'high', 'sources': ['direct-resolve']}]
+                results['origin_ips'] = [{'ip': current_ip, 'confidence': 'high',
+                                         'sources': ['direct-resolve'], 'ip_type': 'origin'}]
                 return results
 
         # Quick techniques: most effective first
@@ -1952,27 +2140,39 @@ class OriginIPEngine:
         self.error_page_ip_leak(domain)
         self.cname_chain_follow(domain)
 
-        # Compile results
+        # Compile results - separate by IP type
         origin_candidates = []
+        infra_ips = []
+        cdn_ips = []
+
         for ip, info in self.found_ips.items():
             if isinstance(ip, str) and ip.startswith('range:'):
                 continue
-            if info.get('is_cdn'):
-                continue
-            origin_candidates.append({
+            ip_type = info.get('ip_type', 'origin')
+            entry = {
                 'ip': ip,
                 'confidence': info['confidence'],
                 'sources': info['sources'],
                 'source_count': len(info['sources']),
-            })
+                'ip_type': ip_type,
+            }
+            if info.get('is_cdn'):
+                entry['cdn_provider'] = info.get('cdn_provider', '')
+                cdn_ips.append(entry)
+            elif ip_type in ('mail', 'spf', 'dns'):
+                entry['note'] = 'Mail/DNS infrastructure - NOT origin IP'
+                infra_ips.append(entry)
+            else:
+                origin_candidates.append(entry)
 
         origin_candidates.sort(key=lambda x: (1 if x['confidence'] == 'high' else 0, x['source_count']), reverse=True)
 
-        # Verify top candidate
-        if origin_candidates:
-            top = origin_candidates[0]
-            verification = self.verify_origin_ip(domain, top['ip'])
-            top['verification'] = verification
+        # Verify ALL origin candidates (not just top one)
+        for candidate in origin_candidates:
+            verification = self.verify_origin_ip(domain, candidate['ip'])
+            candidate['verification'] = verification
 
         results['origin_ips'] = origin_candidates
+        results['infrastructure_ips'] = infra_ips
+        results['cdn_ips'] = cdn_ips
         return results

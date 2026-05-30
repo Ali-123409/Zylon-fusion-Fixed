@@ -1325,6 +1325,7 @@ class ZylonFusion:
             ip_table.add_column("IP", style="bold red")
             ip_table.add_column("Confidence", style="yellow")
             ip_table.add_column("Sources", style="cyan")
+            ip_table.add_column("Type", style="magenta")
             ip_table.add_column("Verified", style="green")
             
             for candidate in origin_ips[:20]:
@@ -1332,16 +1333,37 @@ class ZylonFusion:
                 conf_color = "green" if confidence == 'high' else "yellow" if confidence == 'medium' else "red"
                 sources = ', '.join(candidate.get('sources', [])[:3])
                 verified = candidate.get('verification', {}).get('verified', False)
-                ver_str = "[green]YES[/green]" if verified else "[dim]Not tested[/dim]"
+                ip_type = candidate.get('ip_type', 'origin')
+                ver_str = "[green]YES[/green]" if verified else "[red]NO[/red]"
+                type_str = "ORIGIN" if ip_type == 'origin' else f"[dim]{ip_type}[/dim]"
                 ip_table.add_row(
                     candidate.get('ip', ''),
                     f"[{conf_color}]{confidence}[/{conf_color}]",
                     sources[:60],
+                    type_str,
                     ver_str
                 )
             console.print(ip_table)
         else:
-            console.print("[bold yellow][!] No non-CDN origin IPs found[/bold yellow]")
+            console.print("[bold yellow][!] No verified origin IPs found[/bold yellow]")
+        
+        # Display infrastructure IPs (mail/DNS/SPF) for reference
+        infra_ips = result.get('infrastructure_ips', [])
+        if infra_ips:
+            infra_table = Table(
+                title=f"[dim]Infrastructure IPs (NOT origin): {len(infra_ips)}[/dim]",
+                box=box.SIMPLE, border_style="dim"
+            )
+            infra_table.add_column("IP", style="dim")
+            infra_table.add_column("Type", style="dim yellow")
+            infra_table.add_column("Note", style="dim")
+            for inf in infra_ips[:10]:
+                infra_table.add_row(
+                    inf.get('ip', ''),
+                    inf.get('ip_type', ''),
+                    inf.get('note', 'Infrastructure')
+                )
+            console.print(infra_table)
     
     def _scan_origin_ip_full(self):
         """Origin IP Finder - Full scan with all 22 techniques"""
@@ -1430,7 +1452,7 @@ class ZylonFusion:
             ip_table.add_column("IP", style="bold red")
             ip_table.add_column("Confidence", style="yellow")
             ip_table.add_column("Sources", style="cyan")
-            ip_table.add_column("Source Count", style="green")
+            ip_table.add_column("Type", style="magenta")
             ip_table.add_column("Verified", style="bold green")
             ip_table.add_column("Match Score", style="magenta")
             
@@ -1442,17 +1464,26 @@ class ZylonFusion:
                 ver_str = "[bold green]VERIFIED[/bold green]" if verified else "[dim]Unverified[/dim]"
                 match_score = candidate.get('verification', {}).get('response_similarity', 0)
                 score_str = f"{match_score}%" if match_score else "N/A"
+                ip_type = candidate.get('ip_type', 'origin')
+                type_str = "[green]ORIGIN[/green]" if ip_type == 'origin' else f"[dim]{ip_type}[/dim]"
                 ip_table.add_row(
                     candidate.get('ip', ''),
                     f"[{conf_color}]{confidence}[/{conf_color}]",
                     sources[:60],
-                    str(candidate.get('source_count', 0)),
+                    type_str,
                     ver_str,
                     score_str
                 )
             console.print(ip_table)
         else:
-            console.print("[bold yellow][!] No non-CDN origin IPs discovered[/bold yellow]")
+            console.print("[bold yellow][!] No verified origin IPs discovered (target may be well-protected)[/bold yellow]")
+        
+        # Display infrastructure IPs for reference
+        infra_ips = result.get('infrastructure_ips', [])
+        if infra_ips:
+            console.print(f"\n[bold dim]Infrastructure IPs (NOT origin): {len(infra_ips)}[/bold dim]")
+            for inf in infra_ips[:8]:
+                console.print(f"  [dim]*[/dim] {inf.get('ip', '')} | {inf.get('ip_type', '')} | {inf.get('note', 'Infrastructure')}")
         
         # Display header fingerprint matches
         fp = result.get('header_fingerprint', {})
