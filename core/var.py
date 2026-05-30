@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "1.0.0"
-ZYLON_CODENAME = "Fusion"
+ZYLON_VERSION = "2.0.0"
+ZYLON_CODENAME = "Nuclear"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
@@ -415,3 +415,229 @@ SENSITIVE_JS_PATTERNS = {
         r'(?i)(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})',
     ],
 }
+
+# ============================================================================
+# V2.0 - API ENDPOINT DISCOVERY PATHS
+# ============================================================================
+
+API_ENDPOINTS = [
+    "/api", "/api/v1", "/api/v2", "/api/v3",
+    "/api/users", "/api/user", "/api/admin", "/api/me",
+    "/api/auth", "/api/login", "/api/register", "/api/logout",
+    "/api/config", "/api/settings", "/api/search", "/api/query",
+    "/api/data", "/api/upload", "/api/download", "/api/export",
+    "/api/import", "/api/files", "/api/docs", "/api/swagger",
+    "/api/openapi", "/api/graphql", "/api/rest", "/api/health",
+    "/api/status", "/api/profile", "/api/account", "/api/posts",
+    "/api/comments", "/api/orders", "/api/products", "/api/cart",
+    "/api/payment", "/api/checkout", "/api/webhook", "/api/callback",
+    "/api/notification", "/api/message", "/api/email", "/api/token",
+    "/api/verify", "/api/reset", "/api/confirm", "/api/activate",
+    "/api/otp", "/api/2fa", "/api/session", "/api/role",
+    "/api/permission", "/api/log", "/api/audit", "/api/report",
+    "/api/dashboard", "/api/analytics", "/api/metrics", "/api/batch",
+    "/swagger.json", "/swagger-ui", "/swagger-ui/", "/api-docs",
+    "/openapi.json", "/openapi.yaml", "/api/swagger.json",
+    "/.well-known/openid-configuration", "/.well-known/oauth-authorization-server",
+    "/v1/users", "/v1/auth", "/v1/admin", "/v1/data",
+    "/v2/users", "/v2/auth", "/v2/admin", "/v2/data",
+    "/rest/api", "/rest/v1", "/rest/v2",
+    "/graphql", "/graphiql",
+    "/oauth/token", "/oauth/authorize", "/oauth/revoke",
+    "/health", "/status", "/info", "/metrics",
+    "/actuator", "/actuator/health", "/actuator/env",
+    "/actuator/mappings", "/actuator/configprops", "/actuator/beans",
+]
+
+# ============================================================================
+# V2.0 - RATE LIMIT TEST ENDPOINTS
+# ============================================================================
+
+RATE_LIMIT_ENDPOINTS = [
+    "/login", "/signin", "/auth/login", "/api/login",
+    "/register", "/signup", "/auth/register",
+    "/api/v1/login", "/api/auth/token",
+    "/password-reset", "/forgot-password",
+    "/api/v1/register", "/oauth/token",
+    "/api/otp/verify", "/api/otp/resend",
+    "/2fa/verify", "/api/v1/2fa",
+    "/wp-login.php", "/administrator/login",
+]
+
+# ============================================================================
+# V2.0 - SENSITIVE FILES DEEP SCANNER
+# ============================================================================
+
+SENSITIVE_FILES_DEEP = [
+    # Version control
+    ".git/config", ".git/HEAD", ".git/refs/heads/master",
+    ".git/refs/heads/main", ".svn/entries", ".svn/wc.db",
+    ".hg/store", ".hg/hgrc", ".bzr/checkout",
+    # Environment & config
+    ".env", ".env.local", ".env.production", ".env.development",
+    ".env.staging", ".env.backup", ".env.bak", ".env.save",
+    ".env~", ".env.swp", ".env.old",
+    "config.php", "config.yml", "config.yaml", "config.json",
+    "config.inc.php", "config.ini", "config.asp", "config.aspx",
+    "wp-config.php", "wp-config.php.bak", "wp-config.php~",
+    "wp-config.php.save", "settings.py", "settings.php",
+    "application.properties", "application.yml",
+    "appsettings.json", "web.config",
+    # Database dumps
+    "database.sql", "db.sql", "dump.sql", "backup.sql",
+    "export.sql", "mysql.sql", "db_backup.sql",
+    "database.db", "data.db", "app.db", "sqlite.db",
+    # Backup archives
+    "backup.zip", "backup.tar.gz", "backup.rar", "backup.tar",
+    "site.zip", "www.zip", "web.zip", "public.zip",
+    "htdocs.zip", "home.zip", "root.zip",
+    "backup.tar.bz2", "backup.7z", "db.zip",
+    # Log files
+    "error.log", "access.log", "debug.log", "app.log",
+    "php_error.log", "mysql_error.log", "apache_error.log",
+    "nginx_error.log", "laravel.log", "django.log",
+    "production.log", "development.log", "test.log",
+    # Server info
+    "phpinfo.php", "info.php", "test.php", "pi.php",
+    "server-status", "server-info",
+    # CMS specific
+    "wp-admin/install.php", "wp-admin/upgrade.php",
+    "wp-content/debug.log", "wp-content/backups/",
+    "xmlrpc.php", "wp-cron.php",
+    # API & docs
+    "swagger.json", "swagger.yaml", "openapi.json",
+    "api-docs.json", "graphql", "graphiql",
+    # Docker & CI/CD
+    "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
+    ".dockerenv", "Jenkinsfile", ".gitlab-ci.yml",
+    ".travis.yml", "bitbucket-pipelines.yml",
+    # Cloud credentials
+    ".aws/credentials", ".aws/config",
+    ".google/cloud.json", "service-account.json",
+    "credentials.json", "client_secret.json",
+    # Other sensitive
+    "robots.txt", "sitemap.xml", "crossdomain.xml",
+    "README.md", "CHANGELOG.md", "LICENSE",
+    "package.json", "composer.json", "Gemfile",
+    "requirements.txt", "Pipfile", "pom.xml",
+    ".htaccess", ".htpasswd", ".DS_Store",
+    "id_rsa", "id_rsa.pub", "authorized_keys",
+    "known_hosts", "ssh_config",
+]
+
+# ============================================================================
+# V2.0 - EMAIL ENUMERATION PATTERNS
+# ============================================================================
+
+EMAIL_PATTERNS = [
+    "{first}@{domain}", "{first}.{last}@{domain}",
+    "{first}_{last}@{domain}", "{f}{last}@{domain}",
+    "{first}{l}@{domain}", "{last}.{first}@{domain}",
+    "{last}_{first}@{domain}", "{l}{first}@{domain}",
+    "{first}{last}@{domain}", "{first}.{l}@{domain}",
+    "{f}.{last}@{domain}", "{first}-{last}@{domain}",
+    "{last}{first}@{domain}", "{last}.{f}@{domain}",
+    "{first}.{last}2@{domain}", "{first}2@{domain}",
+]
+
+# ============================================================================
+# V2.0 - SUBDOMAIN TAKEOVER SIGNATURES
+# ============================================================================
+
+TAKEOVER_SIGNATURES = {
+    "GitHub Pages": {"cname": "github.io", "response": "There isn't a GitHub Pages site here", "status": [404]},
+    "Heroku": {"cname": "herokuapp.com", "response": "No such app", "status": [404]},
+    "AWS S3": {"cname": "aws.com", "response": "NoSuchBucket", "status": [404]},
+    "Shopify": {"cname": "shopify.com", "response": "Sorry, this shop is currently unavailable", "status": [410]},
+    "Tumblr": {"cname": "tumblr.com", "response": "Whatever you were looking for doesn't currently exist", "status": [404]},
+    "Wordpress": {"cname": "wordpress.com", "response": "Do you want to register", "status": [200]},
+    "Teamwork": {"cname": "teamwork.com", "response": "Oops - We didn't find your site", "status": [404]},
+    "Help Scout": {"cname": "helpscout.net", "response": "No settings were found for this company", "status": [404]},
+    "Cargo": {"cname": "cargocollective.com", "response": "If you're moving your domain away from Cargo", "status": [404]},
+    "Statuspage": {"cname": "statuspage.io", "response": "You are being redirected", "status": [301]},
+    "Surge": {"cname": "surge.sh", "response": "project not found", "status": [404]},
+    "Bitbucket": {"cname": "bitbucket.io", "response": "Repository not found", "status": [404]},
+    "Intercom": {"cname": "intercom.help", "response": "This page is reserved for artistic dogs", "status": [404]},
+    "Webflow": {"cname": "webflow.io", "response": "The page you're looking for doesn't exist or has been moved", "status": [404]},
+    "Readme": {"cname": "readme.io", "response": "Project doesnt exist", "status": [404]},
+    "Fly": {"cname": "fly.dev", "response": "404 Not Found", "status": [404]},
+    "Vercel": {"cname": "vercel.app", "response": "The deployment could not be found", "status": [404]},
+    "Netlify": {"cname": "netlify.app", "response": "Not Found", "status": [404]},
+    "Pantheon": {"cname": "pantheon.io", "response": "404 error unknown site", "status": [404]},
+    "Zendesk": {"cname": "zendesk.com", "response": "Help Center Closed", "status": [404]},
+    "Freshdesk": {"cname": "freshdesk.com", "response": "There is no helpdesk here", "status": [404]},
+    "GitLab": {"cname": "gitlab.io", "response": "The page you're looking for could not be found", "status": [404]},
+    "MyShopify": {"cname": "myshopify.com", "response": "Sorry, this shop is currently unavailable", "status": [404]},
+    "Uservoice": {"cname": "uservoice.com", "response": "This UserVoice subdomain is currently available", "status": [404]},
+}
+
+# ============================================================================
+# V2.0 - TECH VERSION SIGNATURES WITH VERSION EXTRACTION
+# ============================================================================
+
+TECH_VERSION_SIGNATURES = {
+    "Apache": {
+        "header": "Server",
+        "regex": r"Apache/([\d.]+)",
+    },
+    "nginx": {
+        "header": "Server",
+        "regex": r"nginx/([\d.]+)",
+    },
+    "PHP": {
+        "header": "X-Powered-By",
+        "regex": r"PHP/([\d.]+)",
+    },
+    "Express": {
+        "header": "X-Powered-By",
+        "regex": r"Express/([\d.]+)",
+    },
+    "WordPress": {
+        "meta": "generator",
+        "regex": r"WordPress\s+([\d.]+)",
+    },
+    "Joomla": {
+        "meta": "generator",
+        "regex": r"Joomla!\s*([\d.]+)",
+    },
+    "Drupal": {
+        "meta": "generator",
+        "regex": r"Drupal\s+([\d]+)",
+    },
+    "OpenSSL": {
+        "header": "Server",
+        "regex": r"OpenSSL/([\d.a-z]+)",
+    },
+    "jQuery": {
+        "js_pattern": r"jquery[.-]?([\d.]+)",
+    },
+    "React": {
+        "js_pattern": r"react.*?version.*?([\d.]+)",
+    },
+    "Next.js": {
+        "header": "x-nextjs-cache",
+        "meta": "next-head-count",
+        "regex": r"Next\.js\s*([\d.]+)",
+    },
+    "Laravel": {
+        "cookie": "laravel_session",
+        "header_check": True,
+    },
+    "Django": {
+        "cookie": "csrftoken",
+        "header_check": True,
+    },
+}
+
+# ============================================================================
+# V2.0 - CVE LOOKUP API
+# ============================================================================
+
+CVE_API = "https://cve.circl.lu/api"
+NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+# ============================================================================
+# V2.0 - BROKEN LINK STATUS CODES
+# ============================================================================
+
+BROKEN_LINK_CODES = [404, 410, 500, 502, 503, 0]

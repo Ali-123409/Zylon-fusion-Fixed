@@ -7,8 +7,8 @@
  ███████╗██║██║     ╚██████╔╝███████║
  ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 
- ZYLON FUSION - Advanced Security Reconnaissance & Vulnerability Platform
- Fused from omino + wizard + custom Zylon techniques
+ ZYLON FUSION v2.0 - Advanced Security Reconnaissance & Vulnerability Platform
+ Fused from omino + wizard + custom Zylon techniques + V2.0 Nuclear Modules
  Termux Non-Root Compatible | AI-Ready Architecture
 
  Coded by: Zylon | Hackathon Edition
@@ -141,6 +141,8 @@ from core.advanced_recon import AdvancedRecon
 from core.injections import InjectionArsenal
 from core.advanced_web import AdvancedWebAttacks
 from core.bounty_workflow import BugBountyWorkflow
+from core.v2_recon import V2ReconEngine
+from core.v2_vuln import V2VulnEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -177,8 +179,8 @@ class ZylonUI:
     ███████╗██║██║     ╚██████╔╝███████║
     ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 [/bold red]
-[bold yellow]    FUSION - Advanced Security Reconnaissance & Vulnerability Platform[/bold yellow]
-[bold cyan]    omino + wizard + Zylon Custom Techniques | Termux Non-Root[/bold cyan]
+[bold yellow]    FUSION v2.0 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
+[bold cyan]    omino + wizard + Zylon Custom + V2.0 Nuclear Modules | Termux Non-Root[/bold cyan]
 """
         console.print(Panel(banner, border_style="bright_red", box=box.HEAVY))
         
@@ -251,6 +253,13 @@ class ZylonUI:
             ("39", "Host Header Injection"),
             ("40", "JWT Vulnerability Scanner"),
             ("41", "Broken Authentication Detector"),
+            # V2.0 Nuclear Modules
+            ("44", "API Endpoint Discovery + Fuzzer"),
+            ("45", "Rate Limit Tester"),
+            ("46", "Sensitive File Deep Scanner"),
+            ("47", "Email Enumeration"),
+            ("48", "Broken Link Hijacker"),
+            ("49", "Tech Version + CVE Lookup"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
@@ -324,6 +333,10 @@ class ZylonFusion:
         self.injections = InjectionArsenal(self.session)
         self.adv_web = AdvancedWebAttacks(self.session)
         self.bounty = BugBountyWorkflow()
+        
+        # V2.0 Engines
+        self.v2_recon = V2ReconEngine(self.session)
+        self.v2_vuln = V2VulnEngine(self.session)
     
     def set_target(self, target):
         """Validate and set target"""
@@ -393,6 +406,13 @@ class ZylonFusion:
             '39': self._scan_host_header,
             '40': self._scan_jwt,
             '41': self._scan_broken_auth,
+            # V2.0 Nuclear Modules
+            '44': self._scan_api_fuzzer,
+            '45': self._scan_rate_limit,
+            '46': self._scan_sensitive_files,
+            '47': self._scan_email_enum,
+            '48': self._scan_broken_links,
+            '49': self._scan_tech_cve,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -1276,6 +1296,292 @@ class ZylonFusion:
         self._scan_host_header()
         console.print(f"\n[bold green][+] Bug Bounty Vuln Pipeline Complete![/bold green]")
     
+    # ========================================================================
+    # V2.0 NUCLEAR MODULE SCAN IMPLEMENTATIONS
+    # ========================================================================
+    
+    def _scan_api_fuzzer(self):
+        """API Endpoint Discovery + Fuzzer (V2.0)"""
+        console.print(f"\n[bold magenta][*] API Endpoint Discovery + Fuzzer on {self.target}[/bold magenta]")
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold magenta]Discovering and fuzzing API endpoints...[/bold magenta]"):
+            result = self.v2_vuln.discover_api_endpoints(url)
+        
+        self.results['findings']['api_fuzzer'] = result
+        
+        if result and result.get('discovered_endpoints'):
+            e_table = Table(title=f"API Endpoints Discovered: {result['total_endpoints']}", 
+                          box=box.DOUBLE, border_style="bright_magenta")
+            e_table.add_column("Endpoint", style="cyan")
+            e_table.add_column("Status", style="green")
+            e_table.add_column("Type", style="yellow")
+            e_table.add_column("Vulns", style="red")
+            
+            for ep in result['discovered_endpoints']:
+                is_api = "Yes" if ep.get('is_api') else "No"
+                vuln_count = len(ep.get('vulnerabilities', []))
+                status_color = "green" if ep['status_code'] == 200 else "yellow"
+                e_table.add_row(
+                    ep['path'],
+                    f"[{status_color}]{ep['status_code']}[/{status_color}]",
+                    is_api,
+                    str(vuln_count) if vuln_count > 0 else "-"
+                )
+            console.print(e_table)
+            
+            if result.get('swagger_docs'):
+                console.print("\n[bold red][!] API Documentation Exposed:[/bold red]")
+                for doc in result['swagger_docs']:
+                    console.print(f"  [red]*[/red] {doc['path']} (Status: {doc['status_code']})")
+            
+            if result.get('vulnerabilities'):
+                v_table = Table(title=f"API Vulnerabilities Found: {result['total_vulns']}", 
+                              box=box.HEAVY, border_style="bold red")
+                v_table.add_column("Type", style="red")
+                v_table.add_column("Endpoint", style="cyan")
+                v_table.add_column("Severity", style="yellow")
+                v_table.add_column("Description", style="white")
+                for v in result['vulnerabilities']:
+                    v_table.add_row(
+                        v.get('type', ''),
+                        v.get('endpoint', ''),
+                        v.get('severity', ''),
+                        v.get('description', '')[:60]
+                    )
+                console.print(v_table)
+        else:
+            console.print("[bold yellow][!] No API endpoints discovered[/bold yellow]")
+    
+    def _scan_rate_limit(self):
+        """Rate Limit Tester (V2.0)"""
+        console.print(f"\n[bold magenta][*] Rate Limit Testing on {self.target}[/bold magenta]")
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold magenta]Sending rapid requests to test rate limiting...[/bold magenta]"):
+            result = self.v2_vuln.test_rate_limiting(url)
+        
+        self.results['findings']['rate_limit'] = result
+        
+        if result and result.get('missing_rate_limit'):
+            console.print(f"\n[bold red][!] {result['total_missing']} endpoints missing rate limiting![/bold red]")
+            r_table = Table(title="Missing Rate Limiting", box=box.HEAVY, border_style="bold red")
+            r_table.add_column("Endpoint", style="cyan")
+            r_table.add_column("Severity", style="red")
+            r_table.add_column("Details", style="yellow")
+            for ep in result['missing_rate_limit']:
+                r_table.add_row(
+                    ep['endpoint'],
+                    f"[red]{ep['severity']}[/red]",
+                    ep['description'][:60]
+                )
+            console.print(r_table)
+        else:
+            console.print("[bold green][+] Rate limiting appears to be in place on tested endpoints[/bold green]")
+        
+        # Show summary of all tested endpoints
+        if result and result.get('endpoints_tested'):
+            s_table = Table(title="Rate Limit Test Summary", box=box.ROUNDED, border_style="cyan")
+            s_table.add_column("Endpoint", style="cyan")
+            s_table.add_column("Sent", style="yellow")
+            s_table.add_column("Success", style="green")
+            s_table.add_column("Verdict", style="bold")
+            for ep in result['endpoints_tested']:
+                verdict_color = "red" if 'NO' in ep.get('verdict', '') else "green" if 'RATE' in ep.get('verdict', '') else "dim"
+                s_table.add_row(
+                    ep['endpoint'],
+                    str(ep['requests_sent']),
+                    str(ep['successful']),
+                    f"[{verdict_color}]{ep.get('verdict', 'N/A')}[/{verdict_color}]"
+                )
+            console.print(s_table)
+    
+    def _scan_sensitive_files(self):
+        """Sensitive File Deep Scanner (V2.0)"""
+        console.print(f"\n[bold magenta][*] Sensitive File Deep Scan on {self.target}[/bold magenta]")
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold magenta]Scanning for 100+ sensitive file patterns...[/bold magenta]"):
+            result = self.v2_vuln.scan_sensitive_files(url)
+        
+        self.results['findings']['sensitive_files'] = result
+        
+        if result and result.get('found_files'):
+            # Critical exposures first
+            if result.get('critical_exposures'):
+                console.print(f"\n[bold red][!!!] {result['total_critical']} CRITICAL EXPOSURES FOUND![/bold red]")
+                for exp in result['critical_exposures']:
+                    console.print(f"  [bold red]*[/bold red] {exp['url']} - {exp.get('severity', '').upper()}")
+                    if exp.get('contains_secrets'):
+                        console.print(f"    [red]Contains secrets/passwords![/red]")
+                    if exp.get('git_exposed'):
+                        console.print(f"    [red]Git repository exposed![/red]")
+                    if exp.get('db_dump_exposed'):
+                        console.print(f"    [red]Database dump exposed![/red]")
+            
+            f_table = Table(title=f"Sensitive Files Found: {result['total_found']}", 
+                          box=box.DOUBLE, border_style="bright_red")
+            f_table.add_column("Path", style="cyan")
+            f_table.add_column("Status", style="green")
+            f_table.add_column("Size", style="yellow")
+            f_table.add_column("Severity", style="bold")
+            
+            # Sort by severity
+            severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4}
+            sorted_files = sorted(result['found_files'], 
+                                key=lambda x: severity_order.get(x.get('severity', 'info'), 5))
+            
+            for f in sorted_files[:50]:
+                sev = f.get('severity', 'info')
+                sev_color = "red" if sev == 'critical' else "yellow" if sev == 'high' else "green" if sev == 'medium' else "dim"
+                f_table.add_row(
+                    f['path'],
+                    str(f['status_code']),
+                    str(f.get('size', '')),
+                    f"[{sev_color}]{sev}[/{sev_color}]"
+                )
+            console.print(f_table)
+            if result['total_found'] > 50:
+                console.print(f"[yellow]... and {result['total_found'] - 50} more files[/yellow]")
+        else:
+            console.print("[bold green][+] No sensitive files detected[/bold green]")
+    
+    def _scan_email_enum(self):
+        """Email Enumeration (V2.0)"""
+        console.print(f"\n[bold magenta][*] Email Enumeration on {self.target}[/bold magenta]")
+        domain = self.target.replace('www.', '')
+        
+        with console.status("[bold magenta]Enumerating email addresses...[/bold magenta]"):
+            result = self.v2_recon.enumerate_emails(domain)
+        
+        self.results['findings']['email_enum'] = result
+        
+        if result and result.get('emails'):
+            e_table = Table(title=f"Emails Found: {result['total_found']}", 
+                          box=box.DOUBLE, border_style="bright_cyan")
+            e_table.add_column("#", style="dim")
+            e_table.add_column("Email", style="cyan")
+            e_table.add_column("Source", style="yellow")
+            
+            for i, email in enumerate(result['emails'][:50], 1):
+                source = 'multi'
+                for src, emails in result.get('sources', {}).items():
+                    if email in emails:
+                        source = src
+                        break
+                if any(email.startswith(p.split('@')[0]) for p in result.get('patterns_generated', [])):
+                    source = 'pattern-generated'
+                e_table.add_row(str(i), email, source)
+            console.print(e_table)
+        else:
+            console.print("[bold yellow][!] No emails found[/bold yellow]")
+        
+        if result and result.get('mx_records'):
+            console.print(f"\n[cyan]MX Records:[/cyan] {', '.join(result['mx_records'])}")
+    
+    def _scan_broken_links(self):
+        """Broken Link Hijacker (V2.0)"""
+        console.print(f"\n[bold magenta][*] Broken Link Hijacking Scan on {self.target}[/bold magenta]")
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold magenta]Crawling page and checking external links...[/bold magenta]"):
+            result = self.v2_recon.check_broken_links(url)
+        
+        self.results['findings']['broken_links'] = result
+        
+        console.print(f"\n[cyan]Total links on page:[/cyan] {result.get('total_links', 0)}")
+        console.print(f"[cyan]External links:[/cyan] {result.get('external_links', 0)}")
+        console.print(f"[cyan]Broken links:[/cyan] {result.get('total_broken', 0)}")
+        
+        if result and result.get('hijackable'):
+            console.print(f"\n[bold red][!] {result['total_hijackable']} HIJACKABLE broken links found![/bold red]")
+            h_table = Table(title="Hijackable Domains", box=box.HEAVY, border_style="bold red")
+            h_table.add_column("Broken URL", style="red")
+            h_table.add_column("Domain", style="cyan")
+            h_table.add_column("Status", style="yellow")
+            for link in result['hijackable']:
+                h_table.add_row(
+                    link['url'][:60],
+                    link['domain'],
+                    str(link['status_code'])
+                )
+            console.print(h_table)
+        elif result and result.get('broken_links'):
+            b_table = Table(title=f"Broken Links: {result['total_broken']}", 
+                          box=box.ROUNDED, border_style="yellow")
+            b_table.add_column("URL", style="red")
+            b_table.add_column("Status", style="yellow")
+            b_table.add_column("Server", style="dim")
+            for link in result['broken_links']:
+                b_table.add_row(
+                    link['url'][:60],
+                    str(link['status_code']),
+                    link.get('server', '')[:30]
+                )
+            console.print(b_table)
+        else:
+            console.print("[bold green][+] No broken external links found[/bold green]")
+    
+    def _scan_tech_cve(self):
+        """Technology Version + CVE Lookup (V2.0)"""
+        console.print(f"\n[bold magenta][*] Tech Version + CVE Lookup on {self.target}[/bold magenta]")
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold magenta]Detecting technology versions and looking up CVEs...[/bold magenta]"):
+            result = self.v2_recon.detect_tech_versions(url)
+        
+        self.results['findings']['tech_cve'] = result
+        
+        if result and result.get('technologies'):
+            t_table = Table(title=f"Technologies with Versions: {result['total_techs']}", 
+                          box=box.DOUBLE, border_style="bright_cyan")
+            t_table.add_column("Technology", style="cyan")
+            t_table.add_column("Version", style="green")
+            t_table.add_column("Source", style="yellow")
+            t_table.add_column("CVEs", style="red")
+            
+            for tech in result['technologies']:
+                cve_count = len(tech.get('cves', []))
+                t_table.add_row(
+                    tech['name'],
+                    tech['version'],
+                    tech.get('source', ''),
+                    str(cve_count) if cve_count > 0 else "-"
+                )
+            console.print(t_table)
+            
+            # Show CVEs
+            if result.get('cves'):
+                risk = result.get('risk_summary', {})
+                console.print(f"\n[bold red]CVE Risk Summary:[/bold red] "
+                            f"[red]Critical: {risk.get('critical', 0)}[/red] | "
+                            f"[yellow]High: {risk.get('high', 0)}[/yellow] | "
+                            f"[cyan]Medium: {risk.get('medium', 0)}[/cyan] | "
+                            f"[green]Low: {risk.get('low', 0)}[/green]")
+                
+                c_table = Table(title=f"CVEs Found: {result['total_cves']}", 
+                              box=box.HEAVY, border_style="bold red")
+                c_table.add_column("CVE ID", style="red")
+                c_table.add_column("Technology", style="cyan")
+                c_table.add_column("CVSS", style="yellow")
+                c_table.add_column("Severity", style="bold")
+                c_table.add_column("Summary", style="white")
+                
+                for tech in result['technologies']:
+                    for cve in tech.get('cves', []):
+                        sev = cve.get('severity', 'medium')
+                        sev_color = "red" if sev == 'critical' else "yellow" if sev == 'high' else "green"
+                        c_table.add_row(
+                            cve.get('id', ''),
+                            tech['name'],
+                            str(cve.get('cvss', 0)),
+                            f"[{sev_color}]{sev}[/{sev_color}]",
+                            cve.get('summary', '')[:50]
+                        )
+                console.print(c_table)
+        else:
+            console.print("[bold yellow][!] No technology versions detected[/bold yellow]")
+    
     def _scan_mega(self):
         """MEGA SCAN - Every single module"""
         console.print(f"\n[bold red][!!!] MEGA SCAN INITIATED on {self.target}[/bold red]")
@@ -1322,6 +1628,13 @@ class ZylonFusion:
         self._scan_host_header()
         self._scan_jwt()
         self._scan_broken_auth()
+        # V2.0 Nuclear Modules
+        self._scan_api_fuzzer()
+        self._scan_rate_limit()
+        self._scan_sensitive_files()
+        self._scan_email_enum()
+        self._scan_broken_links()
+        self._scan_tech_cve()
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
