@@ -12,6 +12,7 @@ import requests
 from urllib.parse import urlparse, urljoin, parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
+import random
 
 from core.var import *
 
@@ -25,7 +26,6 @@ class V2VulnEngine:
         self.session.verify = VERIFY_SSL
 
     def _rotate_ua(self):
-        import random
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
 
     # ========================================================================

@@ -172,6 +172,7 @@ class NetworkEngine:
                 ssock.send(f"HEAD / HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
                 banner = ssock.recv(1024).decode('utf-8', errors='ignore').strip()
                 ssock.close()
+                sock.close()
                 return banner[:200]
 
             banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()

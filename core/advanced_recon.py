@@ -16,10 +16,18 @@ import time
 import random
 import hashlib
 
+import dns.resolver
+
 from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, MAX_THREADS,
     REQUEST_DELAY
 )
+
+# DNS resolver compatibility (dnspython < 2.0 uses query, >= 2.0 uses resolve)
+try:
+    _dns_resolve = dns.resolver.resolve
+except AttributeError:
+    _dns_resolve = dns.resolver.query
 
 
 class AdvancedRecon:
@@ -710,8 +718,7 @@ class AdvancedRecon:
                 # Resolve CNAME
                 cname = None
                 try:
-                    import dns.resolver
-                    answers = dns.resolver.resolve(subdomain, 'CNAME')
+                    answers = _dns_resolve(subdomain, 'CNAME')
                     if answers:
                         cname = str(answers[0]).rstrip('.')
                 except Exception:

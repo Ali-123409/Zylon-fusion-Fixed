@@ -8,7 +8,7 @@ import re
 import json
 import socket
 import requests
-from urllib.parse import urlparse, urljoin, parse_qs, quote
+from urllib.parse import urlparse, urljoin, parse_qs, urlencode, quote
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -53,7 +53,6 @@ class VulnEngine:
                         for k in test_params:
                             test_params[k] = [payload]
 
-                        from urllib.parse import urlencode
                         parsed = urlparse(test_url)
                         test_query = urlencode({k: v[0] for k, v in test_params.items()})
                         test_full = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{test_query}"
@@ -177,7 +176,6 @@ class VulnEngine:
                         test_params = parse_qs(parsed.query)
                         test_params[param] = [payload]
 
-                        from urllib.parse import urlencode
                         test_query = urlencode({k: v[0] for k, v in test_params.items()})
                         test_full = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{test_query}"
 

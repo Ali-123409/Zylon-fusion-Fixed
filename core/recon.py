@@ -4,6 +4,7 @@ Fuses: omino OSINT/recon + wizard basic recon + Zylon custom techniques
 Termux Non-Root Compatible - All API/web-based, no raw sockets needed
 """
 
+import os
 import re
 import json
 import socket
@@ -303,8 +304,7 @@ class ReconEngine:
         """DNSDumpster (web scraping)"""
         try:
             url = "https://dnsdumpster.com/"
-            session = requests.Session()
-            resp = session.get(url, timeout=10)
+            resp = self.session.get(url, timeout=10)
             if resp.status_code == 200:
                 # Get CSRF token
                 soup = BeautifulSoup(resp.text, 'html.parser')
@@ -313,7 +313,7 @@ class ReconEngine:
                     token = token.get('value', '')
                     data = {'csrfmiddlewaretoken': token, 'targetip': domain, 'user': 'free'}
                     headers = {'Referer': url}
-                    resp = session.post(url, data=data, headers=headers, timeout=15)
+                    resp = self.session.post(url, data=data, headers=headers, timeout=15)
                     # Parse results
                     subs = set()
                     matches = re.findall(r'([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
