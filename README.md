@@ -18,7 +18,7 @@
  ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 ```
 
-**v2.0 NUCLEAR** — Fused from **omino** + **wizard** + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder
+**v2.0 NUCLEAR** — Fused from **omino** + **wizard** + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine
 
 *Built for **Android Termux (Non-Root)** — No sudo required*
 
@@ -32,7 +32,7 @@
 
 **ZYLON FUSION v2.0 NUCLEAR** is an enterprise-grade offensive security platform that combines the best of two legendary tools — **omino** (advanced recon/vuln suite) and **wizard** (Python security framework) — with brand new custom Zylon techniques, V2.0 Nuclear modules, and a powerful Origin IP Finder engine, all rebuilt from scratch to run on **Android Termux without root access**.
 
-|  🔥 57+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |
+|  🔥 77+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |
 |:-:|:-:|:-:|:-:|:-:|
 
 ---
@@ -91,6 +91,28 @@
 - **Email Enumeration** — User enumeration via registration/login flows
 - **Broken Link Checker** — Dead link detection with status codes
 - **Tech CVE Lookup** — Technology version to CVE correlation
+
+### V3 Security Engine (NEW in v2.0)
+- **GraphQL Security Tester** — Introspection, field suggestion, query depth, mutation abuse, batch queries
+- **DOM-based XSS Scanner** — Source → Sink analysis in JavaScript (15+ patterns)
+- **Reverse IP Lookup** — Find all domains on the same IP (3 sources)
+- **DNS Zone Transfer Test** — AXFR test on all nameservers, full zone dump
+- **Web Cache Deception** — Path confusion with 8 techniques × 12 extensions
+- **Clickjacking Detector** — X-Frame-Options + CSP frame-ancestors + PoC HTML generator
+- **CSP Analyzer** — 10 misconfiguration checks with bypass opportunities
+- **Account Takeover Suite** — Reset token leakage, login CSRF, session fixation
+- **OAuth/SSO Misconfig** — Open redirect in callback, CSRF in state, token leakage
+- **HTTP Method Tampering** — 14 methods + method override headers
+- **Shodan InternetDB** — Free IP intelligence (ports, vulns, CPEs, hostnames)
+- **Favicon Hash Discovery** — mmh3 hash for related domain discovery
+- **Pastebin Dorking** — Search Pastebin, GitHub Gist, Rentry for leaked data
+- **URL Shortener Discovery** — Find hidden/internal URLs via shortened links
+- **Security.txt & Robots.txt** — Parse security.txt, robots.txt, sitemap.xml
+- **Blind XSS Scanner** — Form injection with callback URLs (11 payloads)
+- **WebSocket Security** — Origin validation, unauthenticated access testing
+- **2FA Bypass Tester** — Rate limiting, response manipulation, direct API access
+- **Mixed Content Scanner** — Passive and active mixed content detection
+- **Information Disclosure** — Debug mode, source maps, stack traces, sensitive files
 
 ### Origin IP Finder (NEW in v2.0)
 - **22 Advanced Techniques** to discover the real origin IP behind CDN/Cloudflare/WAF
@@ -272,6 +294,31 @@ ZYLON > exit                 # Quit
 | 54 | **Subdomain Origin** | Zylon V2 | Scan subdomains for non-CDN IPs |
 | 55 | **IP Verification** | Zylon V2 | HTTP verification with host header routing |
 
+### V3 Security Engine (56-75)
+
+| # | Module | Source | Description |
+|---|---|---|---|
+| 56 | **GraphQL Security** | Zylon V3 | Introspection, field suggestion, depth, mutations, batch |
+| 57 | **DOM XSS** | Zylon V3 | Source → Sink analysis in JavaScript (15+ patterns) |
+| 58 | **Reverse IP** | Zylon V3 | Find all domains on same IP (3 sources) |
+| 59 | **DNS Zone Transfer** | Zylon V3 | AXFR test on all nameservers |
+| 60 | **Cache Deception** | Zylon V3 | Path confusion with 8 techniques × 12 extensions |
+| 61 | **Clickjacking** | Zylon V3 | X-Frame-Options + CSP + PoC HTML generator |
+| 62 | **CSP Analyzer** | Zylon V3 | 10 misconfiguration checks with bypasses |
+| 63 | **Account Takeover** | Zylon V3 | Reset token leakage, login CSRF, session fixation |
+| 64 | **OAuth/SSO Misconfig** | Zylon V3 | Open redirect, CSRF state, token leakage |
+| 65 | **HTTP Method Tamper** | Zylon V3 | 14 methods + method override headers |
+| 66 | **Shodan InternetDB** | Zylon V3 | Free IP intelligence (ports, vulns, CPEs) |
+| 67 | **Favicon Hash** | Zylon V3 | mmh3 hash for related domain discovery |
+| 68 | **Pastebin Dork** | Zylon V3 | Search paste sites for leaked data |
+| 69 | **URL Shortener** | Zylon V3 | Find hidden URLs via shortened links |
+| 70 | **Security.txt** | Zylon V3 | Parse security.txt + robots.txt + sitemap.xml |
+| 71 | **Blind XSS** | Zylon V3 | Form injection with callback URLs |
+| 72 | **WebSocket Security** | Zylon V3 | Origin validation, unauthenticated access |
+| 73 | **2FA Bypass** | Zylon V3 | Rate limiting, response manipulation, direct API |
+| 74 | **Mixed Content** | Zylon V3 | Passive and active mixed content detection |
+| 75 | **Info Disclosure** | Zylon V3 | Debug mode, source maps, stack traces, files |
+
 ### Mega Scan
 
 | # | Module | Source | Description |
@@ -339,12 +386,13 @@ zylon-fusion/
 │   ├── bounty_workflow.py    # Bug bounty workflow automation (516 lines)
 │   ├── v2_recon.py           # V2 Recon: API Fuzzer, Rate Limit, Sensitive Files (404 lines)
 │   ├── v2_vuln.py            # V2 Vuln: Email Enum, Broken Links, Tech CVE (364 lines)
-│   └── origin_ip.py          # Origin IP Finder Engine — 22 techniques (2,178 lines)
+│   ├── origin_ip.py          # Origin IP Finder Engine — 22 techniques (2,178 lines)
+│   └── v3_security.py        # V3 Security Engine — 20 modules (2,449 lines)
 ├── install_termux.sh         # Termux one-command installer
 └── requirements.txt          # Python dependencies
 ```
 
-**Total Codebase:** 11,000+ lines of Python
+**Total Codebase:** 13,500+ lines of Python
 
 ---
 
@@ -374,10 +422,11 @@ zylon-fusion/
 | Custom Techniques | 0 | 0 | **8+** |
 | V2 Nuclear Modules | 0 | 0 | **19+** |
 | Origin IP Finder | 0 | 0 | **22 techniques** |
+| V3 Security Engine | 0 | 0 | **20 modules** |
 | AI Integration | No | No | **Yes** |
 | Non-Root Port Scan | No | No | **Yes** |
 | Rich UI | Bash colors | Rich | **Rich** |
-| Total Scan Methods | ~10 | ~5 | **57+** |
+| Total Scan Methods | ~10 | ~5 | **77+** |
 
 ---
 
@@ -434,6 +483,6 @@ Contributions are welcome! Feel free to:
 
 **Built by Zylon | Hackathon Edition**
 
-*omino + wizard + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder = ZYLON FUSION v2.0 NUCLEAR*
+*omino + wizard + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine = ZYLON FUSION v2.0 NUCLEAR*
 
 </div>
