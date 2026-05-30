@@ -185,20 +185,40 @@ class ReconEngine:
         """WHOIS domain lookup"""
         try:
             import whois as pythonwhois
-            w = pythonwhois.whois(domain)
-            result = {}
-            for field in ['domain_name', 'registrar', 'whois_server', 'creation_date',
-                         'expiration_date', 'updated_date', 'name_servers', 'status',
-                         'emails', 'dnssec', 'org', 'country']:
-                val = getattr(w, field, None)
-                if val:
-                    result[field] = str(val)
-            return result
+            # python-whois API: whois.query() for the correct interface
+            if hasattr(pythonwhois, 'query'):
+                w = pythonwhois.query(domain)
+                result = {}
+                if w:
+                    for field in ['name', 'registrar', 'registrant', 'creation_date',
+                                 'expiration_date', 'updated_date', 'name_servers', 'status',
+                                 'emails', 'dnssec', 'org', 'country']:
+                        val = getattr(w, field, None)
+                        if val:
+                            result[field] = str(val)
+                return result if result else {'error': 'WHOIS returned no data'}
+            elif hasattr(pythonwhois, 'whois'):
+                w = pythonwhois.whois(domain)
+                result = {}
+                if w:
+                    for field in ['domain_name', 'registrar', 'whois_server', 'creation_date',
+                                 'expiration_date', 'updated_date', 'name_servers', 'status',
+                                 'emails', 'dnssec', 'org', 'country']:
+                        val = getattr(w, field, None)
+                        if val:
+                            result[field] = str(val)
+                return result if result else {'error': 'WHOIS returned no data'}
+            else:
+                return self._whois_web(domain)
         except ImportError:
             # Fallback: web-based WHOIS
             return self._whois_web(domain)
         except Exception as e:
-            return {'error': str(e)[:100]}
+            # Try web-based fallback before returning error
+            try:
+                return self._whois_web(domain)
+            except Exception:
+                return {'error': str(e)[:100]}
 
     def _whois_web(self, domain):
         """Web-based WHOIS lookup fallback"""

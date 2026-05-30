@@ -36,19 +36,45 @@ class VulnEngine:
     # ========================================================================
 
     def scan_sqli(self, url):
-        """Advanced SQL injection scanner with multiple detection methods"""
+        """Advanced SQL injection scanner with multiple detection methods
+        Optimized: Error-based first, then time-based (only top params),
+        then boolean-based (only if error-based found nothing)"""
+        import time as _time
         result = {'vulnerable': False, 'findings': [], 'tested_urls': 0}
+
+        # Hard limit on total HTTP requests to prevent hanging
+        MAX_REQUESTS = 50
+        request_count = 0
 
         # Collect URLs with parameters
         test_urls = self._collect_test_urls(url)
         result['tested_urls'] = len(test_urls)
 
+        # Separate payloads by type for efficient scanning
+        error_payloads = [p for p in SQLI_PAYLOADS if 'SLEEP' not in p.upper()]
+        time_payloads = [p for p in SQLI_PAYLOADS if 'SLEEP' in p.upper()]
+
+        # Phase 1: Error-based detection (fast - no extra requests)
+        # Get baseline response for boolean comparison (once per URL)
+        baseline_responses = {}
+        for test_url, params in test_urls:
+            try:
+                baseline = self.session.get(test_url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
+                baseline_responses[test_url] = baseline
+            except Exception:
+                pass
+
         for test_url, params in test_urls:
             for param in params:
-                for payload in SQLI_PAYLOADS:
+                found_for_param = False
+                for payload in error_payloads:
+                    if found_for_param:
+                        break
+                    request_count += 1
+                    if request_count > MAX_REQUESTS:
+                        break
                     try:
                         self._rotate_ua()
-                        # Test with payload
                         test_params = dict(parse_qs(urlparse(test_url).query))
                         for k in test_params:
                             test_params[k] = [payload]
@@ -70,17 +96,42 @@ class VulnEngine:
                                     'evidence': f"SQL error: {error}",
                                     'type': 'Error-based SQLi'
                                 })
+                                found_for_param = True
                                 break
 
-                        # Check for time-based (basic)
-                        if 'SLEEP' in payload.upper() or 'sleep' in payload:
-                            import time
-                            start = time.time()
-                            try:
-                                self.session.get(test_full, timeout=15, verify=VERIFY_SSL)
-                            except:
-                                pass
-                            elapsed = time.time() - start
+                        # Boolean-based check (compare with baseline, no extra request)
+                        if not found_for_param and test_url in baseline_responses:
+                            baseline = baseline_responses[test_url]
+                            if resp.status_code != baseline.status_code:
+                                if abs(len(resp.text) - len(baseline.text)) > 500:
+                                    result['vulnerable'] = True
+                                    result['findings'].append({
+                                        'url': test_url,
+                                        'parameter': param,
+                                        'payload': payload,
+                                        'evidence': f"Response difference: {abs(len(resp.text) - len(baseline.text))} bytes",
+                                        'type': 'Boolean-based SQLi'
+                                    })
+                                    found_for_param = True
+
+                    except Exception:
+                        continue
+
+        # Phase 2: Time-based detection (only if no error-based found, and only for first 3 URLs)
+        if not result['vulnerable'] and time_payloads:
+            for test_url, params in test_urls[:3]:
+                for param in params[:1]:  # Only first param per URL
+                    for payload in time_payloads[:2]:  # Only first 2 time payloads
+                        try:
+                            start = _time.time()
+                            test_params = dict(parse_qs(urlparse(test_url).query))
+                            for k in test_params:
+                                test_params[k] = [payload]
+                            parsed = urlparse(test_url)
+                            test_query = urlencode({k: v[0] for k, v in test_params.items()})
+                            test_full = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{test_query}"
+                            self.session.get(test_full, timeout=8, verify=VERIFY_SSL)
+                            elapsed = _time.time() - start
                             if elapsed >= 4.5:
                                 result['vulnerable'] = True
                                 result['findings'].append({
@@ -90,22 +141,9 @@ class VulnEngine:
                                     'evidence': f"Time delay: {elapsed:.1f}s",
                                     'type': 'Time-based SQLi'
                                 })
-
-                        # Check for boolean-based
-                        original_resp = self.session.get(test_url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
-                        if resp.status_code != original_resp.status_code:
-                            if abs(len(resp.text) - len(original_resp.text)) > 500:
-                                result['vulnerable'] = True
-                                result['findings'].append({
-                                    'url': test_url,
-                                    'parameter': param,
-                                    'payload': payload,
-                                    'evidence': f"Response difference: {abs(len(resp.text) - len(original_resp.text))} bytes",
-                                    'type': 'Boolean-based SQLi'
-                                })
-
-                    except Exception:
-                        continue
+                                break
+                        except Exception:
+                            continue
 
         return result
 
@@ -118,6 +156,7 @@ class VulnEngine:
 
             # Collect from current URL
             parsed = urlparse(url)
+            target_domain = parsed.netloc
             params = parse_qs(parsed.query)
             if params:
                 test_urls.append((url, list(params.keys())))
@@ -137,7 +176,9 @@ class VulnEngine:
                 link_parsed = urlparse(href)
                 link_params = parse_qs(link_parsed.query)
                 if link_params and href not in [u[0] for u in test_urls]:
-                    test_urls.append((href, list(link_params.keys())))
+                    # Only include same-domain links to avoid scanning external sites
+                    if target_domain and target_domain in href:
+                        test_urls.append((href, list(link_params.keys())))
 
         except Exception:
             pass
@@ -153,22 +194,34 @@ class VulnEngine:
                 test_urls.append((url + '?page=1', ['page']))
                 test_urls.append((url + '?q=test', ['q']))
 
-        return test_urls[:20]  # Limit to prevent excessive scanning
+        return test_urls[:10]  # Limit to 10 URLs max to prevent excessive scanning
 
     # ========================================================================
     # XSS SCANNER (from wizard + enhanced)
     # ========================================================================
 
     def scan_xss(self, url):
-        """Advanced XSS vulnerability scanner"""
+        """Advanced XSS vulnerability scanner with request limit"""
         result = {'vulnerable': False, 'findings': [], 'tested_urls': 0}
+
+        # Hard limit on total HTTP requests to prevent hanging
+        MAX_REQUESTS = 60
+        request_count = 0
 
         test_urls = self._collect_test_urls(url)
         result['tested_urls'] = len(test_urls)
 
         for test_url, params in test_urls:
+            found_for_url = False
             for param in params:
+                if found_for_url:
+                    break
                 for payload in XSS_PAYLOADS:
+                    request_count += 1
+                    if request_count > MAX_REQUESTS:
+                        break
+                    if found_for_url:
+                        break
                     try:
                         self._rotate_ua()
                         # Build test URL
@@ -194,6 +247,7 @@ class VulnEngine:
                                         'payload': payload,
                                         'type': 'Reflected XSS'
                                     })
+                                    found_for_url = True
                                     break
 
                         # Template injection check
@@ -206,6 +260,7 @@ class VulnEngine:
                                     'payload': payload,
                                     'type': 'Server-Side Template Injection'
                                 })
+                                found_for_url = True
 
                     except Exception:
                         continue
