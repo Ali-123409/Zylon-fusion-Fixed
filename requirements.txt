@@ -1,0 +1,10 @@
+requests
+rich
+colorama
+beautifulsoup4
+dnspython
+python-whois
+lxml
+cryptography
+aiohttp
+pyfiglet
