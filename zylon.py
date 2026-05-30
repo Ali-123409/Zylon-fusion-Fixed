@@ -146,6 +146,7 @@ from core.bounty_workflow import BugBountyWorkflow
 from core.v2_recon import V2ReconEngine
 from core.v2_vuln import V2VulnEngine
 from core.origin_ip import OriginIPEngine
+from core.v3_security import V3SecurityEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -354,6 +355,9 @@ class ZylonFusion:
         
         # Origin IP Finder Engine
         self.origin_ip = OriginIPEngine(self.session)
+
+        # V3.0 Security Engine (20 New Modules)
+        self.v3_security = V3SecurityEngine(self.session)
     
     def set_target(self, target):
         """Validate and set target"""
@@ -439,6 +443,27 @@ class ZylonFusion:
             '55': self._scan_ip_verify,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
+            # V3.0 Security Modules (56-75)
+            '56': self._scan_graphql,
+            '57': self._scan_dom_xss,
+            '58': self._scan_reverse_ip,
+            '59': self._scan_dns_zone_transfer,
+            '60': self._scan_cache_deception,
+            '61': self._scan_clickjacking,
+            '62': self._scan_csp,
+            '63': self._scan_account_takeover,
+            '64': self._scan_oauth,
+            '65': self._scan_http_method,
+            '66': self._scan_shodan_internetdb,
+            '67': self._scan_favicon_hash,
+            '68': self._scan_pastebin_dork,
+            '69': self._scan_url_shortener,
+            '70': self._scan_security_robots,
+            '71': self._scan_blind_xss,
+            '72': self._scan_websocket,
+            '73': self._scan_2fa_bypass,
+            '74': self._scan_mixed_content,
+            '75': self._scan_info_disclosure,
             '99': self._scan_mega,
         }
         
@@ -2044,10 +2069,386 @@ class ZylonFusion:
         self._scan_tech_cve()
         # Origin IP Finder
         self._scan_origin_ip_quick()
+        # V3.0 Security Modules
+        self._scan_graphql()
+        self._scan_dom_xss()
+        self._scan_clickjacking()
+        self._scan_csp()
+        self._scan_http_method()
+        self._scan_shodan_internetdb()
+        self._scan_security_robots()
+        self._scan_mixed_content()
+        self._scan_info_disclosure()
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
-    
+
+    # ========================================================================
+    # V3.0 SECURITY MODULE SCAN IMPLEMENTATIONS (56-75)
+    # ========================================================================
+
+    def _scan_graphql(self):
+        """Scan 56: GraphQL Security Tester"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] GraphQL Security Scan on {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Testing GraphQL endpoints...[/bold magenta]"):
+            result = self.v3_security.scan_graphql(url)
+        self.results['findings']['graphql'] = result
+        if result.get('graphql_found'):
+            console.print(f"[bold yellow][*] GraphQL endpoint found![/bold yellow]")
+            for ep in result.get('endpoints', []):
+                console.print(f"  [cyan]Endpoint: {ep}[/cyan]")
+            for f in result.get('findings', []):
+                sev = f.get('severity', 'Info')
+                color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+                console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+                console.print(f"      {f.get('note', '')}")
+        else:
+            console.print("[green][+] No GraphQL endpoints detected[/green]")
+
+    def _scan_dom_xss(self):
+        """Scan 57: DOM-based XSS Scanner"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] DOM XSS Scan on {self.target}[/bold red]")
+        with console.status("[bold magenta]Analyzing JavaScript for DOM XSS patterns...[/bold magenta]"):
+            result = self.v3_security.scan_dom_xss(url)
+        self.results['findings']['dom_xss'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] DOM XSS Vulnerability Detected![/bold red]")
+            for f in result.get('findings', []):
+                sev = f.get('severity', 'Medium')
+                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
+                console.print(f"  [{color}]*[/{color}] {f['type']}: {f.get('pattern', '')} ({sev})")
+                if f.get('js_file'):
+                    console.print(f"      JS: {f['js_file'][:80]}")
+        else:
+            console.print(f"[green][+] No DOM XSS detected ({result.get('tested', 0)} JS files analyzed)[/green]")
+
+    def _scan_reverse_ip(self):
+        """Scan 58: Reverse IP Lookup"""
+        console.print(f"\n[bold cyan][*] Reverse IP Lookup for {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Finding domains on same IP...[/bold magenta]"):
+            result = self.v3_security.reverse_ip_lookup(self.target)
+        self.results['findings']['reverse_ip'] = result
+        if result.get('ip'):
+            console.print(f"  [cyan]IP: {result['ip']}[/cyan]")
+        if result.get('domains'):
+            console.print(f"  [green]Found {result['total']} domains on same IP:[/green]")
+            for domain in result['domains'][:20]:
+                console.print(f"    - {domain}")
+            if result['total'] > 20:
+                console.print(f"    ... and {result['total'] - 20} more")
+        else:
+            console.print("[yellow][!] No co-hosted domains found[/yellow]")
+
+    def _scan_dns_zone_transfer(self):
+        """Scan 59: DNS Zone Transfer Test"""
+        console.print(f"\n[bold red][*] DNS Zone Transfer Test on {self.target}[/bold red]")
+        with console.status("[bold magenta]Testing AXFR on nameservers...[/bold magenta]"):
+            result = self.v3_security.test_dns_zone_transfer(self.target)
+        self.results['findings']['dns_zone_transfer'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!!!] DNS ZONE TRANSFER VULNERABLE![/bold red]")
+            console.print(f"  [red]Dumped {result.get('total_records', 0)} DNS records![/red]")
+            for rec in result.get('records', [])[:15]:
+                console.print(f"    {rec.get('name', '')} [{rec.get('type', '')}] -> {str(rec.get('value', ''))[:60]}")
+        else:
+            console.print(f"[green][+] Zone transfer properly denied ({result.get('tested', 0)} nameservers tested)[/green]")
+            for ns in result.get('nameservers', []):
+                console.print(f"    NS: {ns}")
+
+    def _scan_cache_deception(self):
+        """Scan 60: Web Cache Deception"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Web Cache Deception Test on {self.target}[/bold red]")
+        with console.status("[bold magenta]Testing cache deception variations...[/bold magenta]"):
+            result = self.v3_security.scan_cache_deception(url)
+        self.results['findings']['cache_deception'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Web Cache Deception Detected![/bold red]")
+            for f in result.get('findings', []):
+                console.print(f"  [red]*[/red] {f['type']}: {f.get('test_url', '')[:80]}")
+                console.print(f"      Similarity: {f.get('similarity', '')} | Severity: {f.get('severity', '')}")
+        else:
+            console.print(f"[green][+] No cache deception detected ({result.get('tested', 0)} tests)[/green]")
+
+    def _scan_clickjacking(self):
+        """Scan 61: Clickjacking Detector"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Clickjacking Test on {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Testing framing protections...[/bold magenta]"):
+            result = self.v3_security.scan_clickjacking(url)
+        self.results['findings']['clickjacking'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Clickjacking Vulnerability Detected![/bold red]")
+            for f in result.get('findings', []):
+                if 'PoC' in f.get('type', ''):
+                    console.print(f"  [yellow]*[/yellow] {f['type']} - save as HTML and test")
+                else:
+                    console.print(f"  [red]*[/red] {f['type']} - {f.get('note', '')}")
+        else:
+            console.print("[green][+] Clickjacking properly protected[/green]")
+
+    def _scan_csp(self):
+        """Scan 62: CSP Analyzer"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] CSP Analysis on {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Analyzing Content-Security-Policy...[/bold magenta]"):
+            result = self.v3_security.analyze_csp(url)
+        self.results['findings']['csp'] = result
+        if result.get('findings'):
+            console.print("[bold yellow][*] CSP Issues Found:[/bold yellow]")
+            for f in result.get('findings', []):
+                sev = f.get('severity', 'Medium')
+                color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+                console.print(f"  [{color}]*[/{color}] {f['type']} - {f.get('note', '')}")
+        else:
+            console.print("[green][+] CSP is properly configured[/green]")
+
+    def _scan_account_takeover(self):
+        """Scan 63: Account Takeover Suite"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Account Takeover Test on {self.target}[/bold red]")
+        with console.status("[bold magenta]Testing ATO vectors...[/bold magenta]"):
+            result = self.v3_security.scan_account_takeover(url)
+        self.results['findings']['account_takeover'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Account Takeover Vector Detected![/bold red]")
+        for f in result.get('findings', []):
+            sev = f.get('severity', 'Medium')
+            color = 'red' if sev in ['Critical', 'High'] else 'yellow'
+            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+            console.print(f"      {f.get('note', '')}")
+
+    def _scan_oauth(self):
+        """Scan 64: OAuth/SSO Misconfig Scanner"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] OAuth/SSO Misconfig Scan on {self.target}[/bold red]")
+        with console.status("[bold magenta]Testing OAuth implementations...[/bold magenta]"):
+            result = self.v3_security.scan_oauth_misconfig(url)
+        self.results['findings']['oauth'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] OAuth Misconfiguration Detected![/bold red]")
+        for f in result.get('findings', []):
+            sev = f.get('severity', 'Info')
+            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+            console.print(f"      {f.get('note', '')}")
+
+    def _scan_http_method(self):
+        """Scan 65: HTTP Method Tampering"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] HTTP Method Tampering Test on {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Testing HTTP methods...[/bold magenta]"):
+            result = self.v3_security.scan_http_method_tampering(url)
+        self.results['findings']['http_method'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] HTTP Method Tampering Detected![/bold red]")
+        for f in result.get('findings', []):
+            sev = f.get('severity', 'Info')
+            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+            console.print(f"  [{color}]*[/{color}] {f['type']}")
+            if f.get('method'):
+                console.print(f"      Method: {f.get('method', '')} | Status: {f.get('status', '')}")
+            if f.get('note'):
+                console.print(f"      {f['note']}")
+        if not result.get('vulnerable') and not result.get('findings'):
+            console.print(f"[green][+] No HTTP method tampering detected ({result.get('tested', 0)} tested)[/green]")
+
+    def _scan_shodan_internetdb(self):
+        """Scan 66: Shodan InternetDB Lookup"""
+        console.print(f"\n[bold cyan][*] Shodan InternetDB Lookup for {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Querying Shodan InternetDB...[/bold magenta]"):
+            result = self.v3_security.lookup_shodan_internetdb(self.target)
+        self.results['findings']['shodan_internetdb'] = result
+        if result.get('error'):
+            console.print(f"[red][!] {result['error']}[/red]")
+        else:
+            if result.get('ip'):
+                console.print(f"  [cyan]IP: {result['ip']}[/cyan]")
+            if result.get('ports'):
+                console.print(f"  [yellow]Open Ports: {', '.join(str(p) for p in result['ports'])}[/yellow]")
+            if result.get('vulns'):
+                console.print(f"  [red]Known Vulnerabilities ({len(result['vulns'])}):[/red]")
+                for v in result['vulns'][:10]:
+                    console.print(f"    - {v}")
+            if result.get('hostnames'):
+                console.print(f"  [cyan]Hostnames: {', '.join(result['hostnames'][:5])}[/cyan]")
+            if result.get('cpes'):
+                console.print(f"  [yellow]Software: {', '.join(result['cpes'][:5])}[/cyan]")
+
+    def _scan_favicon_hash(self):
+        """Scan 67: Favicon Hash Discovery"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Favicon Hash Discovery for {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Calculating favicon hash...[/bold magenta]"):
+            result = self.v3_security.discover_favicon_hash(url)
+        self.results['findings']['favicon_hash'] = result
+        if result.get('hash'):
+            console.print(f"  [cyan]Hash: {result['hash']} ({result.get('hash_type', '')})[/cyan]")
+            console.print(f"  [cyan]MD5: {result.get('md5', 'N/A')}[/cyan]")
+            if result.get('favicon_url'):
+                console.print(f"  [cyan]Favicon URL: {result['favicon_url']}[/cyan]")
+            if result.get('related_domains'):
+                console.print(f"  [yellow]Related Domains ({len(result['related_domains'])}):[/yellow]")
+                for d in result['related_domains'][:10]:
+                    console.print(f"    - {d}")
+        else:
+            console.print(f"[yellow][!] {result.get('error', 'Could not calculate favicon hash')}[/yellow]")
+
+    def _scan_pastebin_dork(self):
+        """Scan 68: Pastebin Dorking"""
+        console.print(f"\n[bold cyan][*] Pastebin Dorking for {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Searching for leaked data...[/bold magenta]"):
+            result = self.v3_security.dork_pastebin(self.target)
+        self.results['findings']['pastebin_dork'] = result
+        if result.get('findings'):
+            console.print(f"[bold red][!] Found {result['total']} leaked entries![/bold red]")
+            for f in result.get('findings', []):
+                console.print(f"  [red]*[/red] {f.get('url', '')}")
+                if f.get('sensitive_types'):
+                    console.print(f"      Sensitive: {', '.join(f['sensitive_types'])} | Severity: {f.get('severity', '')}")
+        else:
+            console.print(f"[green][+] No leaked data found on paste sites[/green]")
+        for source, count in result.get('sources', {}).items():
+            console.print(f"  [cyan]Source {source}: {count} results[/cyan]")
+
+    def _scan_url_shortener(self):
+        """Scan 69: URL Shortener Discovery"""
+        console.print(f"\n[bold cyan][*] URL Shortener Discovery for {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Finding shortened URLs...[/bold magenta]"):
+            result = self.v3_security.discover_url_shorteners(self.target)
+        self.results['findings']['url_shortener'] = result
+        if result.get('expanded_urls'):
+            console.print(f"  [green]Found {result['total_expanded']} shortened URLs pointing to target:[/green]")
+            for item in result['expanded_urls'][:10]:
+                console.print(f"    {item['short']} -> {item['expanded']}")
+        if result.get('hidden_paths'):
+            console.print(f"  [yellow]Hidden Paths Discovered ({len(result['hidden_paths'])}):[/yellow]")
+            for path in result['hidden_paths'][:10]:
+                console.print(f"    {path}")
+        if not result.get('expanded_urls'):
+            console.print("[green][+] No shortened URLs found[/green]")
+
+    def _scan_security_robots(self):
+        """Scan 70: Security.txt & Robots.txt & Sitemap Parser"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Security.txt / Robots.txt / Sitemap for {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Parsing security files...[/bold magenta]"):
+            result = self.v3_security.parse_security_robots_sitemap(url)
+        self.results['findings']['security_robots'] = result
+        # Security.txt
+        if result.get('security_txt', {}).get('found'):
+            console.print(f"  [green]security.txt: Found[/green]")
+            for key in ['Contact', 'Expires', 'Preferred-Languages', 'Canonical']:
+                if result['security_txt'].get(key):
+                    console.print(f"    {key}: {result['security_txt'][key]}")
+        else:
+            console.print(f"  [yellow]security.txt: Not found[/yellow]")
+        # Robots.txt
+        if result.get('robots_txt', {}).get('found'):
+            disallowed = result['robots_txt'].get('disallowed', [])
+            console.print(f"  [green]robots.txt: Found ({len(disallowed)} disallowed paths)[/green]")
+            for path in disallowed[:10]:
+                console.print(f"    Disallow: {path}")
+        else:
+            console.print(f"  [yellow]robots.txt: Not found[/yellow]")
+        # Sitemap
+        if result.get('sitemap', {}).get('found'):
+            total = result['sitemap'].get('total', 0)
+            console.print(f"  [green]sitemap.xml: Found ({total} URLs)[/green]")
+        else:
+            console.print(f"  [yellow]sitemap.xml: Not found[/yellow]")
+        # Findings
+        for f in result.get('findings', []):
+            console.print(f"  [yellow]*[/yellow] {f['type']} - {f.get('note', '')}")
+
+    def _scan_blind_xss(self):
+        """Scan 71: Blind XSS Scanner"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Blind XSS Scan on {self.target}[/bold red]")
+        with console.status("[bold magenta]Injecting blind XSS payloads...[/bold magenta]"):
+            result = self.v3_security.scan_blind_xss(url)
+        self.results['findings']['blind_xss'] = result
+        if result.get('findings'):
+            console.print(f"[bold yellow][*] Blind XSS Payloads Submitted ({result.get('tested', 0)} tests)[/bold yellow]")
+            for f in result.get('findings', []):
+                sev = f.get('severity', 'Medium')
+                color = 'red' if sev == 'High' else 'yellow'
+                console.print(f"  [{color}]*[/{color}] {f['type']} ({f.get('method', '')} to {f.get('url', '')[:60]})")
+                console.print(f"      {f.get('note', '')}")
+        else:
+            console.print(f"[green][+] No forms found for blind XSS injection[/green]")
+
+    def _scan_websocket(self):
+        """Scan 72: WebSocket Security Tester"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] WebSocket Security Test on {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Testing WebSocket endpoints...[/bold magenta]"):
+            result = self.v3_security.scan_websocket(url)
+        self.results['findings']['websocket'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] WebSocket Vulnerability Detected![/bold red]")
+        for f in result.get('findings', []):
+            sev = f.get('severity', 'Info')
+            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+            console.print(f"      {f.get('note', '')}")
+
+    def _scan_2fa_bypass(self):
+        """Scan 73: 2FA Bypass Tester"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] 2FA Bypass Test on {self.target}[/bold red]")
+        with console.status("[bold magenta]Testing 2FA bypass vectors...[/bold magenta]"):
+            result = self.v3_security.scan_2fa_bypass(url)
+        self.results['findings']['2fa_bypass'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] 2FA Bypass Possible![/bold red]")
+        for f in result.get('findings', []):
+            sev = f.get('severity', 'Info')
+            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+            console.print(f"      {f.get('note', '')}")
+
+    def _scan_mixed_content(self):
+        """Scan 74: Mixed Content Scanner"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Mixed Content Scan on {self.target}[/bold cyan]")
+        with console.status("[bold magenta]Checking for mixed content...[/bold magenta]"):
+            result = self.v3_security.scan_mixed_content(url)
+        self.results['findings']['mixed_content'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Mixed Content Detected![/bold red]")
+            for f in result.get('active', []):
+                console.print(f"  [red]*[/red] Active: {f.get('tag', '')} -> {f.get('url', '')[:60]}")
+            for f in result.get('passive', []):
+                console.print(f"  [yellow]*[/yellow] Passive: {f.get('tag', '')} -> {f.get('url', '')[:60]}")
+        else:
+            total = result.get('total_passive', 0) + result.get('total_active', 0)
+            console.print(f"[green][+] No mixed content issues ({total} found)[/green]")
+
+    def _scan_info_disclosure(self):
+        """Scan 75: Information Disclosure Hunter"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Information Disclosure Scan on {self.target}[/bold red]")
+        with console.status("[bold magenta]Hunting for information disclosure...[/bold magenta]"):
+            result = self.v3_security.scan_info_disclosure(url)
+        self.results['findings']['info_disclosure'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Information Disclosure Detected![/bold red]")
+        for f in result.get('findings', []):
+            sev = f.get('severity', 'Medium')
+            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
+            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+            if f.get('url'):
+                console.print(f"      URL: {f['url'][:80]}")
+            if f.get('header'):
+                console.print(f"      {f['header']}: {f.get('value', '')}")
+            if f.get('note'):
+                console.print(f"      {f['note']}")
+        if not result.get('vulnerable') and not result.get('findings'):
+            console.print(f"[green][+] No information disclosure detected ({result.get('tested', 0)} tests)[/green]")
+
     def run_ai_analysis(self):
         """AI-powered vulnerability analysis"""
         if not self.results or not self.results.get('findings'):
@@ -2118,7 +2519,7 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-49, 99)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-75, 99)[/bold yellow]",
                             default="0"
                         )
                         if scan_type.isdigit() and 0 <= int(scan_type) <= 99:
