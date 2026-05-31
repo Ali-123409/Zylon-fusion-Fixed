@@ -371,52 +371,63 @@ class V5AsyncEngine:
 
         try:
             self._rotate_ua()
-            resp = self.session.get(f"https://{target}", timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
-            headers = dict(resp.headers)
-            phase1['findings']['status_code'] = resp.status_code
-            phase1['findings']['server'] = headers.get('Server', 'Unknown')
-            phase1['findings']['title'] = ''
-            phase1['findings']['security_headers'] = {}
+            # Try HTTPS first, fallback to HTTP
+            resp = None
+            try:
+                resp = self.session.get(f"https://{target}", timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
+            except Exception:
+                try:
+                    resp = self.session.get(f"http://{target}", timeout=DEFAULT_TIMEOUT)
+                except Exception:
+                    resp = None
+            if resp:
+                headers = dict(resp.headers)
+                phase1['findings']['status_code'] = resp.status_code
+                phase1['findings']['server'] = headers.get('Server', 'Unknown')
+                phase1['findings']['title'] = ''
+                phase1['findings']['security_headers'] = {}
 
-            # Quick header check
-            security_headers = [
-                'X-Frame-Options', 'Content-Security-Policy',
-                'Strict-Transport-Security', 'X-Content-Type-Options',
-                'X-XSS-Protection', 'Referrer-Policy', 'Permissions-Policy'
-            ]
-            missing = [h for h in security_headers if h not in headers]
-            phase1['findings']['security_headers']['missing'] = missing
-            phase1['findings']['security_headers']['count_missing'] = len(missing)
+                # Quick header check
+                security_headers = [
+                    'X-Frame-Options', 'Content-Security-Policy',
+                    'Strict-Transport-Security', 'X-Content-Type-Options',
+                    'X-XSS-Protection', 'Referrer-Policy', 'Permissions-Policy'
+                ]
+                missing = [h for h in security_headers if h not in headers]
+                phase1['findings']['security_headers']['missing'] = missing
+                phase1['findings']['security_headers']['count_missing'] = len(missing)
 
-            # Quick tech detect
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            title_tag = soup.find('title')
-            if title_tag:
-                phase1['findings']['title'] = title_tag.string or ''
+                # Quick tech detect
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                title_tag = soup.find('title')
+                if title_tag:
+                    phase1['findings']['title'] = title_tag.string or ''
 
-            # Detect framework from JS files
-            js_files = [s.get('src', '') for s in soup.find_all('script', src=True)]
-            frameworks = []
-            for js in js_files:
-                js_lower = js.lower()
-                if 'yii' in js_lower:
-                    frameworks.append('Yii')
-                elif 'laravel' in js_lower:
-                    frameworks.append('Laravel')
-                elif 'django' in js_lower:
-                    frameworks.append('Django')
-                elif 'react' in js_lower:
-                    frameworks.append('React')
-                elif 'vue' in js_lower:
-                    frameworks.append('Vue.js')
-                elif 'angular' in js_lower:
-                    frameworks.append('Angular')
-            phase1['findings']['frameworks'] = frameworks
+                # Detect framework from JS files
+                js_files = [s.get('src', '') for s in soup.find_all('script', src=True)]
+                frameworks = []
+                for js in js_files:
+                    js_lower = js.lower()
+                    if 'yii' in js_lower:
+                        frameworks.append('Yii')
+                    elif 'laravel' in js_lower:
+                        frameworks.append('Laravel')
+                    elif 'django' in js_lower:
+                        frameworks.append('Django')
+                    elif 'react' in js_lower:
+                        frameworks.append('React')
+                    elif 'vue' in js_lower:
+                        frameworks.append('Vue.js')
+                    elif 'angular' in js_lower:
+                        frameworks.append('Angular')
+                phase1['findings']['frameworks'] = frameworks
 
-            # Check cookies
-            cookies = {c.name: {'secure': c.secure, 'httponly': 'httponly' in str(c).lower()}
-                       for c in resp.cookies}
-            phase1['findings']['cookies'] = cookies
+                # Check cookies
+                cookies = {c.name: {'secure': c.secure, 'httponly': 'httponly' in str(c).lower()}
+                           for c in resp.cookies}
+                phase1['findings']['cookies'] = cookies
+            else:
+                phase1['findings']['error'] = 'Could not connect to target (HTTPS and HTTP both failed)'
 
         except Exception as e:
             phase1['findings']['error'] = str(e)[:100]

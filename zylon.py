@@ -190,8 +190,8 @@ class ZylonUI:
     ███████╗██║██║     ╚██████╔╝███████║
     ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 [/bold red]
-[bold yellow]    FUSION v2.4 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
-[bold cyan]    omino + wizard + Zylon Custom + V2 Nuclear + V4 Hunting + V5 Async + V6 Perf | Gemini AI Unlocked | Beast Mode | Termux Non-Root[/bold cyan]
+[bold yellow]    FUSION v2.3 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
+[bold cyan]    omino + wizard + Zylon Custom + V2 Nuclear + V4 Hunting + V5 Async + V6 Perf | Gemini AI | Termux Non-Root[/bold cyan]
 """
         console.print(Panel(banner, border_style="bright_red", box=box.HEAVY))
         
@@ -300,7 +300,7 @@ class ZylonUI:
             ("87", "AI Vulnerability Triage (Classify & Prioritize)"),
             ("88", "AI Recon Advisor (Strategy Suggestions)"),
             ("99", "MEGA SCAN (Every Single Module)"),
-            ("100", "BEAST MODE (AI-Guided Full Assessment - Optimal Workflow)"),
+            ("beast", "BEAST MODE (AI-Guided Full Arsenal + Smart Workflow)"),
             ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
             ("aianalyze", "AI Analyze Last Scan Results"),
             ("aireport", "AI Generate Bug Bounty Report"),
@@ -417,7 +417,7 @@ class ZylonFusion:
             self.ai.set_gemini_key(env_key)
     
     def set_target(self, target):
-        """Validate and set target with automatic HTTPS/HTTP fallback"""
+        """Validate and set target, auto-detect HTTP/HTTPS"""
         target = target.strip()
         # Remove protocol if user included it
         if '://' in target:
@@ -428,23 +428,45 @@ class ZylonFusion:
             return False, "Invalid target - must contain a domain or IP"
         
         self.target = target
-        self.parsed_target = urlparse(f"https://{target}")
         
-        # Auto-detect protocol: try HTTPS first, fall back to HTTP
-        self.protocol = "https://"
+        # Auto-detect protocol: try HTTPS first, fallback to HTTP
+        self.protocol = self._detect_protocol(target)
+        
+        self.parsed_target = urlparse(f"{self.protocol}{target}")
+        proto_label = "HTTPS" if self.protocol == "https://" else "HTTP"
+        return True, f"Target set: {target} ({proto_label})"
+    
+    def _detect_protocol(self, target):
+        """Auto-detect if target supports HTTPS, fallback to HTTP"""
+        # Try HTTPS first
         try:
-            resp = self.session.get(f"https://{target}", timeout=8, verify=False, allow_redirects=True)
-            self.protocol = "https://"
+            resp = self.session.get(
+                f"https://{target}", 
+                timeout=8, 
+                verify=False, 
+                allow_redirects=True
+            )
+            if resp.status_code < 500:
+                return "https://"
         except Exception:
-            try:
-                resp = self.session.get(f"http://{target}", timeout=8, allow_redirects=True)
-                self.protocol = "http://"
-                console.print(f"[yellow][!] HTTPS failed, using HTTP for {target}[/yellow]")
-            except Exception:
-                # Default to HTTPS and let individual scans handle errors
-                self.protocol = "https://"
+            pass
         
-        return True, f"Target set: {target} ({self.protocol})"
+        # Fallback to HTTP
+        try:
+            resp = self.session.get(
+                f"http://{target}", 
+                timeout=8, 
+                allow_redirects=True
+            )
+            if resp.status_code < 500:
+                console.print("[yellow]    HTTPS unavailable, using HTTP[/yellow]")
+                return "http://"
+        except Exception:
+            pass
+        
+        # Default to HTTPS even if both fail (might be temporary)
+        console.print("[yellow]    Cannot verify connectivity, defaulting to HTTPS[/yellow]")
+        return "https://"
     
     def run_scan(self, scan_type):
         """Run a specific scan type"""
@@ -552,7 +574,7 @@ class ZylonFusion:
             '87': self._scan_ai_triage,
             '88': self._scan_ai_recon_advisor,
             '99': self._scan_mega,
-            '100': self._scan_beast_mode,
+            'beast': self._scan_beast,
         }
         
         scan_func = scan_map.get(scan_type)
@@ -2102,325 +2124,6 @@ class ZylonFusion:
         else:
             console.print("[bold yellow][!] No technology versions detected[/bold yellow]")
     
-    # ========================================================================
-    # BEAST MODE - AI-Guided Full Assessment with Optimal Workflow
-    # ========================================================================
-
-    def _scan_beast_mode(self):
-        """BEAST MODE - Runs ALL modules in optimal workflow order with AI guidance.
-        
-        Workflow order:
-        Phase 1: Passive Recon (gather intelligence without touching the target much)
-        Phase 2: Active Recon (enumerate and discover)
-        Phase 3: Vulnerability Scanning (test for specific vulns)
-        Phase 4: Advanced Exploitation (deep testing)
-        Phase 5: AI Analysis (Gemini-powered assessment)
-        Phase 6: Final Report Generation
-        """
-        beast_start = time.time()
-        
-        # Beast Mode Banner
-        console.print(f"\n[bold red]{'='*70}[/bold red]")
-        console.print(f"[bold white on red]  BEAST MODE ACTIVATED  [/bold white on red]")
-        console.print(f"[bold red]{'='*70}[/bold red]")
-        console.print(f"[bold yellow]  Target: {self.target}[/bold yellow]")
-        console.print(f"[bold yellow]  Mode: AI-Guided Full Assessment | All Modules | Optimal Workflow[/bold yellow]")
-        console.print(f"[bold red]{'='*70}[/bold red]")
-        
-        gemini_available = bool(self.ai.gemini_api_key)
-        if gemini_available:
-            console.print("[bold magenta]  Gemini AI: ARMED (AI-guided analysis enabled)[/bold magenta]")
-        else:
-            console.print("[bold yellow]  Gemini AI: NOT AVAILABLE (running without AI guidance)[/bold yellow]")
-        
-        # Track results for each phase
-        beast_results = {
-            'phases_completed': [],
-            'findings_count': 0,
-            'critical_findings': [],
-            'errors': []
-        }
-        
-        # ====================================================================
-        # PHASE 1: PASSIVE RECONNAISSANCE
-        # ====================================================================
-        console.print(f"\n[bold cyan]{'='*60}[/bold cyan]")
-        console.print(f"[bold cyan]  PHASE 1: PASSIVE RECONNAISSANCE[/bold cyan]")
-        console.print(f"[bold cyan]{'='*60}[/bold cyan]")
-        
-        phase1_modules = [
-            (self._scan_whois, "WHOIS Domain Lookup"),
-            (self._scan_geoip, "Geo-IP Location"),
-            (self._scan_dns, "DNS Records Enumeration"),
-            (self._scan_subdomains, "Subdomain Discovery"),
-            (self._scan_wayback, "Wayback URL Discovery"),
-            (self._scan_google_dork, "Google Dorking"),
-            (self._scan_github_dork, "GitHub Secret Dorking"),
-            (self._scan_pastebin_dork, "Pastebin Dork"),
-        ]
-        
-        for scan_func, name in phase1_modules:
-            try:
-                console.print(f"\n[bold green][BEAST] Running: {name}[/bold green]")
-                scan_func()
-                beast_results['findings_count'] += len(self.results.get('findings', {}))
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] {name}: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"{name}: {str(e)[:80]}")
-        
-        beast_results['phases_completed'].append('Passive Recon')
-        console.print(f"[bold green][BEAST] Phase 1 Complete - Passive Recon done[/bold green]")
-        
-        # ====================================================================
-        # PHASE 2: ACTIVE RECONNAISSANCE & ENUMERATION
-        # ====================================================================
-        console.print(f"\n[bold cyan]{'='*60}[/bold cyan]")
-        console.print(f"[bold cyan]  PHASE 2: ACTIVE RECONNAISSANCE & ENUMERATION[/bold cyan]")
-        console.print(f"[bold cyan]{'='*60}[/bold cyan]")
-        
-        phase2_modules = [
-            (self._scan_full_recon, "Full Reconnaissance"),
-            (self._scan_ports, "Port Scanner"),
-            (self._scan_banners, "Banner Grabbing"),
-            (self._scan_headers, "Security Headers Analysis"),
-            (self._scan_ssl, "SSL/TLS Analysis"),
-            (self._scan_waf, "WAF Detection"),
-            (self._scan_techstack, "Technology Fingerprinting"),
-            (self._scan_tech_cve, "Tech Version + CVE Lookup"),
-            (self._scan_cdn_detection, "CDN/WAF Detection"),
-            (self._scan_origin_ip_quick, "Origin IP Finder (Quick)"),
-            (self._scan_subdomain_brute, "Subdomain Brute Force"),
-            (self._scan_dir_brute_async, "Directory Brute Force (Async)"),
-            (self._scan_deep_crawl, "Deep Web Crawler"),
-            (self._scan_param_mining, "Parameter Mining"),
-            (self._scan_deep_js, "Deep JS Analysis"),
-            (self._scan_javascript, "JavaScript Sensitive Data Extractor"),
-            (self._scan_security_robots, "Security Robots.txt Analysis"),
-            (self._scan_favicon_hash, "Favicon Hash Lookup"),
-            (self._scan_shodan_internetdb, "Shodan InternetDB Lookup"),
-            (self._scan_url_shortener, "URL Shortener Analysis"),
-            (self._scan_cross_domain, "Cross-Domain Discovery"),
-        ]
-        
-        for scan_func, name in phase2_modules:
-            try:
-                console.print(f"\n[bold green][BEAST] Running: {name}[/bold green]")
-                scan_func()
-                beast_results['findings_count'] += len(self.results.get('findings', {}))
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] {name}: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"{name}: {str(e)[:80]}")
-        
-        beast_results['phases_completed'].append('Active Recon')
-        console.print(f"[bold green][BEAST] Phase 2 Complete - Active Recon done[/bold green]")
-        
-        # ====================================================================
-        # PHASE 3: VULNERABILITY SCANNING
-        # ====================================================================
-        console.print(f"\n[bold red]{'='*60}[/bold red]")
-        console.print(f"[bold red]  PHASE 3: VULNERABILITY SCANNING[/bold red]")
-        console.print(f"[bold red]{'='*60}[/bold red]")
-        
-        phase3_modules = [
-            (self._scan_sqli, "SQL Injection Scanner"),
-            (self._scan_xss, "XSS Scanner"),
-            (self._scan_dom_xss, "DOM XSS Scanner"),
-            (self._scan_blind_xss, "Blind XSS Scanner"),
-            (self._scan_cors, "CORS Misconfiguration"),
-            (self._scan_openredirect, "Open Redirect"),
-            (self._scan_crlf, "CRLF Injection"),
-            (self._scan_cookies, "Cookie Security"),
-            (self._scan_ssrf, "SSRF Scanner"),
-            (self._scan_ssti, "SSTI Scanner"),
-            (self._scan_lfi, "Path Traversal / LFI"),
-            (self._scan_xxe, "XXE Scanner"),
-            (self._scan_idor, "IDOR Detector"),
-            (self._scan_proto_pollution, "Prototype Pollution"),
-            (self._scan_cache_poison, "Web Cache Poisoning"),
-            (self._scan_smuggling, "HTTP Request Smuggling"),
-            (self._scan_host_header, "Host Header Injection"),
-            (self._scan_jwt, "JWT Vulnerability Scanner"),
-            (self._scan_broken_auth, "Broken Authentication"),
-            (self._scan_wordpress, "WordPress Security"),
-            (self._scan_graphql, "GraphQL Scanner"),
-            (self._scan_clickjacking, "Clickjacking Tester"),
-            (self._scan_csp, "CSP Analysis"),
-            (self._scan_account_takeover, "Account Takeover Scanner"),
-            (self._scan_oauth, "OAuth Security"),
-            (self._scan_http_method, "HTTP Method Testing"),
-            (self._scan_cache_deception, "Cache Deception"),
-            (self._scan_mixed_content, "Mixed Content Detection"),
-            (self._scan_info_disclosure, "Info Disclosure Scanner"),
-            (self._scan_race, "Race Condition Tester"),
-        ]
-        
-        for scan_func, name in phase3_modules:
-            try:
-                console.print(f"\n[bold green][BEAST] Running: {name}[/bold green]")
-                scan_func()
-                beast_results['findings_count'] += len(self.results.get('findings', {}))
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] {name}: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"{name}: {str(e)[:80]}")
-        
-        beast_results['phases_completed'].append('Vulnerability Scanning')
-        console.print(f"[bold green][BEAST] Phase 3 Complete - Vulnerability scanning done[/bold green]")
-        
-        # ====================================================================
-        # PHASE 4: ADVANCED EXPLOITATION & HUNTING
-        # ====================================================================
-        console.print(f"\n[bold magenta]{'='*60}[/bold magenta]")
-        console.print(f"[bold magenta]  PHASE 4: ADVANCED EXPLOITATION & HUNTING[/bold magenta]")
-        console.print(f"[bold magenta]{'='*60}[/bold magenta]")
-        
-        phase4_modules = [
-            (self._scan_takeover, "Subdomain Takeover Check"),
-            (self._scan_api_fuzzer, "API Endpoint Discovery + Fuzzer"),
-            (self._scan_rate_limit, "Rate Limit Tester"),
-            (self._scan_sensitive_files, "Sensitive File Deep Scanner"),
-            (self._scan_email_enum, "Email Enumeration"),
-            (self._scan_broken_links, "Broken Link Hijacker"),
-            (self._scan_cloudbuckets, "Cloud Storage Bucket Detector"),
-            (self._scan_reverse_ip, "Reverse IP Lookup"),
-            (self._scan_dns_zone_transfer, "DNS Zone Transfer Test"),
-            (self._scan_origin_ip_full, "Origin IP Finder (Full)"),
-            (self._scan_ip_verify, "Direct IP Verification"),
-            (self._scan_dns_cert_hunt, "DNS History + Cert Transparency"),
-            (self._scan_subdomain_origin, "Subdomain Resolution + CDN IP Filter"),
-            (self._scan_websocket, "WebSocket Security Test"),
-            (self._scan_2fa_bypass, "2FA Bypass Tester"),
-            (self._scan_username_enum, "Username Enumeration"),
-            (self._scan_email_security, "DMARC/DKIM/SPF Email Security"),
-            (self._scan_csrf, "CSRF Token Detection"),
-            (self._scan_framework, "Framework Detection + Attacks"),
-            (self._scan_js_libraries, "Client-Side JS Library Vulns"),
-            (self._scan_403_bypass, "403 Bypass Tester"),
-            (self._scan_cve_lookup, "CVE-to-Exploit Lookup"),
-        ]
-        
-        for scan_func, name in phase4_modules:
-            try:
-                console.print(f"\n[bold green][BEAST] Running: {name}[/bold green]")
-                scan_func()
-                beast_results['findings_count'] += len(self.results.get('findings', {}))
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] {name}: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"{name}: {str(e)[:80]}")
-        
-        beast_results['phases_completed'].append('Advanced Exploitation')
-        console.print(f"[bold green][BEAST] Phase 4 Complete - Advanced exploitation done[/bold green]")
-        
-        # ====================================================================
-        # PHASE 5: AI-POWERED ANALYSIS
-        # ====================================================================
-        if gemini_available:
-            console.print(f"\n[bold magenta]{'='*60}[/bold magenta]")
-            console.print(f"[bold magenta]  PHASE 5: AI-POWERED ANALYSIS[/bold magenta]")
-            console.print(f"[bold magenta]{'='*60}[/bold magenta]")
-            
-            # AI Smart Scan Analysis
-            try:
-                console.print(f"\n[bold green][BEAST] Running: AI Smart Scan Analysis[/bold green]")
-                self._scan_smart()
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] AI Smart Scan: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"AI Smart Scan: {str(e)[:80]}")
-            
-            # AI Triage
-            try:
-                console.print(f"\n[bold green][BEAST] Running: AI Vulnerability Triage[/bold green]")
-                self._scan_ai_triage()
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] AI Triage: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"AI Triage: {str(e)[:80]}")
-            
-            # AI Recon Advisor
-            try:
-                console.print(f"\n[bold green][BEAST] Running: AI Recon Advisor[/bold green]")
-                self._scan_ai_recon_advisor()
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] AI Recon Advisor: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"AI Recon Advisor: {str(e)[:80]}")
-            
-            # AI Report Generation
-            try:
-                console.print(f"\n[bold green][BEAST] Running: AI Bug Bounty Report[/bold green]")
-                self._ai_report()
-            except Exception as e:
-                console.print(f"[bold red][BEAST ERROR] AI Report: {str(e)[:80]}[/bold red]")
-                beast_results['errors'].append(f"AI Report: {str(e)[:80]}")
-            
-            beast_results['phases_completed'].append('AI Analysis')
-            console.print(f"[bold green][BEAST] Phase 5 Complete - AI analysis done[/bold green]")
-        else:
-            console.print(f"\n[bold yellow][BEAST] Skipping Phase 5 (AI Analysis) - Gemini API not available[/bold yellow]")
-        
-        # ====================================================================
-        # PHASE 6: FINAL REPORT & SUMMARY
-        # ====================================================================
-        beast_elapsed = time.time() - beast_start
-        
-        console.print(f"\n[bold red]{'='*70}[/bold red]")
-        console.print(f"[bold white on red]  BEAST MODE COMPLETE  [/bold white on red]")
-        console.print(f"[bold red]{'='*70}[/bold red]")
-        
-        # Generate report
-        try:
-            self.reports.generate_html_report(self.results, self.target)
-        except Exception:
-            pass
-        
-        # Beast Mode Summary Table
-        summary_table = Table(
-            title="[bold]BEAST MODE ASSESSMENT SUMMARY[/bold]",
-            box=box.HEAVY, border_style="bright_red"
-        )
-        summary_table.add_column("Metric", style="bold yellow")
-        summary_table.add_column("Value", style="bold green")
-        
-        summary_table.add_row("Target", str(self.target))
-        summary_table.add_row("Total Time", f"{beast_elapsed:.1f}s ({beast_elapsed/60:.1f}min)")
-        summary_table.add_row("Phases Completed", f"{len(beast_results['phases_completed'])}/5")
-        summary_table.add_row("Findings Categories", str(len(self.results.get('findings', {}))))
-        summary_table.add_row("AI Analysis", "YES" if gemini_available else "NO")
-        summary_table.add_row("Errors", str(len(beast_results['errors'])))
-        
-        # Count critical findings
-        critical_count = 0
-        for cat, data in self.results.get('findings', {}).items():
-            if isinstance(data, dict):
-                if data.get('vulnerable') or data.get('misconfigured') or data.get('exposed'):
-                    critical_count += 1
-                    beast_results['critical_findings'].append(cat)
-        
-        summary_table.add_row("Critical Findings", f"[bold red]{critical_count}[/bold red]")
-        console.print(summary_table)
-        
-        # List critical findings
-        if beast_results['critical_findings']:
-            console.print(f"\n[bold red][!!!] CRITICAL FINDINGS DETECTED:[/bold red]")
-            for finding in beast_results['critical_findings']:
-                console.print(f"  [red]*[/red] {finding}")
-        
-        # List errors if any
-        if beast_results['errors']:
-            console.print(f"\n[bold yellow][!] {len(beast_results['errors'])} errors encountered:[/bold yellow]")
-            for err in beast_results['errors'][:10]:
-                console.print(f"  [yellow]-[/yellow] {err}")
-        
-        # Phase completion status
-        phases_table = Table(title="Phase Completion", box=box.ROUNDED, border_style="green")
-        phases_table.add_column("Phase", style="cyan")
-        phases_table.add_column("Status", style="green")
-        all_phases = ['Passive Recon', 'Active Recon', 'Vulnerability Scanning', 'Advanced Exploitation', 'AI Analysis']
-        for phase in all_phases:
-            status = "[green]COMPLETE[/green]" if phase in beast_results['phases_completed'] else "[yellow]SKIPPED[/yellow]"
-            phases_table.add_row(phase, status)
-        console.print(phases_table)
-        
-        console.print(f"\n[bold green][BEAST] Full report saved. Beast Mode assessment complete![/bold green]")
-        console.print(f"[bold red]{'='*70}[/bold red]\n")
-
     def _scan_mega(self):
         """MEGA SCAN - Every single module"""
         console.print(f"\n[bold red][!!!] MEGA SCAN INITIATED on {self.target}[/bold red]")
@@ -2498,6 +2201,229 @@ class ZylonFusion:
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
+
+    # ========================================================================
+    # BEAST MODE - AI-Guided Full Arsenal with Smart Workflow
+    # ========================================================================
+
+    def _scan_beast(self):
+        """BEAST MODE - AI-Guided full arsenal with intelligent workflow"""
+        start_time = time.time()
+        
+        console.print(f"\n[bold red]")
+        console.print(Panel(
+            "[bold white]   BEAST MODE ACTIVATED[/bold white]\n"
+            "[bold red]   AI-Guided Full Arsenal | Smart Workflow[/bold red]\n"
+            f"[bold yellow]   Target: {self.target}[/bold yellow]",
+            border_style="bold red",
+            box=box.HEAVY
+        ))
+
+        # ========== PHASE 1: PASSIVE RECON (No interaction with target) ==========
+        console.print(f"\n[bold yellow][PHASE 1] Passive Reconnaissance[/bold yellow]")
+        phase1_scans = [
+            ('1', 'WHOIS Lookup', self._scan_whois),
+            ('3', 'DNS Enumeration', self._scan_dns),
+            ('4', 'Subdomain Discovery', self._scan_subdomains),
+            ('84', 'Subdomain Brute Force', self._scan_subdomain_brute),
+            ('77', 'Email Security', self._scan_email_security),
+            ('53', 'DNS History + Cert IP Hunt', self._scan_dns_cert_hunt),
+        ]
+        for scan_id, name, func in phase1_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                func()
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
+        # ========== PHASE 2: ACTIVE RECON (Light interaction) ==========
+        console.print(f"\n[bold yellow][PHASE 2] Active Reconnaissance[/bold yellow]")
+        phase2_scans = [
+            ('0', 'Full Recon', self._scan_full_recon),
+            ('5', 'Port Scanner', self._scan_ports),
+            ('7', 'Security Headers', self._scan_headers),
+            ('8', 'SSL/TLS Analysis', self._scan_ssl),
+            ('19', 'WAF Detection', self._scan_waf),
+            ('20', 'Tech Fingerprinting', self._scan_techstack),
+            ('52', 'CDN/WAF Detection', self._scan_cdn_detection),
+            ('54', 'Subdomain Resolution + CDN Filter', self._scan_subdomain_origin),
+            ('70', 'Security.txt / Robots.txt', self._scan_security_robots),
+            ('82', 'Cross-Domain Discovery', self._scan_cross_domain),
+        ]
+        for scan_id, name, func in phase2_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                func()
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
+        # ========== PHASE 3: AI ANALYSIS (Get AI guidance before vuln scanning) ==========
+        console.print(f"\n[bold magenta][PHASE 3] AI Tactical Analysis[/bold magenta]")
+        ai_recommendations = None
+        if self.ai.gemini_api_key:
+            try:
+                console.print(f"  [magenta]-> Querying Gemini AI for attack strategy...[/magenta]")
+                # Gather recon findings for AI
+                recon_data = {}
+                for key in ['recon', 'dns', 'subdomains', 'headers', 'ssl', 'waf', 'techstack',
+                            'subdomain_brute', 'cdn_detection', 'ports', 'email_security']:
+                    if key in self.results.get('findings', {}):
+                        recon_data[key] = str(self.results['findings'][key])[:500]
+                
+                ai_recommendations = self.ai.ai_smart_scan(self.target, recon_data)
+                if ai_recommendations:
+                    console.print(Panel(
+                        ai_recommendations[:2000],
+                        title="[bold magenta]AI Attack Strategy[/bold magenta]",
+                        border_style="magenta"
+                    ))
+            except Exception as e:
+                console.print(f"  [yellow]  AI analysis skipped: {str(e)[:50]}[/yellow]")
+        else:
+            console.print(f"  [yellow]  AI not configured, proceeding with standard workflow[/yellow]")
+
+        # ========== PHASE 4: CONTENT DISCOVERY ==========
+        console.print(f"\n[bold yellow][PHASE 4] Content Discovery[/bold yellow]")
+        phase4_scans = [
+            ('11', 'Directory Brute Force', self._scan_dirbrute),
+            ('85', 'Async Dir Brute Force', self._scan_dir_brute_async),
+            ('23', 'Deep Web Crawler', self._scan_deep_crawl),
+            ('24', 'Parameter Mining', self._scan_param_mining),
+            ('25', 'Wayback URLs', self._scan_wayback),
+            ('17', 'JS Sensitive Data', self._scan_javascript),
+            ('28', 'Deep JS Analysis', self._scan_deep_js),
+            ('46', 'Sensitive File Scanner', self._scan_sensitive_files),
+            ('44', 'API Endpoint Discovery', self._scan_api_fuzzer),
+        ]
+        for scan_id, name, func in phase4_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                func()
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
+        # ========== PHASE 5: VULNERABILITY SCANNING (The heavy hits) ==========
+        console.print(f"\n[bold red][PHASE 5] Vulnerability Scanning[/bold red]")
+        phase5_scans = [
+            ('9', 'SQL Injection', self._scan_sqli),
+            ('10', 'XSS Scanner', self._scan_xss),
+            ('13', 'CORS Check', self._scan_cors),
+            ('14', 'Open Redirect', self._scan_openredirect),
+            ('15', 'CRLF Injection', self._scan_crlf),
+            ('30', 'SSRF Scanner', self._scan_ssrf),
+            ('31', 'SSTI Scanner', self._scan_ssti),
+            ('32', 'Path Traversal/LFI', self._scan_lfi),
+            ('33', 'XXE Scanner', self._scan_xxe),
+            ('36', 'Prototype Pollution', self._scan_proto_pollution),
+            ('37', 'Cache Poisoning', self._scan_cache_poison),
+            ('38', 'HTTP Smuggling', self._scan_smuggling),
+            ('39', 'Host Header Injection', self._scan_host_header),
+            ('40', 'JWT Scanner', self._scan_jwt),
+            ('45', 'Rate Limit Tester', self._scan_rate_limit),
+        ]
+        for scan_id, name, func in phase5_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                func()
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
+        # ========== PHASE 6: ADVANCED ATTACKS ==========
+        console.print(f"\n[bold red][PHASE 6] Advanced Attack Vectors[/bold red]")
+        phase6_scans = [
+            ('56', 'GraphQL Security', self._scan_graphql),
+            ('57', 'DOM XSS', self._scan_dom_xss),
+            ('61', 'Clickjacking', self._scan_clickjacking),
+            ('62', 'CSP Analysis', self._scan_csp),
+            ('65', 'HTTP Method Tampering', self._scan_http_method),
+            ('71', 'Blind XSS', self._scan_blind_xss),
+            ('72', 'WebSocket Security', self._scan_websocket),
+            ('73', '2FA Bypass', self._scan_2fa_bypass),
+            ('74', 'Mixed Content', self._scan_mixed_content),
+            ('75', 'Info Disclosure', self._scan_info_disclosure),
+            ('79', 'Framework Attacks', self._scan_framework),
+            ('80', 'JS Library Vulns', self._scan_js_libraries),
+            ('81', '403 Bypass', self._scan_403_bypass),
+            ('78', 'CSRF Detection', self._scan_csrf),
+            ('76', 'Username Enum', self._scan_username_enum),
+        ]
+        for scan_id, name, func in phase6_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                func()
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
+        # ========== PHASE 7: ORIGIN IP + DEEP TECHNIQUES ==========
+        console.print(f"\n[bold yellow][PHASE 7] Origin IP & Deep Techniques[/bold yellow]")
+        phase7_scans = [
+            ('50', 'Origin IP Quick', self._scan_origin_ip_quick),
+            ('55', 'Direct IP Verify', self._scan_ip_verify),
+            ('66', 'Shodan InternetDB', self._scan_shodan_internetdb),
+            ('67', 'Favicon Hash', self._scan_favicon_hash),
+            ('83', 'CVE-to-Exploit', self._scan_cve_lookup),
+            ('49', 'Tech Version CVE', self._scan_tech_cve),
+            ('26', 'Google Dorking', self._scan_google_dork),
+            ('27', 'GitHub Dorking', self._scan_github_dork),
+            ('68', 'Pastebin Dork', self._scan_pastebin_dork),
+            ('69', 'URL Shortener', self._scan_url_shortener),
+            ('29', 'Subdomain Takeover', self._scan_takeover),
+            ('16', 'Cookie Security', self._scan_cookies),
+            ('41', 'Broken Auth', self._scan_broken_auth),
+            ('34', 'IDOR Detector', self._scan_idor),
+            ('35', 'Race Condition', self._scan_race),
+            ('59', 'DNS Zone Transfer', self._scan_dns_zone_transfer),
+            ('60', 'Cache Deception', self._scan_cache_deception),
+            ('63', 'Account Takeover', self._scan_account_takeover),
+            ('64', 'OAuth Security', self._scan_oauth),
+        ]
+        for scan_id, name, func in phase7_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                func()
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
+        # ========== PHASE 8: AI TRIAGE & FINAL REPORT ==========
+        console.print(f"\n[bold magenta][PHASE 8] AI Triage & Final Report[/bold magenta]")
+        
+        # AI Triage
+        if self.ai.gemini_api_key and self.results.get('findings'):
+            try:
+                console.print(f"  [magenta]-> Running AI vulnerability triage...[/magenta]")
+                findings_list = []
+                for category, data in self.results['findings'].items():
+                    findings_list.append({'category': category, 'data': str(data)[:300]})
+                triage = self.ai.ai_triage(self.target, findings_list)
+                if triage:
+                    console.print(Panel(
+                        triage[:3000],
+                        title="[bold magenta]AI Vulnerability Triage[/bold magenta]",
+                        border_style="magenta"
+                    ))
+            except Exception:
+                pass
+
+        # Generate final report
+        self.reports.generate_html_report(self.results, self.target)
+        
+        # Summary
+        elapsed = round(time.time() - start_time, 1)
+        total_findings = len(self.results.get('findings', {}))
+        vuln_count = sum(1 for k, v in self.results.get('findings', {}).items()
+                        if isinstance(v, dict) and (v.get('vulnerable') or v.get('misconfigured') or v.get('exposed')))
+        
+        console.print(f"\n[bold red]")
+        console.print(Panel(
+            f"[bold white]   BEAST MODE COMPLETE[/bold white]\n\n"
+            f"[bold yellow]   Total Modules Run: 55+[/bold yellow]\n"
+            f"[bold cyan]   Findings: {total_findings}[/bold cyan]\n"
+            f"[bold red]   Vulnerabilities: {vuln_count}[/bold red]\n"
+            f"[bold green]   Time: {elapsed}s[/bold green]\n"
+            f"[bold cyan]   Report: ~/.zylon/reports/[/bold cyan]",
+            border_style="bold red",
+            box=box.HEAVY
+        ))
 
     # ========================================================================
     # V3.0 SECURITY MODULE SCAN IMPLEMENTATIONS (56-75)
@@ -3502,6 +3428,17 @@ class ZylonFusion:
                     self._scan_smart()
                     self.reports.save_json(self.results, self.target)
                 
+                elif user_input.lower() == 'beast':
+                    if not self.target:
+                        target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
+                        success, msg = self.set_target(target)
+                        if not success:
+                            console.print(f"[bold red][!] {msg}[/bold red]")
+                            continue
+                        console.print(f"[green][+] {msg}[/green]")
+                    self._scan_beast()
+                    self.reports.save_json(self.results, self.target)
+                
                 elif user_input.lower() == 'wordlists':
                     self._show_wordlist_stats()
                 
@@ -3517,7 +3454,7 @@ class ZylonFusion:
                 elif user_input.lower() == 'perf':
                     self._show_perf_stats()
                 
-                elif user_input.isdigit() and 0 <= int(user_input) <= 100:
+                elif user_input.isdigit() and 0 <= int(user_input) <= 99:
                     if not self.target:
                         target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
                         success, msg = self.set_target(target)
@@ -3534,10 +3471,10 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-88, 99, 100)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-86, 99)[/bold yellow]",
                             default="0"
                         )
-                        if scan_type.isdigit() and 0 <= int(scan_type) <= 100:
+                        if scan_type.isdigit() and 0 <= int(scan_type) <= 99:
                             self.run_scan(scan_type)
                     else:
                         console.print(f"[bold red][!] {msg}[/bold red]")
