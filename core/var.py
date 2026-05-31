@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "2.2.0"
-ZYLON_CODENAME = "Nuclear V5 + Gemini AI"
+ZYLON_VERSION = "2.3.0"
+ZYLON_CODENAME = "Nuclear V6 + Gemini AI + Performance Engine"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
@@ -54,14 +54,18 @@ DEFAULT_TIMEOUT = 10
 MAX_RETRIES = 3
 VERIFY_SSL = False
 FOLLOW_REDIRECTS = True
-MAX_THREADS = 50
-REQUEST_DELAY = 0.05
+MAX_THREADS = 100  # Increased from 50 for faster scanning
+REQUEST_DELAY = 0.02  # Reduced from 0.05 for speed
+ENABLE_DNS_CACHE = True  # New: DNS caching for 3-5x speedup
+ENABLE_PERF_STATS = True  # New: Performance statistics
 
 # ============================================================================
 # GEMINI API KEY (AI-Powered Features)
 # ============================================================================
 
 GEMINI_API_KEY = ""
+GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_FALLBACK_MODEL = "gemini-2.0-flash"
 
 # ============================================================================
 # WORDLIST LOADER - Auto-loads from data/wordlists/ files
@@ -760,6 +764,9 @@ WORDLIST_JWT_SECRETS = load_wordlist('jwt_secrets.txt')
 WORDLIST_SSRF = load_wordlist('ssrf_payloads.txt')
 WORDLIST_LFI = load_wordlist('lfi_payloads.txt')
 
+WORDLIST_API_PATHS = load_wordlist('api_paths.txt')
+WORDLIST_FILE_EXTENSIONS = load_wordlist('file_extensions.txt')
+
 WORDLIST_SIZES = {
     'directories': len(WORDLIST_DIRS),
     'subdomains': len(WORDLIST_SUBDOMAINS),
@@ -768,4 +775,6 @@ WORDLIST_SIZES = {
     'jwt_secrets': len(WORDLIST_JWT_SECRETS),
     'ssrf_payloads': len(WORDLIST_SSRF),
     'lfi_payloads': len(WORDLIST_LFI),
+    'api_paths': len(WORDLIST_API_PATHS),
+    'file_extensions': len(WORDLIST_FILE_EXTENSIONS),
 }

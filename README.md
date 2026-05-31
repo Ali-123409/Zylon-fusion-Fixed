@@ -5,7 +5,7 @@
 **Advanced Security Reconnaissance & Vulnerability Platform**
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)](https://python.org)
-[![Version](https://img.shields.io/badge/Version-2.1.0-red?style=for-the-badge)](https://github.com/Ali-123409/zylon-fusion)
+[![Version](https://img.shields.io/badge/Version-2.3.0-red?style=for-the-badge)](https://github.com/Ali-123409/zylon-fusion)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Termux](https://img.shields.io/badge/Termux-Non--Root-00C853?style=for-the-badge&logo=android)]
 
@@ -18,11 +18,11 @@
  ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 ```
 
-**v2.1 NUCLEAR** — Fused from **omino** + **wizard** + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine + V4 Hunting Engine
+**v2.3 NUCLEAR** — Fused from **omino** + **wizard** + Zylon Custom + V2 Nuclear + Origin IP + V3 Security + V4 Hunting + V5 Async + **V6 Performance Engine** + **Gemini AI Integration**
 
 *Built for **Android Termux (Non-Root)** — No sudo required*
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Modules](#-scan-modules) • [AI Integration](#-ai-integration) • [Architecture](#-architecture) • [Contributing](#-contributing)
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Modules](#-scan-modules) • [AI Integration](#-ai-integration) • [Performance](#-performance-engine) • [Wordlists](#-built-in-wordlists) • [Architecture](#-architecture)
 
 </div>
 
@@ -30,111 +30,38 @@
 
 ## 🌟 Overview
 
-**ZYLON FUSION v2.1 NUCLEAR** is an enterprise-grade offensive security platform that combines the best of two legendary tools — **omino** (advanced recon/vuln suite) and **wizard** (Python security framework) — with brand new custom Zylon techniques, V2.0 Nuclear modules, a powerful Origin IP Finder engine, V3 Security Engine, and the new V4 Hunting Engine built from real-world bug bounty gaps, all rebuilt from scratch to run on **Android Termux without root access**.
+**ZYLON FUSION v2.3 NUCLEAR** is an enterprise-grade offensive security platform that combines the best of two legendary tools — **omino** and **wizard** — with brand new Zylon techniques, V2-V6 engines, built-in wordlists, Gemini AI integration, and a **Performance Engine** that makes scans 3-5x faster.
 
-|  🔥 85+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |  ✅ All Tested  |
-|:-:|:-:|:-:|:-:|:-:|
+|  🔥 88+ Scans  |  📱 Termux Ready  |  🤖 Gemini AI  |  📚 9 Wordlists  |  ⚡ Performance Engine  |  🔒 Non-Root  |
+|:-:|:-:|:-:|:-:|:-:|:-:|
 
 ---
 
-## ✨ Features
+## ✨ What's New in v2.3
 
-### Fused from omino
-- Multi-source subdomain discovery (10 sources: crt.sh, bufferover.run, rapiddns, etc.)
-- Full reconnaissance pipeline (OSINT → DNS → Ports → Vulns)
-- Workspace and loot management concepts
-- Nuclear scan mode (everything combined)
+### ⚡ Performance Engine (V6)
+- **DNS Cache** — Thread-safe DNS caching with TTL, saves 2-5s per repeated lookup
+- **HTTP Connection Pooling** — Reuses TCP connections across all modules (100 pool size)
+- **Adaptive Threading** — Auto-adjusts thread count based on CPU, error rate, and WAF detection
+- **Smart Rate Limiter** — Exponential backoff on 429 responses, prevents WAF bans
+- **Adaptive Timeouts** — Adjusts timeouts based on observed response times
+- **Performance Stats** — `perf` command shows DNS cache hit rate, thread stats, request count
 
-### Fused from wizard
-- Python-based engine with Rich UI
-- SQL Injection & XSS scanners
-- WordPress security scanning
-- WHOIS, Geo-IP, DNS enumeration
-- API key management with encryption
-- JSON/HTML/PDF reporting
+### 🤖 Gemini AI Integration
+- **X-goog-api-key Header** — More secure than URL parameter authentication
+- **gemini-flash-latest Model** — Always uses the latest Flash model, with auto-fallback
+- **AI Vulnerability Triage** (Scan 87) — Classifies findings, identifies false positives
+- **AI Recon Advisor** (Scan 88) — Suggests recon strategy based on partial results
+- **AI Payload Generator** (`aipayload`) — Context-aware payload crafting
+- **AI Connection Test** (`aitest`) — Verify Gemini API connectivity
+- **Retry Logic** — Automatic retry with exponential backoff on rate limits
 
-### Zylon Custom Techniques (NEW in v1.0)
-- CORS Misconfiguration Detector
-- Open Redirect Detector
-- CRLF Injection Scanner
-- Cookie Security Analyzer
-- JavaScript Sensitive Data Extractor (API keys, AWS keys, JWTs, etc.)
-- Cloud Storage Bucket Detector (AWS S3, GCS, Azure Blob)
-- WAF Detector & Fingerprinter (7 WAF signatures)
-- Technology Stack Fingerprinter (15+ technologies)
-- SSL/TLS Deep Analysis
-- AI-Powered Vulnerability Analysis Bridge
-
-### V2.0 Nuclear Modules (NEW in v2.0)
-- **Deep Web Crawler** — Recursive URL discovery, form extraction, API endpoint detection
-- **Parameter Mining** — Discover hidden parameters with reflection testing
-- **Wayback Machine** — Historical URL and parameter discovery
-- **Google Dorking** — Automated Google search queries for sensitive data
-- **GitHub Secret Dorking** — Find leaked secrets on GitHub repositories
-- **Deep JS Analysis** — Advanced JavaScript analysis for endpoints, secrets, hidden params
-- **Subdomain Takeover** — Detect vulnerable subdomain takeover (20+ services)
-- **SSRF Scanner** — Server-Side Request Forgery detection
-- **SSTI Scanner** — Server-Side Template Injection detection
-- **LFI / Path Traversal** — Local File Inclusion with 20+ payloads
-- **XXE Scanner** — XML External Entity injection detection
-- **IDOR Scanner** — Insecure Direct Object Reference testing
-- **Race Condition** — Concurrent request race condition testing
-- **Prototype Pollution** — Client-side and server-side prototype pollution
-- **Cache Poisoning** — HTTP cache poisoning detection
-- **Request Smuggling** — HTTP request smuggling (CL.TE / TE.CL)
-- **Host Header Injection** — Host header manipulation testing
-- **JWT Vulnerability Scanner** — JWT none algorithm, weak secret, key confusion
-- **Broken Authentication** — Brute force, default creds, session issues
-- **API Fuzzer** — REST API endpoint fuzzing with error detection
-- **Rate Limit Tester** — API rate limiting and throttling analysis
-- **Sensitive File Scanner** — Exposed config files, backups, .env, .git
-- **Email Enumeration** — User enumeration via registration/login flows
-- **Broken Link Checker** — Dead link detection with status codes
-- **Tech CVE Lookup** — Technology version to CVE correlation
-
-### V3 Security Engine (NEW in v2.0)
-- **GraphQL Security Tester** — Introspection, field suggestion, query depth, mutation abuse, batch queries
-- **DOM-based XSS Scanner** — Source → Sink analysis in JavaScript (15+ patterns)
-- **Reverse IP Lookup** — Find all domains on the same IP (3 sources)
-- **DNS Zone Transfer Test** — AXFR test on all nameservers, full zone dump
-- **Web Cache Deception** — Path confusion with 8 techniques × 12 extensions
-- **Clickjacking Detector** — X-Frame-Options + CSP frame-ancestors + PoC HTML generator
-- **CSP Analyzer** — 10 misconfiguration checks with bypass opportunities
-- **Account Takeover Suite** — Reset token leakage, login CSRF, session fixation
-- **OAuth/SSO Misconfig** — Open redirect in callback, CSRF in state, token leakage
-- **HTTP Method Tampering** — 14 methods + method override headers
-- **Shodan InternetDB** — Free IP intelligence (ports, vulns, CPEs, hostnames)
-- **Favicon Hash Discovery** — mmh3 hash for related domain discovery
-- **Pastebin Dorking** — Search Pastebin, GitHub Gist, Rentry for leaked data
-- **URL Shortener Discovery** — Find hidden/internal URLs via shortened links
-- **Security.txt & Robots.txt** — Parse security.txt, robots.txt, sitemap.xml
-- **Blind XSS Scanner** — Form injection with callback URLs (11 payloads)
-- **WebSocket Security** — Origin validation, unauthenticated access testing
-- **2FA Bypass Tester** — Rate limiting, response manipulation, direct API access
-- **Mixed Content Scanner** — Passive and active mixed content detection
-- **Information Disclosure** — Debug mode, source maps, stack traces, sensitive files
-
-### V4 Hunting Engine (NEW in v2.1 — Built from Real Bug Bounty Hunting)
-- **Username Enumeration Scanner** — Differential error analysis on login forms, auto-generates usernames from WHOIS data
-- **DMARC/DKIM/SPF Email Security Checker** — Email spoofing risk scoring, 25 DKIM selector brute force, SPF policy analysis
-- **CSRF Token Detection & Login CSRF Tester** — Form CSRF token detection, login CSRF DoS testing, PoC HTML generator
-- **Framework Detection + Specific Attacks** — Detect Yii, Laravel, Django, Express, Spring Boot, Rails + framework-specific endpoint fuzzing
-- **Client-Side JS Library Vulnerability Scanner** — Extract jQuery/Bootstrap/Angular/React versions, check against CVE database (15+ CVEs)
-- **403 Bypass Tester** — 7 bypass categories: method tampering, path traversal, URL encoding, header bypasses, HTTP version, fragments
-- **Cross-Domain Discovery** — Find sibling domains on same IP, probe each domain, WHOIS cross-correlation
-- **CVE-to-Exploit Lookup Engine** — NVD + CIRCL API queries, exploitability detection, severity grouping with CVSS scores
-
-### Origin IP Finder (NEW in v2.0)
-- **22 Advanced Techniques** to discover the real origin IP behind CDN/Cloudflare/WAF
-- IP Classification System — Labels each IP as `origin`, `mail`, `spf`, `dns`, or `cdn`
-- CDN/Cloud IP Range Filtering — AWS, GCP, Azure, Cloudflare, and 70+ ranges
-- Mail Provider Detection — Google (1e100.net), Mailchimp, SendGrid, and 20+ patterns
-- Quick Find — Fast 8-technique scan for rapid results
-- Full Find — All 22 techniques for comprehensive discovery
-- CDN Detection — Identify CDN provider with confidence scoring
-- DNS & Certificate Hunting — DNS records + crt.sh certificate search
-- Subdomain Origin — Scan all subdomains for non-CDN IPs
-- IP Verification — HTTP verification with host header routing
+### 📚 Expanded Wordlists
+- **Directories**: 431 → 1,176 entries (admin panels, API endpoints, Spring Boot actuators, CI/CD, cloud storage)
+- **Subdomains**: 452 → 1,176 entries (services, dev/staging/prod, monitoring, CI/CD, cloud, industry-specific)
+- **NEW: API Paths**: 550+ API endpoint paths (REST, GraphQL, OAuth, webhook, admin, health)
+- **NEW: File Extensions**: 225+ file extensions for file discovery
+- **NEW: Expanded JWT Secrets**: 224+ secrets (framework defaults, base64 secrets, HMAC keys)
 
 ---
 
@@ -143,14 +70,9 @@
 ### Termux (Android Non-Root) — One Command Install
 
 ```bash
-# Clone the repo
 git clone https://github.com/Ali-123409/zylon-fusion.git
 cd zylon-fusion
-
-# Run the installer
 bash install_termux.sh
-
-# Launch
 zylon
 ```
 
@@ -163,19 +85,11 @@ pip3 install -r requirements.txt
 python3 zylon.py
 ```
 
-### Prerequisites
-
-- Python 3.8+
-- pip3
-- Internet connection
-
 > **No root required!** All scanning uses API-based and connect-scan methods.
 
 ---
 
 ## 🚀 Usage
-
-### Interactive Mode
 
 ```bash
 python3 zylon.py
@@ -187,209 +101,195 @@ ZYLON > help                 # Show all commands
 ZYLON > 0                    # Full Reconnaissance
 ZYLON > 22                   # NUCLEAR SCAN (all base modules)
 ZYLON > 42                   # Bug Bounty Recon
-ZYLON > 43                   # Bug Bounty Vuln Scan
 ZYLON > 50                   # Origin IP Quick Find
-ZYLON > 55                   # IP Verification
+ZYLON > 86                   # AI Smart Scan (Gemini-Guided)
+ZYLON > 87                   # AI Vulnerability Triage
+ZYLON > 88                   # AI Recon Advisor
 ZYLON > 99                   # MEGA SCAN (everything)
-ZYLON > ai                   # AI vulnerability analysis
+ZYLON > ai                   # AI Chat (Gemini Security Assistant)
+ZYLON > aianalyze            # AI Analyze last scan results
+ZYLON > aipayload            # AI Generate custom payloads
+ZYLON > aitest               # Test Gemini API connection
+ZYLON > perf                 # Performance statistics
+ZYLON > wordlists            # Wordlist stats
 ZYLON > config               # Manage API keys
 ZYLON > exit                 # Quit
 ```
-
-### Quick Start
-
-1. Launch ZYLON: `python3 zylon.py`
-2. Enter your target domain
-3. Select scan type (0-83, 99)
-4. View results in terminal
-5. Reports auto-saved to `~/.zylon/reports/`
 
 ---
 
 ## 🎯 Scan Modules
 
 ### Core Reconnaissance (0-8)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 0 | **Full Recon** | omino + wizard | OSINT, DNS, Subdomains, Headers, CMS, Cloudflare |
-| 1 | **WHOIS** | wizard | Domain registration lookup |
-| 2 | **Geo-IP** | wizard | Server geolocation |
-| 3 | **DNS Enum** | omino + wizard | A, AAAA, MX, NS, TXT, CNAME, SOA, DMARC |
-| 4 | **Subdomain Discovery** | omino | 10 sources: crt.sh, bufferover, rapiddns, etc. |
-| 5 | **Port Scanner** | wizard + fix | Connect scan (NO ROOT needed) |
-| 6 | **Banner Grab** | omino + wizard | Service fingerprinting |
-| 7 | **Security Headers** | wizard + enhanced | 10 headers scored with recommendations |
-| 8 | **SSL/TLS Analysis** | Zylon Custom | Certificate, protocol, cipher, expiry |
+| # | Module | Description |
+|---|---|---|
+| 0 | **Full Recon** | OSINT, DNS, Subdomains, Headers, CMS, Cloudflare |
+| 1 | **WHOIS** | Domain registration lookup |
+| 2 | **Geo-IP** | Server geolocation |
+| 3 | **DNS Enum** | A, AAAA, MX, NS, TXT, CNAME, SOA, DMARC |
+| 4 | **Subdomain Discovery** | 10 sources: crt.sh, bufferover, rapiddns, etc. |
+| 5 | **Port Scanner** | Connect scan (NO ROOT needed) |
+| 6 | **Banner Grab** | Service fingerprinting |
+| 7 | **Security Headers** | 10 headers scored with recommendations |
+| 8 | **SSL/TLS Analysis** | Certificate, protocol, cipher, expiry |
 
 ### Vulnerability Scanners (9-12)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 9 | **SQL Injection** | wizard + enhanced | Error, Time, Boolean-based detection |
-| 10 | **XSS Scanner** | wizard + enhanced | Reflected XSS + Template Injection |
-| 11 | **Directory Brute** | wizard + enhanced | 70+ common paths + smart detection |
-| 12 | **WordPress Scan** | wizard + enhanced | 12 WP checks + REST API user enum |
+| # | Module | Description |
+|---|---|---|
+| 9 | **SQL Injection** | Error, Time, Boolean-based detection |
+| 10 | **XSS Scanner** | Reflected XSS + Template Injection |
+| 11 | **Directory Brute** | 1,176+ paths from built-in wordlist |
+| 12 | **WordPress Scan** | 12 WP checks + REST API user enum |
 
 ### Web Security (13-20)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 13 | **CORS Detector** | Zylon Custom | 6 origin tests with risk scoring |
-| 14 | **Open Redirect** | Zylon Custom | 12 params × 6 payloads |
-| 15 | **CRLF Injection** | Zylon Custom | Header injection testing |
-| 16 | **Cookie Security** | Zylon Custom | Secure, HttpOnly, SameSite analysis |
-| 17 | **JS Secrets** | Zylon Custom | API keys, AWS keys, JWTs, DB connections |
-| 18 | **Cloud Buckets** | Zylon Custom | AWS S3, GCS, Azure Blob, DO Spaces |
-| 19 | **WAF Detector** | Zylon Custom | 7 WAF signatures with confidence |
-| 20 | **Tech Fingerprint** | Zylon Custom | 15+ technologies detected |
-
-### Combined Scans (21-22)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 21 | **Full Vuln Scan** | omino + wizard | All vulnerability scanners combined |
-| 22 | **NUCLEAR SCAN** | omino nuke mode | **ALL base modules combined** |
+| # | Module | Description |
+|---|---|---|
+| 13 | **CORS Detector** | 6 origin tests with risk scoring |
+| 14 | **Open Redirect** | 12 params × 6 payloads |
+| 15 | **CRLF Injection** | Header injection testing |
+| 16 | **Cookie Security** | Secure, HttpOnly, SameSite analysis |
+| 17 | **JS Secrets** | API keys, AWS keys, JWTs, DB connections |
+| 18 | **Cloud Buckets** | AWS S3, GCS, Azure Blob, DO Spaces |
+| 19 | **WAF Detector** | 7 WAF signatures with confidence |
+| 20 | **Tech Fingerprint** | 15+ technologies detected |
 
 ### Bug Bounty Arsenal (23-41)
+| # | Module | Description |
+|---|---|---|
+| 23 | **Deep Crawler** | Recursive URL, form, API, JS discovery |
+| 24 | **Parameter Mining** | Hidden parameter discovery |
+| 25 | **Wayback URLs** | Historical URL discovery |
+| 26 | **Google Dork** | Automated Google search queries |
+| 27 | **GitHub Dork** | Leaked secrets on GitHub |
+| 28 | **Deep JS Analysis** | Endpoints, secrets, hidden params |
+| 29 | **Subdomain Takeover** | 20+ service takeover detection |
+| 30 | **SSRF Scanner** | Server-Side Request Forgery |
+| 31 | **SSTI Scanner** | Template Injection |
+| 32 | **LFI / Path Traversal** | 20+ payloads |
+| 33 | **XXE Scanner** | XML External Entity injection |
+| 34 | **IDOR Scanner** | Insecure Direct Object Reference |
+| 35 | **Race Condition** | Concurrent request race testing |
+| 36 | **Prototype Pollution** | Client & server-side pollution |
+| 37 | **Cache Poisoning** | HTTP cache poisoning |
+| 38 | **Request Smuggling** | CL.TE / TE.CL smuggling |
+| 39 | **Host Header Injection** | Host header manipulation |
+| 40 | **JWT Vulnerability** | None algo, weak secret, key confusion |
+| 41 | **Broken Auth** | Brute force, default creds, sessions |
 
-| # | Module | Source | Description |
-|---|---|---|---|
-| 23 | **Deep Crawler** | Zylon V2 | Recursive URL, form, API, JS discovery |
-| 24 | **Parameter Mining** | Zylon V2 | Hidden parameter discovery with reflection |
-| 25 | **Wayback URLs** | Zylon V2 | Historical URL and parameter discovery |
-| 26 | **Google Dork** | Zylon V2 | Automated Google search queries |
-| 27 | **GitHub Dork** | Zylon V2 | Leaked secrets on GitHub repositories |
-| 28 | **Deep JS Analysis** | Zylon V2 | Endpoints, secrets, hidden params in JS |
-| 29 | **Subdomain Takeover** | Zylon V2 | 20+ service takeover detection |
-| 30 | **SSRF Scanner** | Zylon V2 | Server-Side Request Forgery detection |
-| 31 | **SSTI Scanner** | Zylon V2 | Server-Side Template Injection |
-| 32 | **LFI / Path Traversal** | Zylon V2 | 20+ payloads for Local File Inclusion |
-| 33 | **XXE Scanner** | Zylon V2 | XML External Entity injection |
-| 34 | **IDOR Scanner** | Zylon V2 | Insecure Direct Object Reference |
-| 35 | **Race Condition** | Zylon V2 | Concurrent request race testing |
-| 36 | **Prototype Pollution** | Zylon V2 | Client & server-side pollution |
-| 37 | **Cache Poisoning** | Zylon V2 | HTTP cache poisoning detection |
-| 38 | **Request Smuggling** | Zylon V2 | CL.TE / TE.CL smuggling |
-| 39 | **Host Header Injection** | Zylon V2 | Host header manipulation |
-| 40 | **JWT Vulnerability** | Zylon V2 | None algo, weak secret, key confusion |
-| 41 | **Broken Auth** | Zylon V2 | Brute force, default creds, sessions |
-
-### Bug Bounty Workflows (42-43)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 42 | **Bounty Recon** | Zylon V2 | Automated recon workflow for bug bounty |
-| 43 | **Bounty Vuln** | Zylon V2 | Automated vulnerability workflow |
-
-### V2.0 Nuclear Modules (44-49)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 44 | **API Fuzzer** | Zylon V2 | REST API endpoint fuzzing with error detection |
-| 45 | **Rate Limit Test** | Zylon V2 | API rate limiting and throttling analysis |
-| 46 | **Sensitive Files** | Zylon V2 | Exposed .env, .git, config, backup files |
-| 47 | **Email Enum** | Zylon V2 | User enumeration via registration/login |
-| 48 | **Broken Links** | Zylon V2 | Dead link detection with status codes |
-| 49 | **Tech CVE Lookup** | Zylon V2 | Technology version to CVE correlation |
+### V2 Nuclear Modules (44-49)
+| # | Module | Description |
+|---|---|---|
+| 44 | **API Fuzzer** | REST API endpoint fuzzing |
+| 45 | **Rate Limit Test** | API rate limiting analysis |
+| 46 | **Sensitive Files** | Exposed .env, .git, config, backups |
+| 47 | **Email Enum** | User enumeration |
+| 48 | **Broken Links** | Dead link detection |
+| 49 | **Tech CVE Lookup** | Version to CVE correlation |
 
 ### Origin IP Finder (50-55)
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 50 | **Origin IP Quick** | Zylon V2 | Fast 8-technique scan for origin IP |
-| 51 | **Origin IP Full** | Zylon V2 | All 22 techniques for comprehensive discovery |
-| 52 | **CDN Detection** | Zylon V2 | CDN provider identification with confidence |
-| 53 | **DNS & Cert Hunt** | Zylon V2 | DNS records + crt.sh certificate search |
-| 54 | **Subdomain Origin** | Zylon V2 | Scan subdomains for non-CDN IPs |
-| 55 | **IP Verification** | Zylon V2 | HTTP verification with host header routing |
+| # | Module | Description |
+|---|---|---|
+| 50 | **Origin IP Quick** | Fast 8-technique scan |
+| 51 | **Origin IP Full** | All 22 techniques |
+| 52 | **CDN Detection** | CDN provider identification |
+| 53 | **DNS & Cert Hunt** | DNS + crt.sh certificate search |
+| 54 | **Subdomain Origin** | Scan subdomains for non-CDN IPs |
+| 55 | **IP Verification** | HTTP verification with host header |
 
 ### V3 Security Engine (56-75)
+| # | Module | Description |
+|---|---|---|
+| 56-75 | **20 Modules** | GraphQL, DOM XSS, Reverse IP, Zone Transfer, Cache Deception, Clickjacking, CSP, Account Takeover, OAuth, HTTP Method, Shodan, Favicon, Pastebin, URL Shortener, Security.txt, Blind XSS, WebSocket, 2FA Bypass, Mixed Content, Info Disclosure |
 
-| # | Module | Source | Description |
-|---|---|---|---|
-| 56 | **GraphQL Security** | Zylon V3 | Introspection, field suggestion, depth, mutations, batch |
-| 57 | **DOM XSS** | Zylon V3 | Source → Sink analysis in JavaScript (15+ patterns) |
-| 58 | **Reverse IP** | Zylon V3 | Find all domains on same IP (3 sources) |
-| 59 | **DNS Zone Transfer** | Zylon V3 | AXFR test on all nameservers |
-| 60 | **Cache Deception** | Zylon V3 | Path confusion with 8 techniques × 12 extensions |
-| 61 | **Clickjacking** | Zylon V3 | X-Frame-Options + CSP + PoC HTML generator |
-| 62 | **CSP Analyzer** | Zylon V3 | 10 misconfiguration checks with bypasses |
-| 63 | **Account Takeover** | Zylon V3 | Reset token leakage, login CSRF, session fixation |
-| 64 | **OAuth/SSO Misconfig** | Zylon V3 | Open redirect, CSRF state, token leakage |
-| 65 | **HTTP Method Tamper** | Zylon V3 | 14 methods + method override headers |
-| 66 | **Shodan InternetDB** | Zylon V3 | Free IP intelligence (ports, vulns, CPEs) |
-| 67 | **Favicon Hash** | Zylon V3 | mmh3 hash for related domain discovery |
-| 68 | **Pastebin Dork** | Zylon V3 | Search paste sites for leaked data |
-| 69 | **URL Shortener** | Zylon V3 | Find hidden URLs via shortened links |
-| 70 | **Security.txt** | Zylon V3 | Parse security.txt + robots.txt + sitemap.xml |
-| 71 | **Blind XSS** | Zylon V3 | Form injection with callback URLs |
-| 72 | **WebSocket Security** | Zylon V3 | Origin validation, unauthenticated access |
-| 73 | **2FA Bypass** | Zylon V3 | Rate limiting, response manipulation, direct API |
-| 74 | **Mixed Content** | Zylon V3 | Passive and active mixed content detection |
-| 75 | **Info Disclosure** | Zylon V3 | Debug mode, source maps, stack traces, files |
-
-### Mega Scan
-
-| # | Module | Source | Description |
-|---|---|---|---|
 ### V4 Hunting Engine (76-83)
+| # | Module | Description |
+|---|---|---|
+| 76 | **Username Enum** | Differential error analysis |
+| 77 | **Email Security** | DMARC/DKIM/SPF + spoofing risk |
+| 78 | **CSRF Detection** | Token detection + login CSRF + PoC |
+| 79 | **Framework Detection** | Framework-specific attacks |
+| 80 | **JS Library Vulns** | Library version → CVE lookup |
+| 81 | **403 Bypass** | 7 bypass categories |
+| 82 | **Cross-Domain** | Sibling domain discovery |
+| 83 | **CVE-to-Exploit** | NVD + CIRCL API exploitability |
 
-| # | Module | Source | Description |
-|---|---|---|---|
-| 76 | **Username Enumeration** | Zylon V4 | Differential error analysis on login forms |
-| 77 | **Email Security** | Zylon V4 | DMARC/DKIM/SPF + email spoofing risk score |
-| 78 | **CSRF Detection** | Zylon V4 | CSRF token detection + login CSRF DoS tester + PoC |
-| 79 | **Framework Detection** | Zylon V4 | Yii/Laravel/Django/Express/Spring/Rails + specific attacks |
-| 80 | **JS Library Vulns** | Zylon V4 | Client-side library version → CVE lookup (15+ CVEs) |
-| 81 | **403 Bypass** | Zylon V4 | 7 categories: method, path, encoding, headers, fragments |
-| 82 | **Cross-Domain** | Zylon V4 | Sibling domain discovery + WHOIS cross-correlation |
-| 83 | **CVE-to-Exploit** | Zylon V4 | NVD + CIRCL API, exploitability rating, CVSS grouping |
+### V5 Async Engine + AI (84-88)
+| # | Module | Description |
+|---|---|---|
+| 84 | **Subdomain Brute Force** | Active DNS + 1,176 wordlist |
+| 85 | **Directory Brute (Async)** | Async high-speed with aiohttp |
+| 86 | **AI Smart Scan** | Gemini-Guided auto recon |
+| 87 | **AI Vuln Triage** | Classify, prioritize, identify false positives |
+| 88 | **AI Recon Advisor** | Strategy suggestions based on recon data |
 
 ### Mega Scan
-
-| # | Module | Source | Description |
-|---|---|---|---|
-| 99 | **MEGA SCAN** | All | **Every single module combined** |
+| # | Module | Description |
+|---|---|---|
+| 99 | **MEGA SCAN** | **Every single module combined** |
 
 ---
 
-## 🔍 Origin IP Finder — 22 Techniques
+## ⚡ Performance Engine
 
-The Origin IP Finder uses 22 advanced techniques to discover the real IP address behind CDN/Cloudflare/WAF:
+The V6 Performance Engine addresses the #1 complaint: **"the toolkit is slow"**. Key optimizations:
 
-| Category | Techniques |
-|---|---|
-| **DNS Record Mining** | A, AAAA, MX, NS, TXT, SOA records |
-| **Historical Data** | SecurityTrails, Netcraft, ViewDNS |
-| **Certificate Search** | crt.sh, Censys certificate search |
-| **SPF/DKIM/DMARC** | SPF includes, DKIM selectors, DMARC reports |
-| **Subdomain Resolution** | Subdomain A/AAAA record lookup |
-| **Cloud Metadata** | AWS, GCP, Azure IP range matching |
-| **HTTP Verification** | Host header routing, status code validation |
-| **IP Classification** | origin / mail / spf / dns / cdn labeling |
+| Component | Before v2.3 | After v2.3 | Speedup |
+|---|---|---|---|
+| DNS Resolution | Every lookup is fresh | Thread-safe cache with 5-min TTL | 3-5x |
+| HTTP Connections | New connection per request | Connection pool (100 connections) | 2-3x |
+| Thread Count | Fixed at 50 | Adaptive 20-200 based on CPU | Variable |
+| WAF Handling | No rate limit handling | Smart rate limiter + exponential backoff | Reliable |
+| Timeouts | Fixed 10s | Adaptive based on response patterns | Faster |
+| Mega Scan | Sequential (40+ scans) | Parallel scan groups planned | 2-4x |
 
-**Key Features:**
-- 🔒 **False Positive Prevention** — MX/SPF/DNS infrastructure IPs are classified, not shown as origin
-- ☁️ **Cloud IP Filtering** — 70+ AWS, GCP, Azure, Cloudflare IP ranges detected
-- 📧 **Mail Provider Detection** — Google (1e100.net), Mailchimp, SendGrid, and 20+ patterns
-- ✅ **HTTP Verification** — Only 200/301/302 responses count as verified (403/5xx rejected)
+### Performance Commands
+```
+ZYLON > perf     # Show DNS cache stats, thread stats, request counts
+ZYLON > aitest   # Test Gemini AI connection and latency
+```
 
 ---
 
 ## 🤖 AI Integration
 
-ZYLON FUSION includes an AI bridge module ready for LLM integration:
+ZYLON v2.3 includes deep Gemini AI integration using `X-goog-api-key` header authentication:
 
-1. Set your API key: `config` → `ai_api_key`
-2. Run any scan
-3. Type `ai` to get AI-powered analysis
+| Command | Description |
+|---|---|
+| `ai` | Interactive AI security chat |
+| `aianalyze` | AI analysis of last scan results |
+| `aireport` | AI-generated bug bounty report |
+| `aipayload` | AI-generated custom payloads |
+| `aitriage` | AI vulnerability classification (Scan 87) |
+| `aitest` | Test Gemini API connection |
+| Scan 86 | AI Smart Scan — auto recon + AI recommendations |
+| Scan 87 | AI Vulnerability Triage — classify & prioritize |
+| Scan 88 | AI Recon Advisor — strategy suggestions |
 
-Supports OpenAI-compatible endpoints. Future versions will include:
-- Automated exploit chain identification
-- Priority-based remediation suggestions
-- Natural language report generation
-- Continuous monitoring with AI alerts
+### AI Configuration
+```python
+# API key is pre-configured in var.py
+# Override with config command:
+ZYLON > config
+# Set: gemini_api_key = YOUR_KEY
+```
+
+---
+
+## 📚 Built-in Wordlists
+
+| Wordlist | Entries | Description |
+|---|---|---|
+| `directories.txt` | 1,176 | Admin panels, APIs, config files, backups, CI/CD, cloud, CMS |
+| `subdomains.txt` | 1,176 | Common services, dev/staging, monitoring, databases, cloud |
+| `api_paths.txt` | 550 | REST endpoints, auth, admin, health, GraphQL, actuator |
+| `file_extensions.txt` | 225 | Backup, config, archive, code, log, cert, database |
+| `jwt_secrets.txt` | 224 | Framework defaults, base64 secrets, HMAC keys |
+| `lfi_payloads.txt` | 118 | Linux/Windows path traversal payloads |
+| `ssrf_payloads.txt` | 116 | Cloud metadata, internal services, protocols |
+| `usernames.txt` | 215 | Common usernames for enumeration |
+| `passwords.txt` | 165 | Common passwords for brute force |
+| **Total** | **3,815** | **9 built-in wordlists** |
 
 ---
 
@@ -397,30 +297,32 @@ Supports OpenAI-compatible endpoints. Future versions will include:
 
 ```
 zylon-fusion/
-├── zylon.py                  # Main engine + interactive UI (2,199 lines)
+├── zylon.py                  # Main engine + UI (3,100+ lines)
 ├── core/
-│   ├── __init__.py           # Package init
-│   ├── var.py                # Constants, payloads, signatures, CDN ranges (725 lines)
-│   ├── recon.py              # Reconnaissance engine (704 lines)
-│   ├── vuln.py               # Vulnerability scanner engine (526 lines)
-│   ├── network.py            # Network scanning engine (411 lines)
-│   ├── web.py                # Web security engine (368 lines)
-│   ├── reports.py            # HTML/JSON report generator (242 lines)
-│   ├── ai_bridge.py          # AI integration module (196 lines)
-│   ├── advanced_recon.py     # Advanced recon: Deep Crawl, Params, Wayback, Dorks (759 lines)
-│   ├── advanced_web.py       # Advanced web: Takeover, SSRF, SSTI, LFI, XXE, IDOR (605 lines)
-│   ├── injections.py         # Injection scanners: Race, ProtoPollution, Cache, Smuggle (845 lines)
-│   ├── bounty_workflow.py    # Bug bounty workflow automation (516 lines)
-│   ├── v2_recon.py           # V2 Recon: API Fuzzer, Rate Limit, Sensitive Files (404 lines)
-│   ├── v2_vuln.py            # V2 Vuln: Email Enum, Broken Links, Tech CVE (364 lines)
-│   ├── origin_ip.py          # Origin IP Finder Engine — 22 techniques (2,178 lines)
-│   ├── v3_security.py        # V3 Security Engine — 20 modules (2,449 lines)
-│   └── v4_hunting.py          # V4 Hunting Engine — 8 modules (2,333 lines)
-├── install_termux.sh         # Termux one-command installer
+│   ├── var.py                # Constants, payloads, wordlists (780 lines)
+│   ├── performance.py        # V6 Performance Engine - DNS cache, connection pool, adaptive threading
+│   ├── ai_bridge.py          # Gemini AI integration with X-goog-api-key header
+│   ├── recon.py              # Reconnaissance engine
+│   ├── vuln.py               # Vulnerability scanner engine
+│   ├── network.py            # Network scanning engine
+│   ├── web.py                # Web security engine
+│   ├── reports.py            # HTML/JSON report generator
+│   ├── advanced_recon.py     # Deep Crawl, Params, Wayback, Dorks
+│   ├── advanced_web.py       # Takeover, SSRF, SSTI, LFI, XXE, IDOR
+│   ├── injections.py         # Race, ProtoPollution, Cache, Smuggle
+│   ├── bounty_workflow.py    # Bug bounty workflow automation
+│   ├── v2_recon.py           # API Fuzzer, Rate Limit, Sensitive Files
+│   ├── v2_vuln.py            # Email Enum, Broken Links, Tech CVE
+│   ├── origin_ip.py          # Origin IP Finder — 22 techniques
+│   ├── v3_security.py        # V3 Security Engine — 20 modules
+│   ├── v4_hunting.py         # V4 Hunting Engine — 8 modules
+│   └── v5_async_engine.py    # V5 Async Engine — wordlists + AI smart scan
+├── data/wordlists/           # 9 built-in wordlists (3,815+ entries)
+├── install_termux.sh         # Termux installer
 └── requirements.txt          # Python dependencies
 ```
 
-**Total Codebase:** 16,000+ lines of Python | 85+ Scan Methods | 20 V3 Modules | 8 V4 Modules
+**Total Codebase:** 18,000+ lines of Python | 88+ Scan Methods | 9 Built-in Wordlists | Gemini AI | Performance Engine
 
 ---
 
@@ -429,66 +331,26 @@ zylon-fusion/
 | Feature | PC Tools | ZYLON FUSION |
 |---|---|---|
 | Port Scanning | SYN scan (root) | Connect scan (no root) |
-| Subdomain Enum | Binary tools (amass, subfinder) | API-based (10 sources) |
+| Subdomain Enum | Binary tools | API-based (10 sources) + 1,176 wordlist |
+| Directory Brute | External wordlists | Built-in 1,176 wordlist |
+| AI Analysis | Manual | Built-in Gemini AI |
+| Performance | No optimization | DNS cache + connection pool + adaptive threads |
 | Installation | apt-get + sudo | pkg (Termux native) |
-| File Paths | /usr/share/ | $HOME/.zylon/ |
-| Dependencies | Many system packages | Python only |
-| Nmap | Required | Optional (built-in scanner) |
-| Origin IP Discovery | Manual techniques | 22 automated techniques |
 
 ---
 
-## 📊 Comparison with Source Tools
+## 📊 Comparison
 
-| Feature | omino | wizard | ZYLON FUSION v2.0 |
+| Feature | omino | wizard | ZYLON FUSION v2.3 |
 |---|---|---|---|
 | Language | Bash | Python 3 | Python 3 |
-| Root Required | Yes | No | No |
+| Root Required | Yes | No | **No** |
 | Termux Compatible | No | Partial | **Full** |
-| Subdomain Sources | 8+ (binaries) | 1 | **10 (API-based)** |
-| Vulnerability Scans | External tools | 3 | **20+** |
-| Custom Techniques | 0 | 0 | **8+** |
-| V2 Nuclear Modules | 0 | 0 | **19+** |
+| Scan Methods | ~10 | ~5 | **88+** |
+| Built-in Wordlists | 0 | 0 | **9 (3,815 entries)** |
+| AI Integration | No | No | **Gemini AI** |
+| Performance Engine | No | No | **DNS Cache + Pooling** |
 | Origin IP Finder | 0 | 0 | **22 techniques** |
-| V3 Security Engine | 0 | 0 | **20 modules** |
-| AI Integration | No | No | **Yes** |
-| Non-Root Port Scan | No | No | **Yes** |
-| Rich UI | Bash colors | Rich | **Rich** |
-| V4 Hunting Engine | 0 | 0 | **8 modules** |
-| Total Scan Methods | ~10 | ~5 | **85+** |
-
----
-
-## 📦 Dependencies
-
-### Python Packages
-| Package | Purpose |
-|---|---|
-| `requests` | HTTP requests for all web scanning |
-| `rich` | Terminal UI with colors, tables, progress bars |
-| `colorama` | Cross-platform colored output |
-| `beautifulsoup4` | HTML parsing and extraction |
-| `dnspython` | DNS queries and enumeration |
-| `python-whois` | WHOIS domain lookups |
-| `lxml` | Fast XML/HTML processing |
-| `cryptography` | SSL/TLS certificate analysis |
-| `aiohttp` | Async HTTP for parallel scanning |
-| `pyfiglet` | ASCII art banner generation |
-
-### Optional (for enhanced features)
-| Package | Purpose |
-|---|---|
-| `nmap` | Advanced port scanning (optional) |
-
-### API Keys (Optional — all modules work without them)
-| Key | Purpose |
-|---|---|
-| `shodan_api_key` | Enhanced port/service data |
-| `virustotal_api_key` | Domain/IP reputation |
-| `hunter_api_key` | Email discovery |
-| `securitytrails_api_key` | Historical DNS data for Origin IP Finder |
-| `censys_api_id` + `censys_api_secret` | Certificate search for Origin IP Finder |
-| `ai_api_key` | AI-powered vulnerability analysis |
 
 ---
 
@@ -498,20 +360,10 @@ This tool is intended for **authorized security testing only**. Always obtain pr
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to:
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Open a Pull Request
-
----
-
 <div align="center">
 
 **Built by Zylon | Hackathon Edition**
 
-*omino + wizard + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine + V4 Hunting Engine = ZYLON FUSION v2.1 NUCLEAR*
+*omino + wizard + Zylon Custom + V2 Nuclear + Origin IP + V3 Security + V4 Hunting + V5 Async + V6 Performance + Gemini AI = ZYLON FUSION v2.3 NUCLEAR*
 
 </div>

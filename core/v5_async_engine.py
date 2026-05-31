@@ -66,6 +66,8 @@ class V5AsyncEngine:
             'jwt_secrets': 'jwt_secrets.txt',
             'ssrf_payloads': 'ssrf_payloads.txt',
             'lfi_payloads': 'lfi_payloads.txt',
+            'api_paths': 'api_paths.txt',
+            'file_extensions': 'file_extensions.txt',
         }
 
         for name, filename in wordlist_files.items():

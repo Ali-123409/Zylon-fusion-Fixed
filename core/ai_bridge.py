@@ -1,23 +1,34 @@
 """
-ZYLON FUSION - AI Bridge Module
-AI-powered vulnerability analysis using Gemini API
+ZYLON FUSION v2.3 - AI Bridge Module
+AI-powered vulnerability analysis using Google Gemini API
+Uses X-goog-api-key header for authentication (more secure than URL param)
+Supports gemini-flash-latest model with automatic fallback
 Termux Non-Root Compatible
 """
 
 import os
 import json
+import time
 import requests
 from core.var import HOME_DIR, DEFAULT_TIMEOUT
 
-# Gemini API key (configurable)
+# Gemini API Configuration
 GEMINI_API_KEY = ""
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_FALLBACK_MODEL = "gemini-2.0-flash"
+GEMINI_MAX_RETRIES = 2
+GEMINI_RETRY_DELAY = 5  # seconds between retries on rate limit
 
 
 class AIBridge:
     """
-    AI Bridge for ZYLON FUSION
-    Provides AI-powered vulnerability analysis
-    Supports: Gemini API (primary), OpenAI-compatible endpoints (secondary)
+    AI Bridge for ZYLON FUSION v2.3
+    Provides AI-powered vulnerability analysis via Google Gemini API
+    
+    Authentication: X-goog-api-key header (more secure than URL param)
+    Primary Model: gemini-flash-latest (auto-updates to latest Flash)
+    Fallback: gemini-2.0-flash
     """
 
     def __init__(self):
@@ -27,10 +38,14 @@ class AIBridge:
         self.gemini_api_key = None
         self.api_endpoint = None
         self.ai_provider = 'gemini'  # 'gemini' or 'openai'
+        self.model = GEMINI_MODEL
+        self.fallback_model = GEMINI_FALLBACK_MODEL
+        self._request_count = 0
+        self._last_error = None
         self._load_config()
 
     def _load_config(self):
-        """Load AI configuration"""
+        """Load AI configuration from ~/.zylon/config.json"""
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file) as f:
@@ -39,11 +54,12 @@ class AIBridge:
                 self.gemini_api_key = config.get('gemini_api_key', '')
                 self.api_endpoint = config.get('ai_endpoint', 'https://api.openai.com/v1')
                 self.ai_provider = config.get('ai_provider', 'gemini')
+                self.model = config.get('gemini_model', GEMINI_MODEL)
         except Exception:
             pass
 
     def set_gemini_key(self, api_key):
-        """Configure Gemini API key"""
+        """Configure Gemini API key and save to config"""
         self.gemini_api_key = api_key
         self.ai_provider = 'gemini'
         self._save_config()
@@ -57,7 +73,7 @@ class AIBridge:
         self._save_config()
 
     def _save_config(self):
-        """Save configuration to file"""
+        """Save configuration to ~/.zylon/config.json"""
         try:
             config = {}
             if os.path.exists(self.config_file):
@@ -67,11 +83,133 @@ class AIBridge:
             config['gemini_api_key'] = self.gemini_api_key or ''
             config['ai_endpoint'] = self.api_endpoint or 'https://api.openai.com/v1'
             config['ai_provider'] = self.ai_provider
+            config['gemini_model'] = self.model
             os.makedirs(self.config_dir, exist_ok=True)
             with open(self.config_file, 'w') as f:
                 json.dump(config, f, indent=2)
         except Exception:
             pass
+
+    # ========================================================================
+    # CORE GEMINI API CALL - Uses X-goog-api-key header
+    # ========================================================================
+
+    def _call_gemini(self, prompt, max_tokens=2048, temperature=0.3, retries=GEMINI_MAX_RETRIES):
+        """
+        Core method to call Gemini API.
+        Uses X-goog-api-key header instead of URL parameter for better security.
+        Automatically retries on rate limits with exponential backoff.
+        Falls back to secondary model if primary fails.
+        """
+        api_key = self.gemini_api_key
+        if not api_key:
+            return None, "No Gemini API key configured"
+
+        models_to_try = [self.model, self.fallback_model]
+
+        for model_name in models_to_try:
+            url = f"{GEMINI_BASE_URL}/{model_name}:generateContent"
+
+            headers = {
+                'Content-Type': 'application/json',
+                'X-goog-api-key': api_key,  # Header-based auth (more secure)
+            }
+
+            payload = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens,
+                    "topP": 0.8,
+                    "topK": 40
+                },
+                "safetySettings": [
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
+                ]
+            }
+
+            for attempt in range(retries + 1):
+                try:
+                    self._request_count += 1
+                    resp = requests.post(
+                        url,
+                        json=payload,
+                        headers=headers,
+                        timeout=90
+                    )
+
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get('candidates', [])
+                        if candidates:
+                            parts = candidates[0].get('content', {}).get('parts', [])
+                            if parts:
+                                self._last_error = None
+                                return parts[0].get('text', ''), None
+                        return None, "Empty response from Gemini"
+
+                    elif resp.status_code == 429:
+                        # Rate limited - retry with backoff
+                        if attempt < retries:
+                            wait_time = GEMINI_RETRY_DELAY * (2 ** attempt)
+                            self._last_error = f"Rate limited, retrying in {wait_time}s..."
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            # Try fallback model
+                            self._last_error = f"Rate limited on {model_name}"
+                            break  # Break to try next model
+
+                    elif resp.status_code == 400:
+                        error_msg = resp.json().get('error', {}).get('message', 'Bad request')
+                        if "location is not supported" in error_msg:
+                            self._last_error = "Gemini API not available in your region"
+                            return None, self._last_error
+                        self._last_error = f"Bad request: {error_msg[:100]}"
+                        break  # Don't retry bad requests
+
+                    elif resp.status_code == 403:
+                        self._last_error = "Invalid Gemini API key"
+                        return None, self._last_error
+
+                    else:
+                        self._last_error = f"Gemini API error: {resp.status_code}"
+                        if attempt < retries:
+                            time.sleep(GEMINI_RETRY_DELAY)
+                            continue
+                        break
+
+                except requests.exceptions.Timeout:
+                    self._last_error = "Gemini API: Request timed out"
+                    if attempt < retries:
+                        time.sleep(GEMINI_RETRY_DELAY)
+                        continue
+                    break
+
+                except requests.exceptions.ConnectionError:
+                    self._last_error = "Gemini API: Connection error"
+                    if attempt < retries:
+                        time.sleep(GEMINI_RETRY_DELAY * 2)
+                        continue
+                    break
+
+                except Exception as e:
+                    self._last_error = f"Gemini API error: {str(e)[:80]}"
+                    if attempt < retries:
+                        time.sleep(GEMINI_RETRY_DELAY)
+                        continue
+                    break
+
+        return None, self._last_error or "All models failed"
+
+    # ========================================================================
+    # ANALYZE SCAN RESULTS
+    # ========================================================================
 
     def analyze_results(self, results):
         """
@@ -148,7 +286,29 @@ class AIBridge:
         # Try Gemini AI analysis first
         ai_analysis = None
         if self.gemini_api_key:
-            ai_analysis = self._query_gemini(results, issues)
+            prompt = f"""You are an expert cybersecurity analyst. Analyze these vulnerability scan findings and provide:
+
+1. **Risk Severity Assessment** - Rate each finding (Critical/High/Medium/Low/Info)
+2. **Attack Vector Analysis** - How each vulnerability can be exploited
+3. **Exploit Chain Possibilities** - Which vulnerabilities can be chained together
+4. **Remediation Priorities** - What to fix first with specific steps
+5. **Proof of Concept Ideas** - Brief PoC concepts for valid findings
+
+Target: {target}
+Scan Type: {results.get('scan_type', 'Unknown')}
+
+Findings:
+{json.dumps(issues[:25], indent=2)}
+
+Raw Findings Summary:
+{json.dumps({k: str(v)[:200] for k, v in findings.items()}, indent=2)}
+
+Provide a concise, technical analysis with actionable recommendations."""
+
+            ai_analysis, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
+            if error and not ai_analysis:
+                summary_parts.append(f"\n[AI Analysis unavailable: {error}]")
+
         if not ai_analysis and self.api_key:
             ai_analysis = self._query_openai(results, issues)
 
@@ -164,85 +324,12 @@ class AIBridge:
             'ai_analysis': ai_analysis
         }
 
-    def _query_gemini(self, results, issues):
-        """
-        Query Gemini API for deep vulnerability analysis.
-        Uses Gemini 1.5 Flash for speed + Gemini Pro for depth.
-        """
-        try:
-            api_key = self.gemini_api_key
-            if not api_key:
-                return None
-
-            # Build prompt
-            prompt = f"""You are an expert cybersecurity analyst. Analyze these vulnerability scan findings and provide:
-
-1. **Risk Severity Assessment** - Rate each finding (Critical/High/Medium/Low/Info)
-2. **Attack Vector Analysis** - How each vulnerability can be exploited
-3. **Exploit Chain Possibilities** - Which vulnerabilities can be chained together
-4. **Remediation Priorities** - What to fix first with specific steps
-5. **Proof of Concept Ideas** - Brief PoC concepts for valid findings
-
-Target: {results.get('target', 'Unknown')}
-Scan Type: {results.get('scan_type', 'Unknown')}
-
-Findings:
-{json.dumps(issues[:25], indent=2)}
-
-Raw Findings Summary:
-{json.dumps({k: str(v)[:200] for k, v in results.get('findings', {}).items()}, indent=2)}
-
-Provide a concise, technical analysis with actionable recommendations."""
-
-            # Gemini API endpoint
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-
-            payload = {
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    "maxOutputTokens": 2048,
-                    "topP": 0.8,
-                    "topK": 40
-                },
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
-                ]
-            }
-
-            resp = requests.post(
-                url,
-                json=payload,
-                timeout=60,
-                headers={'Content-Type': 'application/json'}
-            )
-
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get('candidates', [])
-                if candidates:
-                    parts = candidates[0].get('content', {}).get('parts', [])
-                    if parts:
-                        return parts[0].get('text', '')
-            else:
-                return f"Gemini API error: {resp.status_code}"
-
-        except requests.exceptions.Timeout:
-            return "Gemini API: Request timed out (try again)"
-        except Exception as e:
-            return f"Gemini API unavailable: {str(e)[:80]}"
-
-        return None
+    # ========================================================================
+    # OPENAI FALLBACK
+    # ========================================================================
 
     def _query_openai(self, results, issues):
-        """
-        Query OpenAI-compatible endpoint for deep analysis.
-        """
+        """Query OpenAI-compatible endpoint as fallback"""
         try:
             if not self.api_key:
                 return None
@@ -288,17 +375,20 @@ Provide a concise technical analysis."""
 
         return None
 
+    # ========================================================================
+    # AI CHAT - Interactive Security Assistant
+    # ========================================================================
+
     def ai_chat(self, message, context=None):
         """
         Interactive AI chat for security questions.
-        Uses Gemini API for intelligent responses.
+        Uses Gemini API with X-goog-api-key header.
         """
         api_key = self.gemini_api_key
         if not api_key:
             return "No Gemini API key configured. Use 'config' command to set it."
 
-        try:
-            system_prompt = """You are ZYLON AI, a cybersecurity expert assistant built into the ZYLON FUSION security toolkit.
+        system_prompt = """You are ZYLON AI, a cybersecurity expert assistant built into the ZYLON FUSION security toolkit.
 You help bug bounty hunters and penetration testers with:
 - Vulnerability analysis and exploitation guidance
 - Payload crafting and bypass techniques
@@ -308,52 +398,22 @@ You help bug bounty hunters and penetration testers with:
 
 Always provide technical, actionable responses. Focus on practical exploitation and remediation."""
 
-            if context:
-                system_prompt += f"\n\nCurrent scan context:\n{context[:1000]}"
+        if context:
+            system_prompt += f"\n\nCurrent scan context:\n{context[:1000]}"
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        prompt = f"{system_prompt}\n\nUser question: {message}"
 
-            payload = {
-                "contents": [{
-                    "parts": [{"text": f"{system_prompt}\n\nUser question: {message}"}]
-                }],
-                "generationConfig": {
-                    "temperature": 0.4,
-                    "maxOutputTokens": 2048,
-                    "topP": 0.8,
-                    "topK": 40
-                },
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
-                ]
-            }
+        response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.4)
 
-            resp = requests.post(
-                url,
-                json=payload,
-                timeout=60,
-                headers={'Content-Type': 'application/json'}
-            )
-
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get('candidates', [])
-                if candidates:
-                    parts = candidates[0].get('content', {}).get('parts', [])
-                    if parts:
-                        return parts[0].get('text', '')
-            else:
-                return f"Gemini API error: {resp.status_code}"
-
-        except requests.exceptions.Timeout:
-            return "Request timed out"
-        except Exception as e:
-            return f"AI chat error: {str(e)[:80]}"
-
+        if response:
+            return response
+        if error:
+            return f"AI chat error: {error}"
         return "No response from AI"
+
+    # ========================================================================
+    # AI SMART SCAN - Recommends next steps based on initial recon
+    # ========================================================================
 
     def ai_smart_scan(self, target, scan_results):
         """
@@ -365,8 +425,7 @@ Always provide technical, actionable responses. Focus on practical exploitation 
         if not api_key:
             return None
 
-        try:
-            prompt = f"""You are a bug bounty hunter analyzing initial reconnaissance results.
+        prompt = f"""You are a bug bounty hunter analyzing initial reconnaissance results.
 Based on these findings, recommend the NEXT scans to run and WHY.
 
 Target: {target}
@@ -375,18 +434,28 @@ Initial Findings:
 {json.dumps({k: str(v)[:300] for k, v in scan_results.items()}, indent=2)}
 
 Available ZYLON scan modules:
+- Scan 0: Full Recon
 - Scan 9: SQL Injection
 - Scan 10: XSS
+- Scan 11: Directory Brute Force
 - Scan 13: CORS
 - Scan 14: Open Redirect
 - Scan 15: CRLF Injection
+- Scan 23: Deep Web Crawler
+- Scan 24: Parameter Mining
+- Scan 25: Wayback URLs
 - Scan 30: SSRF
 - Scan 31: SSTI
 - Scan 32: Path Traversal/LFI
 - Scan 33: XXE
 - Scan 36: Prototype Pollution
 - Scan 38: HTTP Request Smuggling
-- Scan 40: JWT
+- Scan 40: JWT Scanner
+- Scan 44: API Fuzzer
+- Scan 45: Rate Limit Tester
+- Scan 50-55: Origin IP Finder
+- Scan 56: GraphQL
+- Scan 57: DOM XSS
 - Scan 76: Username Enumeration
 - Scan 77: Email Security (DMARC/DKIM/SPF)
 - Scan 78: CSRF Token Detection
@@ -395,6 +464,8 @@ Available ZYLON scan modules:
 - Scan 81: 403 Bypass
 - Scan 82: Cross-Domain Discovery
 - Scan 83: CVE-to-Exploit Lookup
+- Scan 84: Subdomain Brute Force (Active DNS)
+- Scan 85: Directory Brute Force (Async High-Speed)
 
 Respond with:
 1. Top 5 recommended scans with reasons
@@ -402,45 +473,12 @@ Respond with:
 3. Potential vulnerability chains
 4. Specific payloads to try based on the tech stack detected"""
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
+        return response
 
-            payload = {
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    "maxOutputTokens": 2048,
-                    "topP": 0.8,
-                    "topK": 40
-                },
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
-                ]
-            }
-
-            resp = requests.post(
-                url,
-                json=payload,
-                timeout=60,
-                headers={'Content-Type': 'application/json'}
-            )
-
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get('candidates', [])
-                if candidates:
-                    parts = candidates[0].get('content', {}).get('parts', [])
-                    if parts:
-                        return parts[0].get('text', '')
-
-        except Exception:
-            pass
-
-        return None
+    # ========================================================================
+    # AI PAYLOAD GENERATOR - Context-aware payload crafting
+    # ========================================================================
 
     def ai_generate_payload(self, vuln_type, context):
         """
@@ -451,8 +489,7 @@ Respond with:
         if not api_key:
             return None
 
-        try:
-            prompt = f"""You are a security researcher generating test payloads for authorized bug bounty testing.
+        prompt = f"""You are a security researcher generating test payloads for authorized bug bounty testing.
 Vulnerability type: {vuln_type}
 Context: {context}
 
@@ -460,45 +497,12 @@ Generate 10 specific test payloads for this vulnerability type tailored to the c
 For each payload, explain what it tests and the expected behavior if vulnerable.
 Format as a numbered list."""
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.5)
+        return response
 
-            payload = {
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }],
-                "generationConfig": {
-                    "temperature": 0.5,
-                    "maxOutputTokens": 2048,
-                    "topP": 0.9,
-                    "topK": 40
-                },
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
-                ]
-            }
-
-            resp = requests.post(
-                url,
-                json=payload,
-                timeout=60,
-                headers={'Content-Type': 'application/json'}
-            )
-
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get('candidates', [])
-                if candidates:
-                    parts = candidates[0].get('content', {}).get('parts', [])
-                    if parts:
-                        return parts[0].get('text', '')
-
-        except Exception:
-            pass
-
-        return None
+    # ========================================================================
+    # AI REPORT WRITER - Professional bug bounty reports
+    # ========================================================================
 
     def ai_write_report(self, target, findings):
         """
@@ -509,8 +513,7 @@ Format as a numbered list."""
         if not api_key:
             return None
 
-        try:
-            prompt = f"""You are writing a professional bug bounty vulnerability report.
+        prompt = f"""You are writing a professional bug bounty vulnerability report.
 Generate a complete, submission-ready report following standard bug bounty format.
 
 Target: {target}
@@ -534,42 +537,107 @@ Format:
 ## References
 [Relevant CVEs, CWEs, or documentation]"""
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        response, error = self._call_gemini(prompt, max_tokens=4096, temperature=0.3)
+        return response
 
-            payload_req = {
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    "maxOutputTokens": 4096,
-                    "topP": 0.8,
-                    "topK": 40
-                },
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
-                ]
-            }
+    # ========================================================================
+    # AI VULN TRIAGE - Prioritize and classify findings
+    # ========================================================================
 
-            resp = requests.post(
-                url,
-                json=payload_req,
-                timeout=60,
-                headers={'Content-Type': 'application/json'}
-            )
+    def ai_triage(self, target, findings_list):
+        """
+        AI-powered vulnerability triage.
+        Classifies findings by severity, groups related issues,
+        and identifies which are likely false positives.
+        """
+        api_key = self.gemini_api_key
+        if not api_key:
+            return None
 
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get('candidates', [])
-                if candidates:
-                    parts = candidates[0].get('content', {}).get('parts', [])
-                    if parts:
-                        return parts[0].get('text', '')
+        prompt = f"""You are a senior security analyst performing vulnerability triage.
+Classify each finding, identify false positives, and prioritize.
 
-        except Exception:
-            pass
+Target: {target}
 
-        return None
+Findings to Triage:
+{json.dumps(findings_list[:30], indent=2, default=str)[:4000]}
+
+For each finding, provide:
+1. **Classification**: Confirmed / Likely / Suspected / Likely False Positive / False Positive
+2. **Severity**: Critical / High / Medium / Low / Info
+3. **Confidence**: High / Medium / Low
+4. **Reasoning**: Brief explanation of your classification
+5. **Action Required**: Immediate / Short-term / Long-term / No action
+
+Also identify:
+- Findings that are likely the same root cause
+- Findings that can be chained together
+- Findings that are likely false positives due to WAF/security controls"""
+
+        response, error = self._call_gemini(prompt, max_tokens=3000, temperature=0.2)
+        return response
+
+    # ========================================================================
+    # AI RECON ADVISOR - Suggests recon strategy
+    # ========================================================================
+
+    def ai_recon_advisor(self, target, recon_data):
+        """
+        AI-powered reconnaissance advisor.
+        Given partial recon results, suggests the most effective
+        next steps for maximum bug bounty impact.
+        """
+        api_key = self.gemini_api_key
+        if not api_key:
+            return None
+
+        prompt = f"""You are an expert bug bounty recon advisor.
+Based on the reconnaissance data below, suggest the most effective next steps.
+
+Target: {target}
+
+Reconnaissance Data:
+{json.dumps({k: str(v)[:300] for k, v in recon_data.items()}, indent=2)}
+
+Provide:
+1. **Attack Surface Assessment** - What's exposed and interesting
+2. **High-Value Targets** - Which subdomains/paths likely have bugs
+3. **Technology-Specific Attacks** - Based on detected tech stack
+4. **Recommended Scan Priority** - Which ZYLON scans to run next
+5. **Custom Wordlist Suggestions** - What to add to wordlists for this target
+6. **Potential Bug Classes** - Most likely vulnerability types for this target"""
+
+        response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
+        return response
+
+    # ========================================================================
+    # UTILITY METHODS
+    # ========================================================================
+
+    def get_status(self):
+        """Get AI Bridge status information"""
+        return {
+            'provider': self.ai_provider,
+            'model': self.model,
+            'fallback_model': self.fallback_model,
+            'api_key_set': bool(self.gemini_api_key),
+            'openai_key_set': bool(self.api_key),
+            'total_requests': self._request_count,
+            'last_error': self._last_error,
+        }
+
+    def test_connection(self):
+        """Test Gemini API connection and return status"""
+        if not self.gemini_api_key:
+            return False, "No API key configured"
+
+        response, error = self._call_gemini(
+            "Respond with exactly: ZYLON_AI_CONNECTED",
+            max_tokens=20,
+            temperature=0.0,
+            retries=0
+        )
+
+        if response:
+            return True, f"Connected to {self.model}"
+        return False, error or "Connection failed"

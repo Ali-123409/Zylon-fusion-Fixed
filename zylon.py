@@ -149,6 +149,11 @@ from core.origin_ip import OriginIPEngine
 from core.v3_security import V3SecurityEngine
 from core.v4_hunting import V4HuntingEngine
 from core.v5_async_engine import V5AsyncEngine
+from core.performance import (
+    dns_cache, optimized_session, adaptive_threads,
+    rate_limiter, smart_timeout, parallel_scanner,
+    get_performance_stats
+)
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -185,8 +190,8 @@ class ZylonUI:
     ███████╗██║██║     ╚██████╔╝███████║
     ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 [/bold red]
-[bold yellow]    FUSION v2.2 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
-[bold cyan]    omino + wizard + Zylon Custom + V2 Nuclear + V4 Hunting + V5 Async | Gemini AI | Termux Non-Root[/bold cyan]
+[bold yellow]    FUSION v2.3 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
+[bold cyan]    omino + wizard + Zylon Custom + V2 Nuclear + V4 Hunting + V5 Async + V6 Perf | Gemini AI | Termux Non-Root[/bold cyan]
 """
         console.print(Panel(banner, border_style="bright_red", box=box.HEAVY))
         
@@ -292,16 +297,22 @@ class ZylonUI:
             ("84", "Subdomain Brute Force (Active DNS + Wordlist)"),
             ("85", "Directory Brute Force (Async High-Speed)"),
             ("86", "AI Smart Scan (Gemini-Guided Auto Recon)"),
+            ("87", "AI Vulnerability Triage (Classify & Prioritize)"),
+            ("88", "AI Recon Advisor (Strategy Suggestions)"),
             ("99", "MEGA SCAN (Every Single Module)"),
             ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
             ("aianalyze", "AI Analyze Last Scan Results"),
             ("aireport", "AI Generate Bug Bounty Report"),
+            ("aipayload", "AI Generate Custom Payloads"),
+            ("aitriage", "AI Triage Findings (Prioritize & Classify)"),
+            ("aitest", "AI Test Connection to Gemini API"),
             ("smart", "AI Smart Scan (Quick Recon + AI Recommendations)"),
             ("wordlists", "Show Built-in Wordlist Stats"),
             ("scope", "Set/Check Bug Bounty Scope"),
             ("poc", "Generate PoC for Last Finding"),
             ("config", "Configuration Manager (API Keys)"),
             ("report", "View/Export Previous Scan Reports"),
+            ("perf", "Performance Stats (DNS Cache, Threads, Speed)"),
             ("update", "Check for Updates"),
             ("fix", "Install Missing Dependencies"),
             ("exit/quit/q", "Exit ZYLON FUSION"),
@@ -384,19 +395,31 @@ class ZylonFusion:
         # V5.0 Async Engine (High-Performance + Wordlists + AI Smart Scan)
         self.v5_async = V5AsyncEngine(self.session)
 
-        # Initialize Gemini API key if configured
+        # Initialize Gemini API key (hardcoded default + config file)
         self._init_gemini()
 
+        # Performance Engine
+        self.dns_cache = dns_cache
+        self.perf_session = optimized_session
+        self.adaptive_threads = adaptive_threads
+        self.rate_limiter = rate_limiter
+
     def _init_gemini(self):
-        """Initialize Gemini API key from config or environment"""
+        """Initialize Gemini API key from var.py default + config file"""
+        # First try hardcoded default key from var.py
+        default_key = GEMINI_API_KEY
+        if default_key:
+            self.ai.set_gemini_key(default_key)
+
+        # Then check config file (overrides default)
         try:
             config_file = os.path.join(os.path.expanduser('~'), '.zylon', 'config.json')
             if os.path.exists(config_file):
                 with open(config_file) as f:
                     config = json.load(f)
-                gemini_key = config.get('gemini_api_key', '')
-                if gemini_key:
-                    self.ai.set_gemini_key(gemini_key)
+                config_key = config.get('gemini_api_key', '')
+                if config_key:
+                    self.ai.set_gemini_key(config_key)
         except Exception:
             pass
     
@@ -518,6 +541,8 @@ class ZylonFusion:
             '84': self._scan_subdomain_brute,
             '85': self._scan_dir_brute_async,
             '86': self._scan_smart,
+            '87': self._scan_ai_triage,
+            '88': self._scan_ai_recon_advisor,
             '99': self._scan_mega,
         }
         
@@ -2883,6 +2908,197 @@ class ZylonFusion:
                 r_table.add_row(rec['scan_id'], rec['name'], rec['reason'][:60])
             console.print(r_table)
 
+    # ========================================================================
+    # SCAN 87: AI VULNERABILITY TRIAGE
+    # ========================================================================
+
+    def _scan_ai_triage(self):
+        """Scan 87: AI Vulnerability Triage - Classify & Prioritize findings"""
+        console.print(f"\n[bold magenta][*] AI Vulnerability Triage on {self.target}[/bold magenta]")
+
+        if not self.ai.gemini_api_key:
+            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
+            return
+
+        if not self.results or not self.results.get('findings'):
+            console.print("[bold yellow][!] Run some scans first to generate findings for triage[/bold yellow]")
+            console.print("[cyan]    Tip: Run scans 0, 7, 9, 10, 11 first, then use scan 87[/cyan]")
+            return
+
+        findings_list = []
+        for category, data in self.results.get('findings', {}).items():
+            findings_list.append({'category': category, 'data': str(data)[:500]})
+
+        with console.status("[bold magenta]Gemini AI is triaging vulnerabilities...[/bold magenta]"):
+            triage_result = self.ai.ai_triage(self.target, findings_list)
+
+        if triage_result:
+            self.results['findings']['ai_triage'] = triage_result
+            console.print(Panel(
+                triage_result,
+                title="[bold magenta]AI Triage Results[/bold magenta]",
+                border_style="magenta"
+            ))
+        else:
+            console.print("[bold yellow][!] AI triage unavailable - check API key[/bold yellow]")
+
+    # ========================================================================
+    # SCAN 88: AI RECON ADVISOR
+    # ========================================================================
+
+    def _scan_ai_recon_advisor(self):
+        """Scan 88: AI Recon Advisor - Strategy suggestions based on recon data"""
+        console.print(f"\n[bold magenta][*] AI Recon Advisor for {self.target}[/bold magenta]")
+
+        if not self.ai.gemini_api_key:
+            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
+            return
+
+        # Run quick recon first
+        recon_data = {}
+        with console.status("[bold cyan]Gathering recon data for AI analysis...[/bold cyan]"):
+            try:
+                import socket
+                ip = socket.gethostbyname(self.target)
+                recon_data['ip'] = ip
+            except Exception:
+                pass
+
+            try:
+                resp = self.session.get(f"https://{self.target}", timeout=10, verify=False)
+                recon_data['status'] = resp.status_code
+                recon_data['server'] = resp.headers.get('Server', 'Unknown')
+                recon_data['headers'] = dict(list(resp.headers.items())[:20])
+                
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                title = soup.find('title')
+                if title:
+                    recon_data['title'] = title.string or ''
+                js_files = [s.get('src', '') for s in soup.find_all('script', src=True)]
+                recon_data['js_count'] = len(js_files)
+            except Exception as e:
+                recon_data['http_error'] = str(e)[:100]
+
+            # Quick DNS
+            try:
+                import dns.resolver
+                resolver = dns.resolver.Resolver()
+                resolver.timeout = 3
+                a_records = resolver.resolve(self.target, 'A')
+                recon_data['dns_a'] = [str(r) for r in a_records]
+            except Exception:
+                pass
+
+        # Get AI advice
+        with console.status("[bold magenta]Gemini AI is analyzing recon strategy...[/bold magenta]"):
+            advisor_result = self.ai.ai_recon_advisor(self.target, recon_data)
+
+        if advisor_result:
+            self.results['findings']['ai_recon_advisor'] = advisor_result
+            console.print(Panel(
+                advisor_result,
+                title="[bold magenta]AI Recon Strategy[/bold magenta]",
+                border_style="magenta"
+            ))
+        else:
+            console.print("[bold yellow][!] AI advisor unavailable - check API key[/bold yellow]")
+
+    # ========================================================================
+    # AI COMMAND HANDLERS
+    # ========================================================================
+
+    def _ai_payload_gen(self):
+        """AI-powered payload generation"""
+        if not self.ai.gemini_api_key:
+            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
+            return
+
+        vuln_type = Prompt.ask("[bold cyan]Vulnerability type (sqli/xss/ssrf/ssti/lfi/rce/etc)[/bold cyan]")
+        context = Prompt.ask("[bold cyan]Context (URL, tech stack, etc.)[/bold cyan]", default=self.target or "")
+
+        console.print(f"\n[bold magenta][*] Generating {vuln_type} payloads...[/bold magenta]")
+        with console.status("[bold magenta]Gemini AI is crafting payloads...[/bold magenta]"):
+            result = self.ai.ai_generate_payload(vuln_type, context)
+
+        if result:
+            console.print(Panel(
+                result,
+                title=f"[bold magenta]AI-Generated {vuln_type.upper()} Payloads[/bold magenta]",
+                border_style="magenta"
+            ))
+        else:
+            console.print("[bold yellow][!] Payload generation unavailable[/bold yellow]")
+
+    def _ai_triage_cmd(self):
+        """AI triage command handler"""
+        self._scan_ai_triage()
+
+    def _ai_test(self):
+        """Test Gemini API connection"""
+        console.print("\n[bold cyan][*] Testing Gemini API connection...[/bold cyan]")
+        success, message = self.ai.test_connection()
+        if success:
+            console.print(f"[bold green][+] {message}[/bold green]")
+        else:
+            console.print(f"[bold red][!] Connection failed: {message}[/bold red]")
+
+    def _show_perf_stats(self):
+        """Display performance statistics"""
+        console.print("\n[bold cyan][*] Performance Statistics[/bold cyan]")
+
+        stats = get_performance_stats()
+
+        perf_table = Table(
+            title="Performance Engine Stats",
+            box=box.DOUBLE, border_style="cyan"
+        )
+        perf_table.add_column("Component", style="yellow")
+        perf_table.add_column("Metric", style="cyan")
+        perf_table.add_column("Value", style="green")
+
+        # DNS Cache
+        dns = stats.get('dns_cache', {})
+        perf_table.add_row("DNS Cache", "Entries", str(dns.get('entries', 0)))
+        perf_table.add_row("DNS Cache", "Hit Rate", str(dns.get('hit_rate', '0%')))
+        perf_table.add_row("DNS Cache", "Hits", str(dns.get('hits', 0)))
+        perf_table.add_row("DNS Cache", "Misses", str(dns.get('misses', 0)))
+
+        # Session
+        perf_table.add_row("HTTP Session", "Total Requests", str(stats.get('session_requests', 0)))
+
+        # Threading
+        threading_stats = stats.get('threading', {})
+        perf_table.add_row("Threading", "Current Threads", str(threading_stats.get('current_threads', 0)))
+        perf_table.add_row("Threading", "Success Count", str(threading_stats.get('success_count', 0)))
+        perf_table.add_row("Threading", "Error Count", str(threading_stats.get('error_count', 0)))
+        perf_table.add_row("Threading", "Avg Response", str(threading_stats.get('avg_response_time', 'N/A')))
+
+        # Timeout
+        timeout_stats = stats.get('timeout', {})
+        perf_table.add_row("Timeout", "Current", str(timeout_stats.get('current_timeout', '10s')))
+        perf_table.add_row("Timeout", "Samples", str(timeout_stats.get('samples', 0)))
+
+        console.print(perf_table)
+
+        # AI Status
+        ai_status = self.ai.get_status()
+        ai_table = Table(
+            title="AI Bridge Status",
+            box=box.ROUNDED, border_style="magenta"
+        )
+        ai_table.add_column("Property", style="yellow")
+        ai_table.add_column("Value", style="green")
+
+        ai_table.add_row("Provider", ai_status.get('provider', 'N/A'))
+        ai_table.add_row("Model", ai_status.get('model', 'N/A'))
+        ai_table.add_row("Fallback Model", ai_status.get('fallback_model', 'N/A'))
+        ai_table.add_row("API Key Set", "Yes" if ai_status.get('api_key_set') else "No")
+        ai_table.add_row("Total AI Requests", str(ai_status.get('total_requests', 0)))
+        ai_table.add_row("Last Error", str(ai_status.get('last_error', 'None')))
+
+        console.print(ai_table)
+
     def run_ai_analysis(self):
         """AI-powered vulnerability analysis"""
         if not self.results or not self.results.get('findings'):
@@ -2960,6 +3176,18 @@ class ZylonFusion:
                 
                 elif user_input.lower() == 'wordlists':
                     self._show_wordlist_stats()
+                
+                elif user_input.lower() == 'aipayload':
+                    self._ai_payload_gen()
+                
+                elif user_input.lower() == 'aitriage':
+                    self._ai_triage_cmd()
+                
+                elif user_input.lower() == 'aitest':
+                    self._ai_test()
+                
+                elif user_input.lower() == 'perf':
+                    self._show_perf_stats()
                 
                 elif user_input.isdigit() and 0 <= int(user_input) <= 99:
                     if not self.target:
