@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "2.4.0"
-ZYLON_CODENAME = "Nuclear V7 + Gemini AI Unlocked + Beast Mode + Performance Engine"
+ZYLON_VERSION = "2.5.0"
+ZYLON_CODENAME = "Nuclear V8 + DDoS Defense Suite + Beast Mode + Gemini AI Unlocked"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 

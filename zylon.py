@@ -97,7 +97,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.text import Text
 from rich import box
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Prompt, Confirm, IntPrompt
 from rich.layout import Layout
 from colorama import Fore, Back, Style, init as colorama_init
 from bs4 import BeautifulSoup
@@ -154,6 +154,7 @@ from core.performance import (
     rate_limiter, smart_timeout, parallel_scanner,
     get_performance_stats
 )
+from core.ddos_engine import DDoSDefenseEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -299,6 +300,13 @@ class ZylonUI:
             ("86", "AI Smart Scan (Gemini-Guided Auto Recon)"),
             ("87", "AI Vulnerability Triage (Classify & Prioritize)"),
             ("88", "AI Recon Advisor (Strategy Suggestions)"),
+            # V6.0 DDoS Defense Testing Modules
+            ("89", "HTTPS Flood Resilience Test (WAF/CDN Blocking Check)"),
+            ("90", "Slowloris Vulnerability Test (Connection Exhaustion)"),
+            ("91", "Slow POST Vulnerability Test (Slow Body Upload)"),
+            ("92", "Rate Limit Detection (Find Protection Threshold)"),
+            ("93", "Connection Capacity Test (Max Concurrent Connections)"),
+            ("ddos", "DDoS Defense Suite (All DDoS Tests)"),
             ("99", "MEGA SCAN (Every Single Module)"),
             ("beast", "BEAST MODE (AI-Guided Full Arsenal + Smart Workflow)"),
             ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
@@ -395,6 +403,9 @@ class ZylonFusion:
 
         # V5.0 Async Engine (High-Performance + Wordlists + AI Smart Scan)
         self.v5_async = V5AsyncEngine(self.session)
+
+        # DDoS Defense Testing Engine
+        self.ddos = DDoSDefenseEngine(self.session)
 
         # Initialize Gemini API key (hardcoded default + config file)
         self._init_gemini()
@@ -573,6 +584,12 @@ class ZylonFusion:
             '86': self._scan_smart,
             '87': self._scan_ai_triage,
             '88': self._scan_ai_recon_advisor,
+            # V6.0 DDoS Defense Testing (89-93)
+            '89': self._scan_ddos_https_flood,
+            '90': self._scan_ddos_slowloris,
+            '91': self._scan_ddos_slow_post,
+            '92': self._scan_ddos_rate_limit,
+            '93': self._scan_ddos_connection_capacity,
             '99': self._scan_mega,
             'beast': self._scan_beast,
         }
@@ -2388,6 +2405,39 @@ class ZylonFusion:
             except Exception as e:
                 console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
 
+        # ========== PHASE 7.5: DDoS DEFENSE TESTS ==========
+        console.print(f"\n[bold red][PHASE 7.5] DDoS Defense Testing[/bold red]")
+        ddos_scans = [
+            ('89', 'HTTPS Flood Resilience', self.ddos.test_https_flood_resilience),
+            ('90', 'Slowloris Vulnerability', self.ddos.test_slowloris),
+            ('91', 'Slow POST Vulnerability', self.ddos.test_slow_post),
+            ('92', 'Rate Limit Detection', self.ddos.test_rate_limit),
+            ('93', 'Connection Capacity', self.ddos.test_connection_capacity),
+        ]
+        url = f"{self.protocol}{self.target}"
+        for scan_id, name, func in ddos_scans:
+            try:
+                console.print(f"  [cyan]-> Running {name}...[/cyan]")
+                if scan_id == '89':
+                    result = func(url, threads=5, requests_per_thread=10, duration=15)
+                elif scan_id == '90':
+                    result = func(url, connections=10, duration=10)
+                elif scan_id == '91':
+                    result = func(url, connections=3)
+                elif scan_id == '92':
+                    result = func(url, total_requests=30, threads=5)
+                elif scan_id == '93':
+                    result = func(url, max_connections=25)
+                else:
+                    result = func(url)
+                if result:
+                    self.results['findings'][f'ddos_{name.lower().replace(" ", "_")}'] = result
+                    vuln = result.get('vulnerable') or result.get('protection_detected') or result.get('rate_limit_detected')
+                    c = 'green' if vuln else 'yellow'
+                    console.print(f"  [{c}]  {result.get('verdict', 'Done')}[/{c}]")
+            except Exception as e:
+                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
+
         # ========== PHASE 8: AI TRIAGE & FINAL REPORT ==========
         console.print(f"\n[bold magenta][PHASE 8] AI Triage & Final Report[/bold magenta]")
         
@@ -2430,8 +2480,306 @@ class ZylonFusion:
         ))
 
     # ========================================================================
-    # V3.0 SECURITY MODULE SCAN IMPLEMENTATIONS (56-75)
+    # V6.0 DDoS DEFENSE TESTING MODULES (89-93)
     # ========================================================================
+
+    def _ddos_config_prompt(self, test_name):
+        """Interactive prompt for DDoS test configuration"""
+        console.print(f"\n[bold cyan][*] {test_name} - Configuration[/bold cyan]")
+        console.print("[dim]   Press Enter for defaults | Ctrl+C to cancel[/dim]\n")
+        
+        threads = IntPrompt.ask(
+            "[bold yellow]   Concurrent threads/connections[/bold yellow]",
+            default=10
+        )
+        requests_per_thread = IntPrompt.ask(
+            "[bold yellow]   Requests per thread[/bold yellow]",
+            default=20
+        )
+        duration = IntPrompt.ask(
+            "[bold yellow]   Max duration (seconds)[/bold yellow]",
+            default=30
+        )
+        
+        console.print(f"\n[bold green]   Config: {threads} threads × {requests_per_thread} reqs = ~{threads * requests_per_thread} total | {duration}s max[/bold green]")
+        return threads, requests_per_thread, duration
+
+    def _scan_ddos_https_flood(self):
+        """Scan 89: HTTPS Flood Resilience Test"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] HTTPS Flood Resilience Test on {self.target}[/bold red]")
+        console.print("[dim]   Tests if WAF/CDN blocks high-frequency HTTPS requests[/dim]")
+        
+        threads, reqs_per_thread, duration = self._ddos_config_prompt("HTTPS Flood Test")
+        
+        with console.status(f"[bold red]Sending HTTPS flood ({threads} threads × {reqs_per_thread} reqs)...[/bold red]"):
+            result = self.ddos.test_https_flood_resilience(
+                url, threads=threads, requests_per_thread=reqs_per_thread, duration=duration
+            )
+        
+        self.results['findings']['ddos_https_flood'] = result
+        
+        # Display results
+        verdict_color = 'green' if result.get('protection_detected') else 'red'
+        console.print(Panel(
+            f"[bold]Test:[/bold] HTTPS Flood Resilience\n"
+            f"[bold]Total Requests:[/bold] {result.get('total_requests_sent', 0)}\n"
+            f"[bold]Successful:[/bold] {result.get('successful_requests', 0)} | "
+            f"[bold]Blocked:[/bold] {result.get('blocked_requests', 0)} | "
+            f"[bold]Errors:[/bold] {result.get('error_requests', 0)}\n"
+            f"[bold]Avg Response:[/bold] {result.get('avg_response_time_ms', 0)}ms | "
+            f"[bold]Max Response:[/bold] {result.get('max_response_time_ms', 0)}ms\n"
+            f"[bold]First Block After:[/bold] {result.get('first_block_after', 'N/A')}s\n"
+            f"[bold]Blocking Codes:[/bold] {result.get('blocking_status_codes', {})}\n"
+            f"[bold]Degradation:[/bold] {'Yes' if result.get('degradation_detected') else 'No'}\n\n"
+            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
+            title="[bold red]HTTPS Flood Results[/bold red]",
+            border_style="red",
+            box=box.HEAVY
+        ))
+
+    def _scan_ddos_slowloris(self):
+        """Scan 90: Slowloris Vulnerability Test"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Slowloris Vulnerability Test on {self.target}[/bold red]")
+        console.print("[dim]   Tests if server is vulnerable to slow connection exhaustion[/dim]")
+        
+        threads, _, duration = self._ddos_config_prompt("Slowloris Test")
+        
+        with console.status(f"[bold red]Opening {threads} slow connections for {duration}s...[/bold red]"):
+            result = self.ddos.test_slowloris(
+                url, connections=threads, duration=duration
+            )
+        
+        self.results['findings']['ddos_slowloris'] = result
+        
+        vuln = result.get('vulnerable', False)
+        verdict_color = 'red' if vuln else 'green'
+        console.print(Panel(
+            f"[bold]Test:[/bold] Slowloris Vulnerability\n"
+            f"[bold]Connections Opened:[/bold] {result.get('connections_opened', 0)}/{result.get('connections_attempted', 0)}\n"
+            f"[bold]Connections Maintained:[/bold] {result.get('connections_maintained', 0)}\n"
+            f"[bold]Connections Dropped:[/bold] {result.get('connections_dropped', 0)}\n"
+            f"[bold]Normal Response:[/bold] {result.get('normal_response_time_ms', 0)}ms\n"
+            f"[bold]Under Load Response:[/bold] {result.get('under_load_response_time_ms', 'N/A')}ms\n\n"
+            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
+            title="[bold red]Slowloris Results[/bold red]",
+            border_style="red",
+            box=box.HEAVY
+        ))
+
+    def _scan_ddos_slow_post(self):
+        """Scan 91: Slow POST Vulnerability Test"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Slow POST Vulnerability Test on {self.target}[/bold red]")
+        console.print("[dim]   Tests if server accepts very slow POST body uploads[/dim]")
+        
+        threads, _, duration = self._ddos_config_prompt("Slow POST Test")
+        
+        with console.status(f"[bold red]Sending {threads} slow POST connections...[/bold red]"):
+            result = self.ddos.test_slow_post(
+                url, connections=threads, chunk_delay=1.0
+            )
+        
+        self.results['findings']['ddos_slow_post'] = result
+        
+        vuln = result.get('vulnerable', False)
+        verdict_color = 'red' if vuln else 'green'
+        console.print(Panel(
+            f"[bold]Test:[/bold] Slow POST Vulnerability\n"
+            f"[bold]Connections Opened:[/bold] {result.get('connections_opened', 0)}\n"
+            f"[bold]Connections Accepted (vulnerable):[/bold] {result.get('connections_accepted', 0)}\n"
+            f"[bold]Connections Rejected (protected):[/bold] {result.get('connections_rejected', 0)}\n\n"
+            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
+            title="[bold red]Slow POST Results[/bold red]",
+            border_style="red",
+            box=box.HEAVY
+        ))
+
+    def _scan_ddos_rate_limit(self):
+        """Scan 92: Rate Limit Detection"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Rate Limit Detection on {self.target}[/bold red]")
+        console.print("[dim]   Finds the threshold where rate limiting kicks in[/dim]")
+        
+        threads, total_reqs, _ = self._ddos_config_prompt("Rate Limit Test")
+        
+        with console.status(f"[bold red]Sending {total_reqs} requests across {threads} threads...[/bold red]"):
+            result = self.ddos.test_rate_limit(
+                url, total_requests=total_reqs, threads=threads
+            )
+        
+        self.results['findings']['ddos_rate_limit'] = result
+        
+        protected = result.get('rate_limit_detected', False)
+        verdict_color = 'green' if protected else 'red'
+        console.print(Panel(
+            f"[bold]Test:[/bold] Rate Limit Detection\n"
+            f"[bold]Successful:[/bold] {result.get('successful', 0)} | "
+            f"[bold]Rate Limited:[/bold] {result.get('rate_limited', 0)} | "
+            f"[bold]Errors:[/bold] {result.get('errors', 0)}\n"
+            f"[bold]Limit Type:[/bold] {result.get('rate_limit_type', 'N/A')}\n"
+            f"[bold]Requests Until Limit:[/bold] {result.get('requests_until_limit', 'N/A')}\n"
+            f"[bold]Blocking Code:[/bold] {result.get('blocking_status_code', 'N/A')}\n"
+            f"[bold]Rate Limit Header:[/bold] {result.get('rate_limit_header', 'N/A')}\n\n"
+            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
+            title="[bold red]Rate Limit Results[/bold red]",
+            border_style="red",
+            box=box.HEAVY
+        ))
+
+    def _scan_ddos_connection_capacity(self):
+        """Scan 93: Connection Capacity Test"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold red][*] Connection Capacity Test on {self.target}[/bold red]")
+        console.print("[dim]   Tests max concurrent connections before server degrades[/dim]")
+        
+        max_conns, _, _ = self._ddos_config_prompt("Connection Capacity Test")
+        
+        with console.status(f"[bold red]Opening up to {max_conns} connections...[/bold red]"):
+            result = self.ddos.test_connection_capacity(
+                url, max_connections=max_conns
+            )
+        
+        self.results['findings']['ddos_connection_capacity'] = result
+        
+        console.print(Panel(
+            f"[bold]Test:[/bold] Connection Capacity\n"
+            f"[bold]Successful Connections:[/bold] {result.get('successful_connections', 0)}\n"
+            f"[bold]Failed Connections:[/bold] {result.get('failed_connections', 0)}\n"
+            f"[bold]Peak Concurrent:[/bold] {result.get('peak_concurrent', 0)}\n"
+            f"[bold]Refusal Point:[/bold] {result.get('refusal_point', 'N/A')}\n"
+            f"[bold]Degradation Point:[/bold] {result.get('degradation_point', 'N/A')}\n"
+            f"[bold]Under Load Response:[/bold] {result.get('under_load_response_ms', 'N/A')}ms\n\n"
+            f"[bold yellow]VERDICT: {result.get('verdict', 'Unknown')}[/bold yellow]",
+            title="[bold red]Connection Capacity Results[/bold red]",
+            border_style="red",
+            box=box.HEAVY
+        ))
+
+    def _scan_ddos_suite(self):
+        """DDoS Defense Suite - Run all DDoS defense tests with smart defaults"""
+        url = f"{self.protocol}{self.target}"
+        start_time = time.time()
+        
+        console.print(f"\n[bold red]")
+        console.print(Panel(
+            "[bold white]   DDoS DEFENSE SUITE[/bold white]\n"
+            "[bold red]   Testing Server Protection Resilience[/bold red]\n"
+            f"[bold yellow]   Target: {self.target}[/bold yellow]\n"
+            "[dim white]   User-controlled concurrency | Auto-stops on protection detection[/dim white]",
+            border_style="bold red",
+            box=box.HEAVY
+        ))
+        
+        # Configuration
+        console.print(f"\n[bold yellow][CONFIG] DDoS Suite Settings[/bold yellow]")
+        threads = IntPrompt.ask(
+            "[bold yellow]   Threads/connections per test[/bold yellow]",
+            default=10
+        )
+        reqs = IntPrompt.ask(
+            "[bold yellow]   Requests per thread[/bold yellow]",
+            default=20
+        )
+        duration = IntPrompt.ask(
+            "[bold yellow]   Max duration per test (seconds)[/bold yellow]",
+            default=30
+        )
+        
+        console.print(f"\n[bold green]   Config: {threads} threads | {reqs} reqs/thread | {duration}s max per test[/bold green]")
+        
+        # Ensure findings dict exists
+        if 'findings' not in self.results:
+            self.results['findings'] = {}
+        
+        # Phase 1: HTTPS Flood
+        console.print(f"\n[bold yellow][TEST 1/5] HTTPS Flood Resilience[/bold yellow]")
+        try:
+            with console.status(f"[bold red]Testing HTTPS flood resilience...[/bold red]"):
+                r1 = self.ddos.test_https_flood_resilience(url, threads=threads, requests_per_thread=reqs, duration=duration)
+            self.results['findings']['ddos_https_flood'] = r1
+            c = 'green' if r1.get('protection_detected') else 'red'
+            console.print(f"  [{c}]  {r1.get('verdict', 'Unknown')}[/{c}]")
+        except Exception as e:
+            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
+        
+        # Phase 2: Slowloris
+        console.print(f"\n[bold yellow][TEST 2/5] Slowloris Vulnerability[/bold yellow]")
+        try:
+            with console.status(f"[bold red]Testing slow connection exhaustion...[/bold red]"):
+                r2 = self.ddos.test_slowloris(url, connections=threads, duration=duration)
+            self.results['findings']['ddos_slowloris'] = r2
+            c = 'red' if r2.get('vulnerable') else 'green'
+            console.print(f"  [{c}]  {r2.get('verdict', 'Unknown')}[/{c}]")
+        except Exception as e:
+            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
+        
+        # Phase 3: Slow POST
+        console.print(f"\n[bold yellow][TEST 3/5] Slow POST Vulnerability[/bold yellow]")
+        try:
+            with console.status(f"[bold red]Testing slow POST body upload...[/bold red]"):
+                r3 = self.ddos.test_slow_post(url, connections=min(threads, 5))
+            self.results['findings']['ddos_slow_post'] = r3
+            c = 'red' if r3.get('vulnerable') else 'green'
+            console.print(f"  [{c}]  {r3.get('verdict', 'Unknown')}[/{c}]")
+        except Exception as e:
+            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
+        
+        # Phase 4: Rate Limit
+        console.print(f"\n[bold yellow][TEST 4/5] Rate Limit Detection[/bold yellow]")
+        try:
+            with console.status(f"[bold red]Finding rate limit threshold...[/bold red]"):
+                r4 = self.ddos.test_rate_limit(url, total_requests=threads * reqs, threads=threads)
+            self.results['findings']['ddos_rate_limit'] = r4
+            c = 'green' if r4.get('rate_limit_detected') else 'red'
+            console.print(f"  [{c}]  {r4.get('verdict', 'Unknown')}[/{c}]")
+        except Exception as e:
+            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
+        
+        # Phase 5: Connection Capacity
+        console.print(f"\n[bold yellow][TEST 5/5] Connection Capacity[/bold yellow]")
+        try:
+            with console.status(f"[bold red]Testing max concurrent connections...[/bold red]"):
+                r5 = self.ddos.test_connection_capacity(url, max_connections=threads * 5)
+            self.results['findings']['ddos_connection_capacity'] = r5
+            console.print(f"  [yellow]  {r5.get('verdict', 'Unknown')}[/yellow]")
+        except Exception as e:
+            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
+        
+        # Generate resilience report
+        report = self.ddos.generate_resilience_report()
+        
+        elapsed = round(time.time() - start_time, 1)
+        
+        # Summary
+        vulns = sum(1 for k, v in self.results.get('findings', {}).items()
+                    if k.startswith('ddos_') and isinstance(v, dict) and v.get('vulnerable'))
+        protections = sum(1 for k, v in self.results.get('findings', {}).items()
+                         if k.startswith('ddos_') and isinstance(v, dict) and 
+                         (v.get('protection_detected') or v.get('rate_limit_detected')))
+        
+        verdict_color = 'green' if vulns == 0 and protections > 0 else 'red' if vulns > 0 else 'yellow'
+        
+        console.print(f"\n[bold red]")
+        console.print(Panel(
+            f"[bold white]   DDoS DEFENSE SUITE COMPLETE[/bold white]\n\n"
+            f"[bold yellow]   Tests Run: 5[/bold yellow]\n"
+            f"[bold red]   DoS Vulnerabilities: {vulns}[/bold red]\n"
+            f"[bold green]   Protections Detected: {protections}[/bold green]\n"
+            f"[bold cyan]   Time: {elapsed}s[/bold cyan]\n\n"
+            f"[bold {verdict_color}]   Overall: {report.get('overall_verdict', 'Unknown')}[/bold {verdict_color}]",
+            border_style="bold red",
+            box=box.HEAVY
+        ))
+        
+        # Recommendations
+        if report.get('recommendations'):
+            console.print(f"\n[bold yellow]Recommendations:[/bold yellow]")
+            for rec in report['recommendations']:
+                console.print(f"  [cyan]- {rec}[/cyan]")
+
+
 
     def _scan_graphql(self):
         """Scan 56: GraphQL Security Tester"""
@@ -3441,6 +3789,17 @@ class ZylonFusion:
                             continue
                         console.print(f"[green][+] {msg}[/green]")
                     self._scan_beast()
+                    self.reports.save_json(self.results, self.target)
+                
+                elif user_input.lower() == 'ddos':
+                    if not self.target:
+                        target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
+                        success, msg = self.set_target(target)
+                        if not success:
+                            console.print(f"[bold red][!] {msg}[/bold red]")
+                            continue
+                        console.print(f"[green][+] {msg}[/green]")
+                    self._scan_ddos_suite()
                     self.reports.save_json(self.results, self.target)
                 
                 elif user_input.lower() == 'wordlists':
