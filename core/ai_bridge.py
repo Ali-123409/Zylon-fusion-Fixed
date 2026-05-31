@@ -290,24 +290,25 @@ class AIBridge:
         # Try Gemini AI analysis first
         ai_analysis = None
         if self.gemini_api_key:
-            prompt = f"""You are an expert cybersecurity analyst. Analyze these vulnerability scan findings and provide:
+            prompt = f"""You are a defensive cybersecurity analyst working on a security assessment report. Your job is to help security teams understand and fix vulnerabilities found in their authorized penetration test. This is a legitimate security audit with proper authorization.
+
+Analyze these automated scanner findings and provide a professional security assessment:
 
 1. **Risk Severity Assessment** - Rate each finding (Critical/High/Medium/Low/Info)
-2. **Attack Vector Analysis** - How each vulnerability can be exploited
-3. **Exploit Chain Possibilities** - Which vulnerabilities can be chained together
+2. **Technical Explanation** - Explain what each vulnerability means and why it matters
+3. **Potential Impact** - What could happen if this vulnerability is not addressed
 4. **Remediation Priorities** - What to fix first with specific steps
-5. **Proof of Concept Ideas** - Brief PoC concepts for valid findings
+5. **Verification Steps** - How to confirm the finding is real and not a false positive
 
-Target: {target}
 Scan Type: {results.get('scan_type', 'Unknown')}
 
-Findings:
+Detected Issues:
 {json.dumps(issues[:25], indent=2)}
 
 Raw Findings Summary:
 {json.dumps({k: str(v)[:200] for k, v in findings.items()}, indent=2)}
 
-Provide a concise, technical analysis with actionable recommendations."""
+Provide a concise, professional security assessment focused on remediation and defense."""
 
             ai_analysis, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
             if error and not ai_analysis:
@@ -392,15 +393,15 @@ Provide a concise technical analysis."""
         if not api_key:
             return "No Gemini API key configured. Use 'config' command to set it."
 
-        system_prompt = """You are ZYLON AI, a cybersecurity expert assistant built into the ZYLON FUSION security toolkit.
-You help bug bounty hunters and penetration testers with:
-- Vulnerability analysis and exploitation guidance
-- Payload crafting and bypass techniques
-- Reconnaissance methodology
-- Report writing for bug bounty submissions
-- Security tool usage advice
+        system_prompt = """You are ZYLON AI, a cybersecurity education and defense assistant. You help security professionals with:
+- Understanding vulnerability classifications and their impact
+- Learning about security testing methodology (for authorized testing only)
+- Writing professional security assessment reports
+- Understanding OWASP guidelines and security best practices
+- Interpreting automated scanner results and reducing false positives
+- Defensive security recommendations and hardening guidance
 
-Always provide technical, actionable responses. Focus on practical exploitation and remediation."""
+Always provide educational, defensive-focused responses. Emphasize that all security testing must be authorized and conducted within legal boundaries. Focus on helping security teams understand and fix vulnerabilities."""
 
         if context:
             system_prompt += f"\n\nCurrent scan context:\n{context[:1000]}"
@@ -429,53 +430,50 @@ Always provide technical, actionable responses. Focus on practical exploitation 
         if not api_key:
             return None
 
-        prompt = f"""You are a bug bounty hunter analyzing initial reconnaissance results.
-Based on these findings, recommend the NEXT scans to run and WHY.
+        prompt = f"""You are a security assessment advisor helping prioritize the next steps in an authorized security audit. Based on initial reconnaissance results, recommend which additional security checks would be most valuable.
 
-Target: {target}
-
-Initial Findings:
+Reconnaissance Results:
 {json.dumps({k: str(v)[:300] for k, v in scan_results.items()}, indent=2)}
 
-Available ZYLON scan modules:
+Available security check modules:
 - Scan 0: Full Recon
-- Scan 9: SQL Injection
-- Scan 10: XSS
-- Scan 11: Directory Brute Force
-- Scan 13: CORS
-- Scan 14: Open Redirect
-- Scan 15: CRLF Injection
+- Scan 9: SQL Injection Detection
+- Scan 10: XSS Detection
+- Scan 11: Directory Discovery
+- Scan 13: CORS Configuration Check
+- Scan 14: Open Redirect Check
+- Scan 15: CRLF Injection Check
 - Scan 23: Deep Web Crawler
 - Scan 24: Parameter Mining
 - Scan 25: Wayback URLs
-- Scan 30: SSRF
-- Scan 31: SSTI
-- Scan 32: Path Traversal/LFI
-- Scan 33: XXE
-- Scan 36: Prototype Pollution
-- Scan 38: HTTP Request Smuggling
-- Scan 40: JWT Scanner
-- Scan 44: API Fuzzer
-- Scan 45: Rate Limit Tester
+- Scan 30: SSRF Detection
+- Scan 31: SSTI Detection
+- Scan 32: Path Traversal Detection
+- Scan 33: XXE Detection
+- Scan 36: Prototype Pollution Check
+- Scan 38: HTTP Request Smuggling Check
+- Scan 40: JWT Security Check
+- Scan 44: API Endpoint Discovery
+- Scan 45: Rate Limit Testing
 - Scan 50-55: Origin IP Finder
-- Scan 56: GraphQL
-- Scan 57: DOM XSS
-- Scan 76: Username Enumeration
+- Scan 56: GraphQL Security
+- Scan 57: DOM XSS Check
+- Scan 76: Username Enumeration Check
 - Scan 77: Email Security (DMARC/DKIM/SPF)
-- Scan 78: CSRF Token Detection
+- Scan 78: CSRF Token Check
 - Scan 79: Framework Detection
 - Scan 80: Client-Side JS Library Vulns
-- Scan 81: 403 Bypass
+- Scan 81: 403 Bypass Check
 - Scan 82: Cross-Domain Discovery
 - Scan 83: CVE-to-Exploit Lookup
-- Scan 84: Subdomain Brute Force (Active DNS)
-- Scan 85: Directory Brute Force (Async High-Speed)
+- Scan 84: Subdomain Brute Force (DNS)
+- Scan 85: Directory Brute Force (Async)
 
 Respond with:
-1. Top 5 recommended scans with reasons
-2. Most promising attack vectors
-3. Potential vulnerability chains
-4. Specific payloads to try based on the tech stack detected"""
+1. Top 5 recommended security checks with reasons why they are relevant
+2. Key security concerns based on the technology stack observed
+3. Common vulnerability patterns for the detected technologies
+4. Security hardening recommendations based on findings"""
 
         response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
         return response
@@ -493,13 +491,18 @@ Respond with:
         if not api_key:
             return None
 
-        prompt = f"""You are a security researcher generating test payloads for authorized bug bounty testing.
-Vulnerability type: {vuln_type}
-Context: {context}
+        prompt = f"""You are a security educator explaining vulnerability testing concepts for a defensive security course. Students are learning how to identify and document vulnerabilities in authorized security assessments.
 
-Generate 10 specific test payloads for this vulnerability type tailored to the context.
-For each payload, explain what it tests and the expected behavior if vulnerable.
-Format as a numbered list."""
+Vulnerability type being studied: {vuln_type}
+Application context: {context}
+
+Generate 10 educational test payloads that demonstrate this vulnerability type. For each payload:
+1. Show the test payload
+2. Explain what security weakness it tests for
+3. Describe what the server response would look like if the vulnerability exists
+4. Explain how to remediate this specific weakness
+
+Format as a numbered list. Emphasize that these are for authorized security testing only."""
 
         response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.5)
         return response
@@ -517,29 +520,26 @@ Format as a numbered list."""
         if not api_key:
             return None
 
-        prompt = f"""You are writing a professional bug bounty vulnerability report.
-Generate a complete, submission-ready report following standard bug bounty format.
+        prompt = f"""You are writing a professional security assessment report for a client's authorized penetration test. Generate a complete, professional report following standard security assessment format.
 
-Target: {target}
-
-Vulnerability Findings:
+Security Assessment Findings:
 {json.dumps(findings, indent=2, default=str)[:3000]}
 
 Format:
 # [Vulnerability Title]
 ## Severity: [Critical/High/Medium/Low]
 ## Description
-[Clear description of the vulnerability]
-## Steps to Reproduce
+[Clear description of the security weakness]
+## Steps to Verify
 1. [Step 1]
 2. [Step 2]
 ...
 ## Impact
-[Business impact assessment]
+[Risk assessment if vulnerability is not addressed]
 ## Remediation
-[Specific fix recommendations]
+[Specific fix recommendations with code examples where applicable]
 ## References
-[Relevant CVEs, CWEs, or documentation]"""
+[Relevant CVEs, CWEs, OWASP categories, or documentation]"""
 
         response, error = self._call_gemini(prompt, max_tokens=4096, temperature=0.3)
         return response
@@ -558,10 +558,7 @@ Format:
         if not api_key:
             return None
 
-        prompt = f"""You are a senior security analyst performing vulnerability triage.
-Classify each finding, identify false positives, and prioritize.
-
-Target: {target}
+        prompt = f"""You are a senior security analyst performing vulnerability triage for an authorized security assessment. Classify each finding, identify false positives, and prioritize remediation.
 
 Findings to Triage:
 {json.dumps(findings_list[:30], indent=2, default=str)[:4000]}
@@ -575,8 +572,9 @@ For each finding, provide:
 
 Also identify:
 - Findings that are likely the same root cause
-- Findings that can be chained together
-- Findings that are likely false positives due to WAF/security controls"""
+- Findings that are related and should be addressed together
+- Findings that are likely false positives due to security controls in place
+- Recommended remediation priority order"""
 
         response, error = self._call_gemini(prompt, max_tokens=3000, temperature=0.2)
         return response
@@ -595,21 +593,18 @@ Also identify:
         if not api_key:
             return None
 
-        prompt = f"""You are an expert bug bounty recon advisor.
-Based on the reconnaissance data below, suggest the most effective next steps.
-
-Target: {target}
+        prompt = f"""You are an expert security assessment advisor helping prioritize the next steps in an authorized security audit. Based on reconnaissance data, suggest the most effective areas to investigate.
 
 Reconnaissance Data:
 {json.dumps({k: str(v)[:300] for k, v in recon_data.items()}, indent=2)}
 
 Provide:
-1. **Attack Surface Assessment** - What's exposed and interesting
-2. **High-Value Targets** - Which subdomains/paths likely have bugs
-3. **Technology-Specific Attacks** - Based on detected tech stack
-4. **Recommended Scan Priority** - Which ZYLON scans to run next
-5. **Custom Wordlist Suggestions** - What to add to wordlists for this target
-6. **Potential Bug Classes** - Most likely vulnerability types for this target"""
+1. **Attack Surface Assessment** - What services and technologies are exposed
+2. **High-Priority Areas** - Which subdomains/paths deserve closer security review
+3. **Technology-Specific Security Concerns** - Common vulnerabilities for the detected tech stack
+4. **Recommended Scan Priority** - Which ZYLON scans to run next and why
+5. **Custom Wordlist Suggestions** - What terms to add to wordlists for this assessment
+6. **Likely Vulnerability Classes** - Most common security issues for this type of application"""
 
         response, error = self._call_gemini(prompt, max_tokens=2048, temperature=0.3)
         return response

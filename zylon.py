@@ -416,7 +416,7 @@ class ZylonFusion:
             self.ai.set_gemini_key(env_key)
     
     def set_target(self, target):
-        """Validate and set target"""
+        """Validate and set target, auto-detect HTTP/HTTPS"""
         target = target.strip()
         # Remove protocol if user included it
         if '://' in target:
@@ -427,8 +427,45 @@ class ZylonFusion:
             return False, "Invalid target - must contain a domain or IP"
         
         self.target = target
-        self.parsed_target = urlparse(f"https://{target}")
-        return True, f"Target set: {target}"
+        
+        # Auto-detect protocol: try HTTPS first, fallback to HTTP
+        self.protocol = self._detect_protocol(target)
+        
+        self.parsed_target = urlparse(f"{self.protocol}{target}")
+        proto_label = "HTTPS" if self.protocol == "https://" else "HTTP"
+        return True, f"Target set: {target} ({proto_label})"
+    
+    def _detect_protocol(self, target):
+        """Auto-detect if target supports HTTPS, fallback to HTTP"""
+        # Try HTTPS first
+        try:
+            resp = self.session.get(
+                f"https://{target}", 
+                timeout=8, 
+                verify=False, 
+                allow_redirects=True
+            )
+            if resp.status_code < 500:
+                return "https://"
+        except Exception:
+            pass
+        
+        # Fallback to HTTP
+        try:
+            resp = self.session.get(
+                f"http://{target}", 
+                timeout=8, 
+                allow_redirects=True
+            )
+            if resp.status_code < 500:
+                console.print("[yellow]    HTTPS unavailable, using HTTP[/yellow]")
+                return "http://"
+        except Exception:
+            pass
+        
+        # Default to HTTPS even if both fail (might be temporary)
+        console.print("[yellow]    Cannot verify connectivity, defaulting to HTTPS[/yellow]")
+        return "https://"
     
     def run_scan(self, scan_type):
         """Run a specific scan type"""
