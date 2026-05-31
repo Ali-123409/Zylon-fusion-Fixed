@@ -8,5 +8,7 @@ build/
 .env
 *.log
 .DS_Store
-data/
+data/cache/
+data/temp/
+data/results/
 loot/
