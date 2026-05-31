@@ -2355,7 +2355,7 @@ class ZylonFusion:
             if result.get('hostnames'):
                 console.print(f"  [cyan]Hostnames: {', '.join(result['hostnames'][:5])}[/cyan]")
             if result.get('cpes'):
-                console.print(f"  [yellow]Software: {', '.join(result['cpes'][:5])}[/cyan]")
+                console.print(f"  [yellow]Software: {', '.join(result['cpes'][:5])}[/yellow]")
 
     def _scan_favicon_hash(self):
         """Scan 67: Favicon Hash Discovery"""
@@ -2849,7 +2849,7 @@ class ZylonFusion:
             console.print("[yellow]    Gemini AI: Not configured (use 'config' to set key)[/yellow]")
             console.print("[yellow]    Running basic smart scan without AI...[/yellow]")
 
-        with console.status("[bold magenta]Running AI-guided smart scan...[/bold cyan]"):
+        with console.status("[bold magenta]Running AI-guided smart scan...[/bold magenta]"):
             result = self.v5_async.scan_smart(
                 self.target,
                 ai_bridge=self.ai if gemini_configured else None
