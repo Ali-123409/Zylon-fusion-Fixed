@@ -2210,6 +2210,10 @@ class ZylonFusion:
         """BEAST MODE - AI-Guided full arsenal with intelligent workflow"""
         start_time = time.time()
         
+        # Initialize results dict with 'findings' key - CRITICAL for all scan functions
+        self.results = {'target': self.target, 'scan_type': 'beast_mode',
+                       'timestamp': datetime.now().isoformat(), 'findings': {}}
+        
         console.print(f"\n[bold red]")
         console.print(Panel(
             "[bold white]   BEAST MODE ACTIVATED[/bold white]\n"
