@@ -148,6 +148,7 @@ from core.v2_vuln import V2VulnEngine
 from core.origin_ip import OriginIPEngine
 from core.v3_security import V3SecurityEngine
 from core.v4_hunting import V4HuntingEngine
+from core.v5_async_engine import V5AsyncEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -184,8 +185,8 @@ class ZylonUI:
     ███████╗██║██║     ╚██████╔╝███████║
     ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 [/bold red]
-[bold yellow]    FUSION v2.1 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
-[bold cyan]    omino + wizard + Zylon Custom + V2.0 Nuclear + V4.0 Hunting | Termux Non-Root[/bold cyan]
+[bold yellow]    FUSION v2.2 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
+[bold cyan]    omino + wizard + Zylon Custom + V2 Nuclear + V4 Hunting + V5 Async | Gemini AI | Termux Non-Root[/bold cyan]
 """
         console.print(Panel(banner, border_style="bright_red", box=box.HEAVY))
         
@@ -287,8 +288,16 @@ class ZylonUI:
             ("81", "403 Bypass Tester"),
             ("82", "Cross-Domain Discovery"),
             ("83", "CVE-to-Exploit Lookup Engine"),
+            # V5.0 Async Engine Modules
+            ("84", "Subdomain Brute Force (Active DNS + Wordlist)"),
+            ("85", "Directory Brute Force (Async High-Speed)"),
+            ("86", "AI Smart Scan (Gemini-Guided Auto Recon)"),
             ("99", "MEGA SCAN (Every Single Module)"),
-            ("ai", "AI-Powered Vulnerability Analysis (Experimental)"),
+            ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
+            ("aianalyze", "AI Analyze Last Scan Results"),
+            ("aireport", "AI Generate Bug Bounty Report"),
+            ("smart", "AI Smart Scan (Quick Recon + AI Recommendations)"),
+            ("wordlists", "Show Built-in Wordlist Stats"),
             ("scope", "Set/Check Bug Bounty Scope"),
             ("poc", "Generate PoC for Last Finding"),
             ("config", "Configuration Manager (API Keys)"),
@@ -371,6 +380,25 @@ class ZylonFusion:
 
         # V4.0 Hunting Engine (8 New Modules)
         self.v4_hunting = V4HuntingEngine(self.session)
+
+        # V5.0 Async Engine (High-Performance + Wordlists + AI Smart Scan)
+        self.v5_async = V5AsyncEngine(self.session)
+
+        # Initialize Gemini API key if configured
+        self._init_gemini()
+
+    def _init_gemini(self):
+        """Initialize Gemini API key from config or environment"""
+        try:
+            config_file = os.path.join(os.path.expanduser('~'), '.zylon', 'config.json')
+            if os.path.exists(config_file):
+                with open(config_file) as f:
+                    config = json.load(f)
+                gemini_key = config.get('gemini_api_key', '')
+                if gemini_key:
+                    self.ai.set_gemini_key(gemini_key)
+        except Exception:
+            pass
     
     def set_target(self, target):
         """Validate and set target"""
@@ -486,6 +514,10 @@ class ZylonFusion:
             '81': self._scan_403_bypass,
             '82': self._scan_cross_domain,
             '83': self._scan_cve_lookup,
+            # V5.0 Async Engine Modules (84-86)
+            '84': self._scan_subdomain_brute,
+            '85': self._scan_dir_brute_async,
+            '86': self._scan_smart,
             '99': self._scan_mega,
         }
         
@@ -2711,20 +2743,165 @@ class ZylonFusion:
         else:
             console.print("[green][+] No critical CVEs found for detected technologies[/green]")
 
+    # ====================================================================
+    # V5.0 ASYNC ENGINE SCAN IMPLEMENTATIONS
+    # ====================================================================
+
+    def _scan_subdomain_brute(self):
+        """Scan 84: Subdomain Brute Force (Active DNS + Wordlist)"""
+        console.print(f"\n[bold cyan][*] Subdomain Brute Force on {self.target}[/bold cyan]")
+
+        # Show wordlist stats
+        wl_stats = self.v5_async.get_wordlist_stats()
+        subdomain_count = wl_stats.get('subdomains', 0)
+        console.print(f"[cyan]    Wordlist: {subdomain_count} subdomain names loaded[/cyan]")
+
+        with console.status(f"[bold cyan]Resolving {subdomain_count} subdomains via DNS...[/bold cyan]"):
+            result = self.v5_async.scan_subdomain_bruteforce(self.target)
+
+        self.results['findings']['subdomain_brute'] = result
+
+        found = result.get('found', [])
+        if found:
+            s_table = Table(
+                title=f"[bold green]Subdomains Found: {len(found)}[/bold green] ({result.get('time_taken', 0)}s)",
+                box=box.ROUNDED, border_style="green"
+            )
+            s_table.add_column("#", style="dim")
+            s_table.add_column("Subdomain", style="cyan")
+            s_table.add_column("IP", style="yellow")
+            s_table.add_column("Reverse DNS", style="green")
+            for i, sub in enumerate(found, 1):
+                s_table.add_row(str(i), sub['subdomain'], sub['ip'],
+                               sub.get('reverse_dns', '')[:40])
+            console.print(s_table)
+            console.print(f"\n[cyan]Tested: {result['tested']} | Resolved: {result['resolved']} | "
+                         f"Time: {result['time_taken']}s[/cyan]")
+        else:
+            console.print(f"[yellow][!] No subdomains resolved from {subdomain_count} names[/yellow]")
+            console.print(f"[cyan]    Tested: {result['tested']} | Time: {result['time_taken']}s[/cyan]")
+
+    def _scan_dir_brute_async(self):
+        """Scan 85: Directory Brute Force (Async High-Speed)"""
+        console.print(f"\n[bold cyan][*] Async Directory Brute Force on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+
+        # Show wordlist stats
+        wl_stats = self.v5_async.get_wordlist_stats()
+        dir_count = wl_stats.get('directories', 0)
+        console.print(f"[cyan]    Wordlist: {dir_count} paths loaded | Async mode[/cyan]")
+
+        with console.status(f"[bold cyan]Scanning {dir_count} paths at high speed...[/bold cyan]"):
+            result = self.v5_async.scan_dir_bruteforce_async(url)
+
+        self.results['findings']['dir_brute_async'] = result
+
+        found = result.get('found', [])
+        if found:
+            d_table = Table(
+                title=f"[bold]Paths Found: {len(found)}[/bold] ({result.get('time_taken', 0)}s)",
+                box=box.ROUNDED, border_style="cyan"
+            )
+            d_table.add_column("#", style="dim")
+            d_table.add_column("Path", style="yellow")
+            d_table.add_column("Status", style="green")
+            d_table.add_column("Size", style="cyan")
+            for i, item in enumerate(found[:150], 1):
+                status = item.get('status', 0)
+                status_color = "green" if status == 200 else "yellow" if status in [301, 302] else "red"
+                size = str(item.get('size', ''))
+                d_table.add_row(str(i), item.get('path', ''),
+                               f"[{status_color}]{status}[/{status_color}]", size)
+            console.print(d_table)
+            if len(found) > 150:
+                console.print(f"[yellow]... and {len(found) - 150} more paths[/yellow]")
+            console.print(f"\n[cyan]Scanned: {result['tested']} | Found: {len(found)} | "
+                         f"Time: {result['time_taken']}s[/cyan]")
+        else:
+            console.print(f"[yellow][!] No accessible paths found[/yellow]")
+            console.print(f"[cyan]    Scanned: {result['tested']} | Time: {result['time_taken']}s[/cyan]")
+
+    def _scan_smart(self):
+        """Scan 86: AI Smart Scan (Gemini-Guided Auto Recon)"""
+        console.print(f"\n[bold magenta][*] AI Smart Scan on {self.target}[/bold magenta]")
+
+        gemini_configured = bool(self.ai.gemini_api_key)
+        if gemini_configured:
+            console.print("[magenta]    Gemini AI: Connected[/magenta]")
+        else:
+            console.print("[yellow]    Gemini AI: Not configured (use 'config' to set key)[/yellow]")
+            console.print("[yellow]    Running basic smart scan without AI...[/yellow]")
+
+        with console.status("[bold magenta]Running AI-guided smart scan...[/bold cyan]"):
+            result = self.v5_async.scan_smart(
+                self.target,
+                ai_bridge=self.ai if gemini_configured else None
+            )
+
+        self.results['findings']['smart_scan'] = result
+
+        # Display Phase 1: Quick Recon results
+        phases = result.get('phases', [])
+        for phase in phases:
+            findings = phase.get('findings', {})
+            if findings:
+                p_table = Table(
+                    title=f"[bold]{phase['name']} Results[/bold]",
+                    box=box.ROUNDED, border_style="cyan"
+                )
+                p_table.add_column("Property", style="yellow")
+                p_table.add_column("Value", style="green")
+                for key, val in findings.items():
+                    if isinstance(val, (str, int, float, bool)):
+                        p_table.add_row(key, str(val))
+                    elif isinstance(val, list) and len(val) < 10:
+                        p_table.add_row(key, ', '.join(str(v) for v in val))
+                    elif isinstance(val, dict):
+                        p_table.add_row(key, f"{len(val)} items")
+                console.print(p_table)
+
+        # Display AI Recommendations
+        ai_recs = result.get('ai_recommendations')
+        if ai_recs:
+            console.print(Panel(
+                ai_recs,
+                title="[bold magenta]AI Recommendations[/bold magenta]",
+                border_style="magenta"
+            ))
+
+        # Display recommended next scans
+        recs = result.get('summary', {}).get('recommended_next_scans', [])
+        if recs:
+            r_table = Table(
+                title="[bold yellow]Recommended Next Scans[/bold yellow]",
+                box=box.ROUNDED, border_style="yellow"
+            )
+            r_table.add_column("Scan ID", style="cyan")
+            r_table.add_column("Name", style="green")
+            r_table.add_column("Reason", style="yellow")
+            for rec in recs:
+                r_table.add_row(rec['scan_id'], rec['name'], rec['reason'][:60])
+            console.print(r_table)
+
     def run_ai_analysis(self):
         """AI-powered vulnerability analysis"""
         if not self.results or not self.results.get('findings'):
             console.print("[bold yellow][!] Run a scan first before AI analysis[/bold yellow]")
             return
-        
+
+        gemini_configured = bool(self.ai.gemini_api_key)
+        if not gemini_configured:
+            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command to set it.[/bold yellow]")
+            console.print("[cyan]    Set key: gemini_api_key = YOUR_KEY[/cyan]")
+
         console.print("\n[bold magenta][*] AI-Powered Vulnerability Analysis[/bold magenta]")
-        with console.status("[bold magenta]AI is analyzing scan results...[/bold magenta]"):
+        with console.status("[bold magenta]Gemini AI is analyzing scan results...[/bold magenta]"):
             analysis = self.ai.analyze_results(self.results)
-        
+
         if analysis:
             console.print(Panel(
                 analysis.get('summary', 'No analysis available'),
-                title="[bold magenta]AI Analysis[/bold magenta]",
+                title="[bold magenta]Gemini AI Analysis[/bold magenta]",
                 border_style="magenta"
             ))
         else:
@@ -2762,7 +2939,27 @@ class ZylonFusion:
                     self._report_menu()
                 
                 elif user_input.lower() == 'ai':
+                    self._ai_chat_mode()
+                
+                elif user_input.lower() == 'aianalyze':
                     self.run_ai_analysis()
+                
+                elif user_input.lower() == 'aireport':
+                    self._ai_report()
+                
+                elif user_input.lower() == 'smart':
+                    if not self.target:
+                        target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
+                        success, msg = self.set_target(target)
+                        if not success:
+                            console.print(f"[bold red][!] {msg}[/bold red]")
+                            continue
+                        console.print(f"[green][+] {msg}[/green]")
+                    self._scan_smart()
+                    self.reports.save_json(self.results, self.target)
+                
+                elif user_input.lower() == 'wordlists':
+                    self._show_wordlist_stats()
                 
                 elif user_input.isdigit() and 0 <= int(user_input) <= 99:
                     if not self.target:
@@ -2781,7 +2978,7 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-83, 99)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-86, 99)[/bold yellow]",
                             default="0"
                         )
                         if scan_type.isdigit() and 0 <= int(scan_type) <= 99:
@@ -2807,7 +3004,7 @@ class ZylonFusion:
             with open(config_file) as f:
                 config = json.load(f)
         
-        keys = ['shodan_api_key', 'virustotal_api_key', 'hunter_api_key', 
+        keys = ['gemini_api_key', 'shodan_api_key', 'virustotal_api_key', 'hunter_api_key', 
                 'securitytrails_api_key', 'censys_api_id', 'censys_api_secret',
                 'github_api_key', 'ai_api_key']
         
@@ -2822,9 +3019,14 @@ class ZylonFusion:
         
         action = Prompt.ask("[yellow]Set API key? (y/n)[/yellow]", default="n")
         if action.lower() == 'y':
-            key_name = Prompt.ask("[yellow]API key name[/yellow]")
+            key_name = Prompt.ask("[yellow]API key name (e.g. gemini_api_key)[/yellow]")
             key_val = Prompt.ask("[yellow]API key value[/yellow]")
             config[key_name] = key_val
+            
+            # Auto-configure Gemini
+            if key_name == 'gemini_api_key':
+                self.ai.set_gemini_key(key_val)
+                console.print("[green][+] Gemini API key configured and saved![/green]")
             
             os.makedirs(os.path.dirname(config_file), exist_ok=True)
             with open(config_file, 'w') as f:
@@ -2847,6 +3049,113 @@ class ZylonFusion:
                 console.print("[yellow][!] No reports found[/yellow]")
         else:
             console.print("[yellow][!] No reports directory found[/yellow]")
+
+    def _ai_chat_mode(self):
+        """Interactive AI chat mode using Gemini"""
+        gemini_configured = bool(self.ai.gemini_api_key)
+        if not gemini_configured:
+            console.print("[bold yellow][!] Gemini API key not configured![/bold yellow]")
+            console.print("[cyan]    Use 'config' command and set gemini_api_key[/cyan]")
+            return
+
+        console.print("\n[bold magenta]=== ZYLON AI Chat (Gemini) ===[/bold magenta]")
+        console.print("[cyan]Type your security question. 'exit' to leave chat mode.[/cyan]")
+
+        # Build context from current target
+        context = ""
+        if self.target:
+            context = f"Current target: {self.target}"
+            if self.results and self.results.get('findings'):
+                context += f"\nScan results available: {list(self.results['findings'].keys())}"
+
+        while True:
+            try:
+                console.print("[bold magenta]AI>[/bold magenta] ", end="")
+                question = input().strip()
+                if not question:
+                    continue
+                if question.lower() in ['exit', 'quit', 'q', 'back']:
+                    break
+
+                with console.status("[bold magenta]Gemini AI is thinking...[/bold magenta]"):
+                    response = self.ai.ai_chat(question, context=context)
+
+                console.print(Panel(response, title="[bold magenta]ZYLON AI[/bold magenta]",
+                                   border_style="magenta"))
+
+                # Update context with conversation
+                context += f"\n\nQ: {question}\nA: {response[:200]}"
+
+            except KeyboardInterrupt:
+                break
+            except EOFError:
+                break
+
+    def _ai_report(self):
+        """Generate AI-powered bug bounty report"""
+        if not self.results or not self.results.get('findings'):
+            console.print("[bold yellow][!] Run a scan first before generating report[/bold yellow]")
+            return
+
+        gemini_configured = bool(self.ai.gemini_api_key)
+        if not gemini_configured:
+            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
+            return
+
+        console.print("\n[bold magenta][*] AI-Powered Bug Bounty Report Generation[/bold magenta]")
+        with console.status("[bold magenta]Gemini AI is writing your report...[/bold magenta]"):
+            report = self.ai.ai_write_report(self.target, self.results.get('findings', {}))
+
+        if report:
+            console.print(Panel(report, title="[bold magenta]Bug Bounty Report[/bold magenta]",
+                              border_style="magenta"))
+
+            # Save report to file
+            report_dir = os.path.join(get_home(), '.zylon', 'reports')
+            os.makedirs(report_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_file = os.path.join(report_dir, f"ai_report_{self.target}_{timestamp}.md")
+            with open(report_file, 'w') as f:
+                f.write(f"# Bug Bounty Report - {self.target}\n\n")
+                f.write(f"Generated: {datetime.now().isoformat()}\n\n")
+                f.write(report)
+            console.print(f"\n[green][+] Report saved to: {report_file}[/green]")
+        else:
+            console.print("[bold yellow][!] Report generation failed[/bold yellow]")
+
+    def _show_wordlist_stats(self):
+        """Show built-in wordlist statistics"""
+        console.print("\n[bold cyan][*] Built-in Wordlist Statistics[/bold cyan]")
+
+        stats = self.v5_async.get_wordlist_stats()
+
+        wl_table = Table(
+            title="[bold]ZYLON Wordlists[/bold]",
+            box=box.ROUNDED, border_style="cyan"
+        )
+        wl_table.add_column("Wordlist", style="yellow")
+        wl_table.add_column("Entries", style="green")
+        wl_table.add_column("Used By", style="cyan")
+
+        wl_usage = {
+            'directories': 'Scan 11, 85 (Dir Brute)',
+            'subdomains': 'Scan 84 (Subdomain Brute)',
+            'usernames': 'Scan 76 (Username Enum)',
+            'passwords': 'Login brute force',
+            'jwt_secrets': 'Scan 40 (JWT Scanner)',
+            'ssrf_payloads': 'Scan 30 (SSRF)',
+            'lfi_payloads': 'Scan 32 (LFI)',
+        }
+
+        for name, count in stats.items():
+            usage = wl_usage.get(name, 'Various')
+            count_str = str(count) if count > 0 else "[red]Not loaded[/red]"
+            wl_table.add_row(name, count_str, usage)
+
+        console.print(wl_table)
+        console.print(f"\n[cyan]Wordlist path: {WORDLISTS_DIR}[/cyan]")
+        total = sum(stats.values())
+        console.print(f"[green]Total entries across all wordlists: {total}[/green]")
 
 
 # ============================================================================

@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "2.1.0"
-ZYLON_CODENAME = "Nuclear V4"
+ZYLON_VERSION = "2.2.0"
+ZYLON_CODENAME = "Nuclear V5 + Gemini AI"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
@@ -54,8 +54,32 @@ DEFAULT_TIMEOUT = 10
 MAX_RETRIES = 3
 VERIFY_SSL = False
 FOLLOW_REDIRECTS = True
-MAX_THREADS = 20
-REQUEST_DELAY = 0.1
+MAX_THREADS = 50
+REQUEST_DELAY = 0.05
+
+# ============================================================================
+# GEMINI API KEY (AI-Powered Features)
+# ============================================================================
+
+GEMINI_API_KEY = ""
+
+# ============================================================================
+# WORDLIST LOADER - Auto-loads from data/wordlists/ files
+# ============================================================================
+
+def load_wordlist(filename):
+    """Load a wordlist file from data/wordlists/ directory"""
+    filepath = os.path.join(WORDLISTS_DIR, filename)
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', errors='ignore') as f:
+                return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except Exception:
+            return []
+    return []
+
+# Wordlists will be loaded after COMMON_DIRS and ORIGIN_CHECK_SUBDOMAINS are defined
+# See _init_wordlists() below - called at end of file
 
 # ============================================================================
 # PORT SCANNING (CONNECT SCAN - NO ROOT NEEDED)
@@ -723,3 +747,25 @@ ORIGIN_CHECK_SUBDOMAINS = [
     'app', 'portal', 'test', 'old', 'beta', 'blog', 'shop', 'cdn',
     'ns1', 'ns2', 'mx', 'smtp', 'pop', 'imap', 'vpn', 'remote',
 ]
+
+# ============================================================================
+# WORDLIST INITIALIZATION - Load from files after all constants defined
+# ============================================================================
+
+WORDLIST_DIRS = load_wordlist('directories.txt') or COMMON_DIRS
+WORDLIST_SUBDOMAINS = load_wordlist('subdomains.txt') or ORIGIN_CHECK_SUBDOMAINS
+WORDLIST_USERNAMES = load_wordlist('usernames.txt')
+WORDLIST_PASSWORDS = load_wordlist('passwords.txt')
+WORDLIST_JWT_SECRETS = load_wordlist('jwt_secrets.txt')
+WORDLIST_SSRF = load_wordlist('ssrf_payloads.txt')
+WORDLIST_LFI = load_wordlist('lfi_payloads.txt')
+
+WORDLIST_SIZES = {
+    'directories': len(WORDLIST_DIRS),
+    'subdomains': len(WORDLIST_SUBDOMAINS),
+    'usernames': len(WORDLIST_USERNAMES),
+    'passwords': len(WORDLIST_PASSWORDS),
+    'jwt_secrets': len(WORDLIST_JWT_SECRETS),
+    'ssrf_payloads': len(WORDLIST_SSRF),
+    'lfi_payloads': len(WORDLIST_LFI),
+}
