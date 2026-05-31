@@ -1,28 +1,53 @@
 """
 ZYLON FUSION v2.5 - DDoS Defense Testing Engine
-Authorized stress testing to evaluate server protection effectiveness
-Tests rate limiting, WAF/CDN resilience, slow connection handling, and more
-Termux Non-Root Compatible | User-Controlled Concurrency
+================================================
 
-DISCLAIMER: These tests are for AUTHORIZED security assessments ONLY.
-User must have written permission to test the target.
-All tests use user-defined concurrency levels and auto-stop on protection detection.
+WHAT THIS DOES:
+    Tests whether a server's protections (WAF, CDN, rate limiting) actually work.
+    You control the concurrency (threads, requests, duration).
+    Tests auto-stop when protection is detected — we don't keep hammering.
+
+HOW IT DIFFERS FROM BATTLE MODE:
+    - Battle Mode: Uses YOUR phone farm (multiple IPs) via Telnet
+    - DDoS Engine: Uses YOUR local machine only (single IP, raw sockets)
+    - Battle Mode = distributed testing (many sources)
+    - DDoS Engine = single-source testing (one source)
+
+TEST MODULES:
+    89 - HTTPS Flood Resilience:  Sends many HTTPS requests, checks if WAF/CDN blocks them
+    90 - Slowloris Vulnerability:  Opens slow connections, checks if server exhausts workers
+    91 - Slow POST Vulnerability:  Sends body data slowly, checks if server accepts it
+    92 - Rate Limit Detection:     Finds exact threshold where rate limiting kicks in
+    93 - Connection Capacity:      Finds max concurrent connections before server degrades
+
+AUTO-STOP LOGIC:
+    When 3+ requests get blocked (429/403/503), the test stops automatically.
+    No point continuing — we already proved the defense works.
+    If NOTHING blocks after all requests → target is VULNERABLE (bug bounty finding!).
+
+TERMUX COMPATIBLE: Yes - works on Android without root
+USER-CONTROLLED:   You set threads, requests, duration before each test
 """
 
 import time
 import random
-import socket
-import ssl
-import threading
+import socket       # Raw TCP/TLS sockets — used for Slowloris, HTTPS flood
+import ssl          # TLS wrapper — wraps raw socket for HTTPS connections
+import threading    # Run multiple requests in parallel (one thread per request)
 import json
 from datetime import datetime
 from urllib.parse import urlparse
 
-import requests
+import requests     # High-level HTTP library — used for rate limit tests
 
 # ============================================================================
 # USER AGENTS POOL
 # ============================================================================
+# List of real browser User-Agent strings.
+# We rotate these randomly so each request looks like a different browser.
+# This helps test if WAF blocks based on User-Agent patterns.
+# If all requests use same UA → WAF might flag as bot.
+# Rotating UAs → looks more like real traffic → harder for WAF to detect.
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Safari/605.1.15",
