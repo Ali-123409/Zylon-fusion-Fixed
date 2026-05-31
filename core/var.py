@@ -63,7 +63,7 @@ ENABLE_PERF_STATS = True  # New: Performance statistics
 # GEMINI API KEY (AI-Powered Features)
 # ============================================================================
 
-GEMINI_API_KEY = ""
+GEMINI_API_KEY = ""  # Set via 'config' command or GEMINI_API_KEY env var
 GEMINI_MODEL = "gemini-flash-latest"
 GEMINI_FALLBACK_MODEL = "gemini-2.0-flash"
 
