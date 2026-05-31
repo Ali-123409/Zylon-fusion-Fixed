@@ -5,7 +5,7 @@
 **Advanced Security Reconnaissance & Vulnerability Platform**
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)](https://python.org)
-[![Version](https://img.shields.io/badge/Version-2.0.0-red?style=for-the-badge)](https://github.com/Ali-123409/zylon-fusion)
+[![Version](https://img.shields.io/badge/Version-3.0.0-red?style=for-the-badge)](https://github.com/Ali-123409/zylon-fusion)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Termux](https://img.shields.io/badge/Termux-Non--Root-00C853?style=for-the-badge&logo=android)]
 
