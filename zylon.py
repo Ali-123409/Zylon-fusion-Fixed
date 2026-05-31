@@ -155,6 +155,7 @@ from core.performance import (
     get_performance_stats
 )
 from core.ddos_engine import DDoSDefenseEngine
+from core.battle_engine import BattleEngine, is_private_ip
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -307,6 +308,7 @@ class ZylonUI:
             ("92", "Rate Limit Detection (Find Protection Threshold)"),
             ("93", "Connection Capacity Test (Max Concurrent Connections)"),
             ("ddos", "DDoS Defense Suite (All DDoS Tests)"),
+            ("battle", "Academy Battle Mode (Red vs Blue Team)"),
             ("99", "MEGA SCAN (Every Single Module)"),
             ("beast", "BEAST MODE (AI-Guided Full Arsenal + Smart Workflow)"),
             ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
@@ -406,6 +408,9 @@ class ZylonFusion:
 
         # DDoS Defense Testing Engine
         self.ddos = DDoSDefenseEngine(self.session)
+
+        # Academy Battle Engine (Red Team vs Blue Team)
+        self.battle = BattleEngine()
 
         # Initialize Gemini API key (hardcoded default + config file)
         self._init_gemini()
@@ -2779,7 +2784,325 @@ class ZylonFusion:
             for rec in report['recommendations']:
                 console.print(f"  [cyan]- {rec}[/cyan]")
 
+    # ========================================================================
+    # ACADEMY BATTLE MODE (Red Team vs Blue Team)
+    # ========================================================================
 
+    def _battle_mode_menu(self):
+        """Academy Battle Mode - Red Team vs Blue Team interactive menu"""
+        console.print(f"\n[bold red]")
+        console.print(Panel(
+            "[bold white]   ACADEMY BATTLE MODE[/bold white]\n"
+            "[bold red]   Red Team (ZYLON) vs Blue Team (Defenders)[/bold red]\n"
+            "[bold yellow]   Connect YOUR phone farm → Attack YOUR server[/bold yellow]\n"
+            "[dim white]   Local network only | Ctrl+C = EMERGENCY STOP[/dim white]",
+            border_style="bold red",
+            box=box.HEAVY
+        ))
+        
+        while True:
+            console.print(f"\n[bold red]BATTLE[/bold red] [bold yellow]>[/bold yellow] ", end="")
+            try:
+                cmd = input().strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                # Emergency stop
+                self._battle_emergency_stop()
+                break
+            
+            if not cmd:
+                continue
+            
+            if cmd in ['exit', 'quit', 'q', 'back']:
+                self._battle_emergency_stop()
+                console.print("[bold yellow][*] Exiting Battle Mode. All agents stopped.[/bold yellow]")
+                break
+            
+            elif cmd == 'help':
+                self._battle_help()
+            
+            elif cmd == 'add':
+                self._battle_add_agent()
+            
+            elif cmd == 'addbulk':
+                self._battle_add_bulk()
+            
+            elif cmd == 'connect':
+                self._battle_connect()
+            
+            elif cmd == 'status':
+                self._battle_status()
+            
+            elif cmd == 'target':
+                self._battle_set_target()
+            
+            elif cmd == 'recon':
+                self._battle_run_phase('recon')
+            
+            elif cmd == 'flood':
+                self._battle_run_phase('flood')
+            
+            elif cmd == 'slowloris':
+                self._battle_run_phase('slowloris')
+            
+            elif cmd == 'slowpost':
+                self._battle_run_phase('slowpost')
+            
+            elif cmd == 'fullbattle':
+                self._battle_full()
+            
+            elif cmd == 'stop':
+                self._battle_emergency_stop()
+            
+            elif cmd == 'dashboard':
+                self.battle.display_dashboard()
+            
+            elif cmd == 'clear':
+                self.battle = BattleEngine()
+                console.print("[green][+] Battle engine reset[/green]")
+            
+            else:
+                console.print(f"[bold red][!] Unknown command: {cmd}. Type 'help'[/bold red]")
+    
+    def _battle_help(self):
+        """Display Battle Mode help"""
+        help_table = Table(
+            title="[bold red]⚔️ Battle Mode Commands[/bold red]",
+            box=box.ROUNDED, border_style="red"
+        )
+        help_table.add_column("Command", style="yellow")
+        help_table.add_column("Description", style="cyan")
+        
+        commands = [
+            ("add", "Add single agent (IP:port user pass)"),
+            ("addbulk", "Add multiple agents from list"),
+            ("connect", "Connect to all registered agents"),
+            ("status", "Show agent connection status"),
+            ("target", "Set battle target (YOUR server URL)"),
+            ("recon", "Phase 1: Light probing (5 reqs/agent)"),
+            ("flood", "Phase 2: HTTP flood (50 reqs/agent)"),
+            ("slowloris", "Phase 3: Slow connection test"),
+            ("slowpost", "Phase 4: Slow body upload test"),
+            ("fullbattle", "Run all phases sequentially"),
+            ("dashboard", "Show battle statistics"),
+            ("stop", "EMERGENCY STOP all agents"),
+            ("clear", "Reset battle engine"),
+            ("exit/back/q", "Exit Battle Mode (stops all agents)"),
+        ]
+        for cmd, desc in commands:
+            help_table.add_row(cmd, desc)
+        
+        console.print(help_table)
+        console.print("\n[bold red]⚠️  LOCAL NETWORK ONLY - Battle Mode restricted to private IPs[/bold red]")
+    
+    def _battle_add_agent(self):
+        """Add a single agent interactively"""
+        console.print("\n[bold cyan][*] Add Agent (your phone on local network)[/bold cyan]")
+        
+        host = Prompt.ask("[bold yellow]   Phone IP (e.g. 192.168.1.10)[/bold yellow]")
+        port = IntPrompt.ask("[bold yellow]   Telnet port[/bold yellow]", default=23)
+        username = Prompt.ask("[bold yellow]   Username[/bold yellow]", default="admin")
+        password = Prompt.ask("[bold yellow]   Password[/bold yellow]", default="admin")
+        
+        success, msg = self.battle.add_agent(host, port, username, password)
+        if success:
+            console.print(f"[green][+] {msg}[/green]")
+        else:
+            console.print(f"[bold red][!] {msg}[/bold red]")
+    
+    def _battle_add_bulk(self):
+        """Add multiple agents from bulk input"""
+        console.print("\n[bold cyan][*] Bulk Add Agents[/bold cyan]")
+        console.print("[dim]   Format: IP:PORT:USER:PASS (one per line, empty line to finish)[/dim]")
+        
+        added = 0
+        while True:
+            try:
+                line = input("  > ").strip()
+            except EOFError:
+                break
+            if not line:
+                break
+            
+            parts = line.split(':')
+            if len(parts) >= 4:
+                host, port_str, user, passwd = parts[0], parts[1], parts[2], parts[3]
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    console.print(f"  [red]Invalid port: {port_str}[/red]")
+                    continue
+                success, msg = self.battle.add_agent(host, port, user, passwd)
+                if success:
+                    console.print(f"  [green][+] {msg}[/green]")
+                    added += 1
+                else:
+                    console.print(f"  [red][!] {msg}[/red]")
+            elif len(parts) == 2:
+                # IP:PORT with default creds
+                host, port_str = parts
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    console.print(f"  [red]Invalid port: {port_str}[/red]")
+                    continue
+                success, msg = self.battle.add_agent(host, port, "admin", "admin")
+                if success:
+                    console.print(f"  [green][+] {msg} (default: admin/admin)[/green]")
+                    added += 1
+                else:
+                    console.print(f"  [red][!] {msg}[/red]")
+            else:
+                console.print(f"  [red]Invalid format. Use IP:PORT:USER:PASS[/red]")
+        
+        console.print(f"\n[bold green][+] {added} agents added. Use 'connect' to connect.[/bold green]")
+    
+    def _battle_connect(self):
+        """Connect to all registered agents"""
+        if not self.battle.agents:
+            console.print("[bold red][!] No agents registered. Use 'add' or 'addbulk' first.[/bold red]")
+            return
+        
+        console.print(f"\n[bold cyan][*] Connecting to {len(self.battle.agents)} agents...[/bold cyan]")
+        
+        success, results = self.battle.connect_all()
+        
+        for agent_id, host, ok, msg in results:
+            status = "✅" if ok else "❌"
+            console.print(f"  [{status}] Agent {agent_id} ({host}): {msg}")
+        
+        connected = sum(1 for a in self.battle.agents if a.connected)
+        console.print(f"\n[bold {'green' if connected > 0 else 'red'}][+] {connected}/{len(self.battle.agents)} agents connected[/bold {'green' if connected > 0 else 'red'}]")
+    
+    def _battle_status(self):
+        """Show agent status"""
+        if not self.battle.agents:
+            console.print("[bold red][!] No agents registered[/bold red]")
+            return
+        
+        self.battle.display_dashboard()
+    
+    def _battle_set_target(self):
+        """Set battle target (must be on local network)"""
+        target = Prompt.ask("[bold yellow]   Target URL (YOUR server, e.g. http://192.168.1.100:8080)[/bold yellow]")
+        
+        # Validate it's a local/private IP
+        from urllib.parse import urlparse as _urlparse
+        parsed = _urlparse(target)
+        hostname = parsed.hostname or target
+        
+        if is_private_ip(hostname):
+            self.battle.target = target
+            console.print(f"[green][+] Battle target set: {target}[/green]")
+        else:
+            console.print(f"[bold red][!] BLOCKED: {hostname} is not a local/private IP.[/bold red]")
+            console.print("[yellow]   Battle Mode only works on YOUR local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)[/yellow]")
+    
+    def _battle_run_phase(self, phase):
+        """Run a specific battle phase"""
+        if not self.battle.agents:
+            console.print("[bold red][!] No agents. Use 'add' then 'connect'[/bold red]")
+            return
+        
+        if not self.battle.target:
+            console.print("[bold red][!] No target set. Use 'target' first[/bold red]")
+            return
+        
+        active = sum(1 for a in self.battle.agents if a.connected)
+        if active == 0:
+            console.print("[bold red][!] No agents connected. Use 'connect' first[/bold red]")
+            return
+        
+        if self.battle.stats['start_time'] is None:
+            self.battle.stats['start_time'] = time.time()
+        
+        console.print(f"\n[bold red]⚔️  LAUNCHING {phase.upper()} | {active} agents → {self.battle.target}[/bold red]")
+        console.print("[dim]   Press Ctrl+C for EMERGENCY STOP[/dim]")
+        
+        try:
+            if phase == 'recon':
+                self.battle.phase_recon(self.battle.target)
+            elif phase == 'flood':
+                reqs = IntPrompt.ask("[bold yellow]   Requests per agent[/bold yellow]", default=50)
+                path = Prompt.ask("[bold yellow]   URL path[/bold yellow]", default="/")
+                self.battle.phase_flood(self.battle.target, requests_per_agent=reqs, path=path)
+            elif phase == 'slowloris':
+                conns = IntPrompt.ask("[bold yellow]   Connections per agent[/bold yellow]", default=3)
+                from urllib.parse import urlparse as _up
+                p = _up(self.battle.target)
+                host = p.hostname
+                port = p.port or 80
+                self.battle.phase_slowloris(host, target_port=port, connections_per_agent=conns)
+            elif phase == 'slowpost':
+                conns = IntPrompt.ask("[bold yellow]   Connections per agent[/bold yellow]", default=2)
+                self.battle.phase_slow_post(self.battle.target, connections_per_agent=conns)
+        except KeyboardInterrupt:
+            self._battle_emergency_stop()
+        
+        self.battle.display_dashboard()
+    
+    def _battle_full(self):
+        """Run full battle - all phases"""
+        if not self.battle.agents or not self.battle.target:
+            console.print("[bold red][!] Need agents + target. Use 'add', 'connect', 'target'[/bold red]")
+            return
+        
+        active = sum(1 for a in self.battle.agents if a.connected)
+        if active == 0:
+            console.print("[bold red][!] No agents connected. Use 'connect'[/bold red]")
+            return
+        
+        self.battle.stats['start_time'] = time.time()
+        
+        console.print(f"\n[bold red]")
+        console.print(Panel(
+            f"[bold white]   FULL BATTLE COMMENCING[/bold white]\n"
+            f"[bold red]   {active} agents → {self.battle.target}[/bold red]\n"
+            f"[bold yellow]   4 Phases | Ctrl+C = EMERGENCY STOP[/bold yellow]",
+            border_style="bold red",
+            box=box.HEAVY
+        ))
+        
+        from urllib.parse import urlparse as _up
+        p = _up(self.battle.target)
+        host = p.hostname
+        port = p.port or 80
+        
+        phases = [
+            ('recon', lambda: self.battle.phase_recon(self.battle.target)),
+            ('flood', lambda: self.battle.phase_flood(self.battle.target, requests_per_agent=50)),
+            ('slowloris', lambda: self.battle.phase_slowloris(host, target_port=port)),
+            ('slowpost', lambda: self.battle.phase_slow_post(self.battle.target)),
+        ]
+        
+        for phase_name, phase_func in phases:
+            try:
+                phase_func()
+            except KeyboardInterrupt:
+                self._battle_emergency_stop()
+                console.print("[bold red][!] EMERGENCY STOP - All agents halted[/bold red]")
+                break
+        
+        # Final dashboard
+        self.battle.display_dashboard()
+        
+        # Defense tips
+        console.print(f"\n[bold cyan]🛡️ Blue Team Defense Tips:[/bold cyan]")
+        console.print(f"  [cyan]- Apache: Set Timeout 30, MaxRequestWorkers 150[/cyan]")
+        console.print(f"  [cyan]- Nginx: limit_req_zone rate=10r/s, limit_conn per IP[/cyan]")
+        console.print(f"  [cyan]- Deploy WAF with rate limiting (ModSecurity)[/cyan]")
+        console.print(f"  [cyan]- Use CDN (Cloudflare) for DDoS absorption[/cyan]")
+        console.print(f"  [cyan]- Implement JS Challenge for suspicious traffic[/cyan]")
+    
+    def _battle_emergency_stop(self):
+        """Emergency stop all agents"""
+        if self.battle.agents:
+            console.print(f"\n[bold red][!!!] EMERGENCY STOP - Stopping all agents...[/bold red]")
+            self.battle.disconnect_all()
+            console.print("[bold green][+] All agents stopped and disconnected[/bold green]")
+
+    # ========================================================================
+    # V3.0 SECURITY MODULE SCAN IMPLEMENTATIONS (56-75)
+    # ========================================================================
 
     def _scan_graphql(self):
         """Scan 56: GraphQL Security Tester"""
@@ -3801,6 +4124,9 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                     self._scan_ddos_suite()
                     self.reports.save_json(self.results, self.target)
+                
+                elif user_input.lower() == 'battle':
+                    self._battle_mode_menu()
                 
                 elif user_input.lower() == 'wordlists':
                     self._show_wordlist_stats()
