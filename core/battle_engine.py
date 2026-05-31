@@ -1489,3 +1489,104 @@ class BattleEngine:
             border_style="red",
             box=box.HEAVY
         ))
+    
+    # ========================================================================
+    # BULK LOADING & DIAGNOSTICS (for 4K phone farms)
+    # ========================================================================
+
+    def load_file(self, filepath):
+        """
+        Load agents from a creds file. Supports thousands of phones.
+        
+        FILE FORMAT (one line per phone):
+            IP:PORT:USER:PASS
+            IP:PORT:USER:PASS
+            ...
+        
+        EXAMPLE FILE (farm.txt):
+            192.168.1.10:23:admin:password1
+            192.168.1.11:23:admin:password2
+            10.0.0.5:8022:root:mypass
+        
+        SHORTCUT FORMATS:
+            IP:PORT              (uses default admin/admin)
+            IP                   (uses default port 23, admin/admin)
+        """
+        if not os.path.exists(filepath):
+            return False, f"File not found: {filepath}"
+        
+        added = 0
+        failed = 0
+        
+        try:
+            with open(filepath, 'r') as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    
+                    parts = line.split(':')
+                    try:
+                        if len(parts) >= 4:
+                            host, port_str, user, passwd = parts[0], parts[1], parts[2], parts[3]
+                            port = int(port_str)
+                        elif len(parts) == 2:
+                            host, port_str = parts
+                            port = int(port_str)
+                            user, passwd = 'admin', 'admin'
+                        elif len(parts) == 1:
+                            host = parts[0]
+                            port = 23
+                            user, passwd = 'admin', 'admin'
+                        else:
+                            failed += 1
+                            continue
+                        
+                        success, msg = self.add_agent(host, port, user, passwd)
+                        if success:
+                            added += 1
+                        else:
+                            failed += 1
+                    except (ValueError, IndexError):
+                        failed += 1
+                        continue
+        except Exception as e:
+            return False, f"Error reading file: {str(e)}"
+        
+        return True, f"Loaded {added} agents ({failed} failed) from {filepath}"
+    
+    def probe_agent(self, host, port=None):
+        """
+        Probe a phone to see what ports are open and diagnose connection issues.
+        
+        WHY: When connection fails, this tells you WHY:
+            - No ports open = phone off or behind NAT
+            - SSH open = use SSH (port 8022)
+            - Telnet open = use Telnet (port 23)
+        """
+        ports_to_check = [23, 8022, 22, 80, 443, 8080]
+        if port and int(port) not in ports_to_check:
+            ports_to_check.insert(0, int(port))
+        
+        results = {'host': host, 'ports': {}, 'recommendation': ''}
+        open_ports = []
+        
+        for p in ports_to_check:
+            is_open, msg = check_port(host, p, timeout=5)
+            results['ports'][p] = {'open': is_open, 'detail': msg}
+            if is_open:
+                open_ports.append(p)
+        
+        if not open_ports:
+            results['recommendation'] = (
+                "NO PORTS OPEN - Phone unreachable.\n"
+                "Causes: phone off, cellular NAT, wrong IP\n"
+                "SOLUTION: Same WiFi network, VPN overlay (Tailscale), or HTTP C2 mode"
+            )
+        elif 8022 in open_ports or 22 in open_ports:
+            ssh_port = 8022 if 8022 in open_ports else 22
+            results['recommendation'] = f"SSH port {ssh_port} is OPEN! Use port {ssh_port}."
+        elif 23 in open_ports:
+            results['recommendation'] = "Telnet port 23 is OPEN. Standard Telnet should work."
+        
+        return results

