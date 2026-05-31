@@ -405,30 +405,15 @@ class ZylonFusion:
         self.rate_limiter = rate_limiter
 
     def _init_gemini(self):
-        """Initialize Gemini API key from env var, var.py default, and config file"""
-        # Priority: env var > config file > var.py default
+        """Initialize Gemini API key - hardcoded default, env var overrides"""
+        # Use hardcoded key from var.py as default
+        if GEMINI_API_KEY:
+            self.ai.set_gemini_key(GEMINI_API_KEY)
+
+        # Environment variable can override
         env_key = os.environ.get('GEMINI_API_KEY', '')
         if env_key:
             self.ai.set_gemini_key(env_key)
-            return
-
-        # Check config file
-        try:
-            config_file = os.path.join(os.path.expanduser('~'), '.zylon', 'config.json')
-            if os.path.exists(config_file):
-                with open(config_file) as f:
-                    config = json.load(f)
-                config_key = config.get('gemini_api_key', '')
-                if config_key:
-                    self.ai.set_gemini_key(config_key)
-                    return
-        except Exception:
-            pass
-
-        # Finally try var.py default
-        default_key = GEMINI_API_KEY
-        if default_key:
-            self.ai.set_gemini_key(default_key)
     
     def set_target(self, target):
         """Validate and set target"""

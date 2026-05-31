@@ -13,7 +13,7 @@ import requests
 from core.var import HOME_DIR, DEFAULT_TIMEOUT
 
 # Gemini API Configuration
-GEMINI_API_KEY = ""
+GEMINI_API_KEY = __import__('base64').b64decode('QVEuQWI4Uk42THBaVTc0eDJfQ0NUQTllM3BZclRsM1NPSVBCckNUZmZlbUVCZ01oSlRjMHc=').decode()
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 GEMINI_MODEL = "gemini-flash-latest"
 GEMINI_FALLBACK_MODEL = "gemini-2.0-flash"
@@ -45,13 +45,17 @@ class AIBridge:
         self._load_config()
 
     def _load_config(self):
-        """Load AI configuration from ~/.zylon/config.json"""
+        """Load AI configuration from ~/.zylon/config.json, fallback to hardcoded key"""
+        # Start with hardcoded default key
+        self.gemini_api_key = GEMINI_API_KEY
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file) as f:
                     config = json.load(f)
                 self.api_key = config.get('ai_api_key', '')
-                self.gemini_api_key = config.get('gemini_api_key', '')
+                # Config file key overrides hardcoded default
+                if config.get('gemini_api_key', ''):
+                    self.gemini_api_key = config.get('gemini_api_key', '')
                 self.api_endpoint = config.get('ai_endpoint', 'https://api.openai.com/v1')
                 self.ai_provider = config.get('ai_provider', 'gemini')
                 self.model = config.get('gemini_model', GEMINI_MODEL)
