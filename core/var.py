@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "2.0.0"
-ZYLON_CODENAME = "Nuclear"
+ZYLON_VERSION = "2.1.0"
+ZYLON_CODENAME = "Nuclear V4"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 

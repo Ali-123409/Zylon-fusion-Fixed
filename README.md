@@ -5,7 +5,7 @@
 **Advanced Security Reconnaissance & Vulnerability Platform**
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)](https://python.org)
-[![Version](https://img.shields.io/badge/Version-3.0.0-red?style=for-the-badge)](https://github.com/Ali-123409/zylon-fusion)
+[![Version](https://img.shields.io/badge/Version-2.1.0-red?style=for-the-badge)](https://github.com/Ali-123409/zylon-fusion)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Termux](https://img.shields.io/badge/Termux-Non--Root-00C853?style=for-the-badge&logo=android)]
 
@@ -18,7 +18,7 @@
  ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 ```
 
-**v2.0 NUCLEAR** — Fused from **omino** + **wizard** + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine
+**v2.1 NUCLEAR** — Fused from **omino** + **wizard** + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine + V4 Hunting Engine
 
 *Built for **Android Termux (Non-Root)** — No sudo required*
 
@@ -30,9 +30,9 @@
 
 ## 🌟 Overview
 
-**ZYLON FUSION v2.0 NUCLEAR** is an enterprise-grade offensive security platform that combines the best of two legendary tools — **omino** (advanced recon/vuln suite) and **wizard** (Python security framework) — with brand new custom Zylon techniques, V2.0 Nuclear modules, and a powerful Origin IP Finder engine, all rebuilt from scratch to run on **Android Termux without root access**.
+**ZYLON FUSION v2.1 NUCLEAR** is an enterprise-grade offensive security platform that combines the best of two legendary tools — **omino** (advanced recon/vuln suite) and **wizard** (Python security framework) — with brand new custom Zylon techniques, V2.0 Nuclear modules, a powerful Origin IP Finder engine, V3 Security Engine, and the new V4 Hunting Engine built from real-world bug bounty gaps, all rebuilt from scratch to run on **Android Termux without root access**.
 
-|  🔥 77+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |  ✅ All Tested  |
+|  🔥 85+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |  ✅ All Tested  |
 |:-:|:-:|:-:|:-:|:-:|
 
 ---
@@ -114,6 +114,16 @@
 - **Mixed Content Scanner** — Passive and active mixed content detection
 - **Information Disclosure** — Debug mode, source maps, stack traces, sensitive files
 
+### V4 Hunting Engine (NEW in v2.1 — Built from Real Bug Bounty Hunting)
+- **Username Enumeration Scanner** — Differential error analysis on login forms, auto-generates usernames from WHOIS data
+- **DMARC/DKIM/SPF Email Security Checker** — Email spoofing risk scoring, 25 DKIM selector brute force, SPF policy analysis
+- **CSRF Token Detection & Login CSRF Tester** — Form CSRF token detection, login CSRF DoS testing, PoC HTML generator
+- **Framework Detection + Specific Attacks** — Detect Yii, Laravel, Django, Express, Spring Boot, Rails + framework-specific endpoint fuzzing
+- **Client-Side JS Library Vulnerability Scanner** — Extract jQuery/Bootstrap/Angular/React versions, check against CVE database (15+ CVEs)
+- **403 Bypass Tester** — 7 bypass categories: method tampering, path traversal, URL encoding, header bypasses, HTTP version, fragments
+- **Cross-Domain Discovery** — Find sibling domains on same IP, probe each domain, WHOIS cross-correlation
+- **CVE-to-Exploit Lookup Engine** — NVD + CIRCL API queries, exploitability detection, severity grouping with CVSS scores
+
 ### Origin IP Finder (NEW in v2.0)
 - **22 Advanced Techniques** to discover the real origin IP behind CDN/Cloudflare/WAF
 - IP Classification System — Labels each IP as `origin`, `mail`, `spf`, `dns`, or `cdn`
@@ -190,7 +200,7 @@ ZYLON > exit                 # Quit
 
 1. Launch ZYLON: `python3 zylon.py`
 2. Enter your target domain
-3. Select scan type (0-75, 99)
+3. Select scan type (0-83, 99)
 4. View results in terminal
 5. Reports auto-saved to `~/.zylon/reports/`
 
@@ -323,6 +333,23 @@ ZYLON > exit                 # Quit
 
 | # | Module | Source | Description |
 |---|---|---|---|
+### V4 Hunting Engine (76-83)
+
+| # | Module | Source | Description |
+|---|---|---|---|
+| 76 | **Username Enumeration** | Zylon V4 | Differential error analysis on login forms |
+| 77 | **Email Security** | Zylon V4 | DMARC/DKIM/SPF + email spoofing risk score |
+| 78 | **CSRF Detection** | Zylon V4 | CSRF token detection + login CSRF DoS tester + PoC |
+| 79 | **Framework Detection** | Zylon V4 | Yii/Laravel/Django/Express/Spring/Rails + specific attacks |
+| 80 | **JS Library Vulns** | Zylon V4 | Client-side library version → CVE lookup (15+ CVEs) |
+| 81 | **403 Bypass** | Zylon V4 | 7 categories: method, path, encoding, headers, fragments |
+| 82 | **Cross-Domain** | Zylon V4 | Sibling domain discovery + WHOIS cross-correlation |
+| 83 | **CVE-to-Exploit** | Zylon V4 | NVD + CIRCL API, exploitability rating, CVSS grouping |
+
+### Mega Scan
+
+| # | Module | Source | Description |
+|---|---|---|---|
 | 99 | **MEGA SCAN** | All | **Every single module combined** |
 
 ---
@@ -387,12 +414,13 @@ zylon-fusion/
 │   ├── v2_recon.py           # V2 Recon: API Fuzzer, Rate Limit, Sensitive Files (404 lines)
 │   ├── v2_vuln.py            # V2 Vuln: Email Enum, Broken Links, Tech CVE (364 lines)
 │   ├── origin_ip.py          # Origin IP Finder Engine — 22 techniques (2,178 lines)
-│   └── v3_security.py        # V3 Security Engine — 20 modules (2,449 lines)
+│   ├── v3_security.py        # V3 Security Engine — 20 modules (2,449 lines)
+│   └── v4_hunting.py          # V4 Hunting Engine — 8 modules (2,333 lines)
 ├── install_termux.sh         # Termux one-command installer
 └── requirements.txt          # Python dependencies
 ```
 
-**Total Codebase:** 14,000+ lines of Python | 77+ Scan Methods | 20 V3 Modules
+**Total Codebase:** 16,000+ lines of Python | 85+ Scan Methods | 20 V3 Modules | 8 V4 Modules
 
 ---
 
@@ -426,7 +454,8 @@ zylon-fusion/
 | AI Integration | No | No | **Yes** |
 | Non-Root Port Scan | No | No | **Yes** |
 | Rich UI | Bash colors | Rich | **Rich** |
-| Total Scan Methods | ~10 | ~5 | **77+** |
+| V4 Hunting Engine | 0 | 0 | **8 modules** |
+| Total Scan Methods | ~10 | ~5 | **85+** |
 
 ---
 
@@ -483,6 +512,6 @@ Contributions are welcome! Feel free to:
 
 **Built by Zylon | Hackathon Edition**
 
-*omino + wizard + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine = ZYLON FUSION v2.0 NUCLEAR*
+*omino + wizard + Zylon Custom Techniques + V2.0 Nuclear Modules + Origin IP Finder + V3 Security Engine + V4 Hunting Engine = ZYLON FUSION v2.1 NUCLEAR*
 
 </div>

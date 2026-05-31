@@ -147,6 +147,7 @@ from core.v2_recon import V2ReconEngine
 from core.v2_vuln import V2VulnEngine
 from core.origin_ip import OriginIPEngine
 from core.v3_security import V3SecurityEngine
+from core.v4_hunting import V4HuntingEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -183,8 +184,8 @@ class ZylonUI:
     ███████╗██║██║     ╚██████╔╝███████║
     ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 [/bold red]
-[bold yellow]    FUSION v2.0 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
-[bold cyan]    omino + wizard + Zylon Custom + V2.0 Nuclear Modules | Termux Non-Root[/bold cyan]
+[bold yellow]    FUSION v2.1 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
+[bold cyan]    omino + wizard + Zylon Custom + V2.0 Nuclear + V4.0 Hunting | Termux Non-Root[/bold cyan]
 """
         console.print(Panel(banner, border_style="bright_red", box=box.HEAVY))
         
@@ -277,6 +278,15 @@ class ZylonUI:
             ("55", "Direct IP Verification (Host Header)"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
+            # V4.0 Hunting Modules
+            ("76", "Username Enumeration Scanner"),
+            ("77", "DMARC/DKIM/SPF Email Security Checker"),
+            ("78", "CSRF Token Detection & Login CSRF Tester"),
+            ("79", "Framework Detection + Specific Attacks"),
+            ("80", "Client-Side JS Library Vulnerability Scanner"),
+            ("81", "403 Bypass Tester"),
+            ("82", "Cross-Domain Discovery"),
+            ("83", "CVE-to-Exploit Lookup Engine"),
             ("99", "MEGA SCAN (Every Single Module)"),
             ("ai", "AI-Powered Vulnerability Analysis (Experimental)"),
             ("scope", "Set/Check Bug Bounty Scope"),
@@ -358,6 +368,9 @@ class ZylonFusion:
 
         # V3.0 Security Engine (20 New Modules)
         self.v3_security = V3SecurityEngine(self.session)
+
+        # V4.0 Hunting Engine (8 New Modules)
+        self.v4_hunting = V4HuntingEngine(self.session)
     
     def set_target(self, target):
         """Validate and set target"""
@@ -464,6 +477,15 @@ class ZylonFusion:
             '73': self._scan_2fa_bypass,
             '74': self._scan_mixed_content,
             '75': self._scan_info_disclosure,
+            # V4.0 Hunting Modules (76-83)
+            '76': self._scan_username_enum,
+            '77': self._scan_email_security,
+            '78': self._scan_csrf,
+            '79': self._scan_framework,
+            '80': self._scan_js_libraries,
+            '81': self._scan_403_bypass,
+            '82': self._scan_cross_domain,
+            '83': self._scan_cve_lookup,
             '99': self._scan_mega,
         }
         
@@ -2079,6 +2101,15 @@ class ZylonFusion:
         self._scan_security_robots()
         self._scan_mixed_content()
         self._scan_info_disclosure()
+        # V4.0 Hunting Modules
+        self._scan_username_enum()
+        self._scan_email_security()
+        self._scan_csrf()
+        self._scan_framework()
+        self._scan_js_libraries()
+        self._scan_403_bypass()
+        self._scan_cross_domain()
+        self._scan_cve_lookup()
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
@@ -2449,6 +2480,237 @@ class ZylonFusion:
         if not result.get('vulnerable') and not result.get('findings'):
             console.print(f"[green][+] No information disclosure detected ({result.get('tested', 0)} tests)[/green]")
 
+    # ========================================================================
+    # V4.0 HUNTING MODULE SCAN IMPLEMENTATIONS (76-83)
+    # ========================================================================
+
+    def _scan_username_enum(self):
+        """Scan 76: Username Enumeration Scanner"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Username Enumeration Scan on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Testing for username enumeration vulnerabilities...[/bold cyan]"):
+            result = self.v4_hunting.scan_username_enum(url)
+        self.results['findings']['username_enum'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Username Enumeration Detected![/bold red]")
+            e_table = Table(title="Confirmed Valid Usernames", box=box.HEAVY, border_style="red")
+            e_table.add_column("Username", style="red")
+            e_table.add_column("Evidence", style="yellow")
+            for finding in result.get('findings', []):
+                e_table.add_row(
+                    finding.get('username', ''),
+                    finding.get('evidence', '')[:60]
+                )
+            console.print(e_table)
+        else:
+            console.print(f"[green][+] No username enumeration detected ({result.get('tested', 0)} usernames tested)[/green]")
+
+    def _scan_email_security(self):
+        """Scan 77: DMARC/DKIM/SPF Email Security Checker"""
+        console.print(f"\n[bold cyan][*] Email Security (DMARC/DKIM/SPF) Check on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Checking email security records...[/bold cyan]"):
+            result = self.v4_hunting.scan_email_security(self.target)
+        self.results['findings']['email_security'] = result
+
+        # Display DMARC
+        dmarc = result.get('dmarc', {})
+        dmarc_status = dmarc.get('status', 'unknown')
+        console.print(f"\n[bold]DMARC:[/bold] {'[red]MISSING[/red]' if dmarc_status == 'missing' else '[green]' + dmarc_status + '[/green]'}")
+        if dmarc.get('policy'):
+            console.print(f"  Policy: {dmarc['policy']}")
+
+        # Display SPF
+        spf = result.get('spf', {})
+        spf_status = spf.get('status', 'unknown')
+        console.print(f"[bold]SPF:[/bold] {'[red]MISSING[/red]' if spf_status == 'missing' else '[green]' + spf_status + '[/green]'}")
+        if spf.get('all_mechanism'):
+            console.print(f"  All Mechanism: {spf['all_mechanism']}")
+
+        # Display DKIM
+        dkim = result.get('dkim', {})
+        dkim_found = dkim.get('selectors_found', [])
+        console.print(f"[bold]DKIM:[/bold] {len(dkim_found)} selectors found ({dkim.get('tested', 0)} tested)")
+
+        # Risk score
+        risk = result.get('risk_score', 0)
+        risk_color = 'red' if risk >= 70 else 'yellow' if risk >= 40 else 'green'
+        console.print(f"\n[bold]Email Spoofing Risk Score: [{risk_color}]{risk}/100[/{risk_color}][/bold]")
+        console.print(f"[bold]Risk Level: [{risk_color}]{result.get('risk_level', 'Unknown')}[/{risk_color}][/bold]")
+
+    def _scan_csrf(self):
+        """Scan 78: CSRF Token Detection & Login CSRF Tester"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] CSRF Detection on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Testing for CSRF vulnerabilities...[/bold cyan]"):
+            result = self.v4_hunting.scan_csrf(url)
+        self.results['findings']['csrf'] = result
+        if result.get('vulnerable'):
+            console.print("[bold red][!] CSRF Vulnerability Detected![/bold red]")
+            for f in result.get('findings', []):
+                sev = f.get('severity', 'Medium')
+                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
+                console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+                if f.get('note'):
+                    console.print(f"      {f['note']}")
+            if result.get('poc_html'):
+                console.print("\n[bold yellow][!] CSRF PoC HTML generated - saved in report[/bold yellow]")
+        else:
+            console.print(f"[green][+] No CSRF vulnerabilities detected ({result.get('tested', 0)} forms tested)[/green]")
+
+    def _scan_framework(self):
+        """Scan 79: Framework Detection + Specific Attacks"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Framework Detection on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Detecting frameworks and testing framework-specific attacks...[/bold cyan]"):
+            result = self.v4_hunting.scan_framework(url)
+        self.results['findings']['framework'] = result
+
+        # Display detected frameworks
+        framework_names = result.get('detected_frameworks', result.get('frameworks_detected', []))
+        framework_details = result.get('framework_details', {})
+        if framework_names:
+            fw_table = Table(title="Detected Frameworks", box=box.ROUNDED, border_style="cyan")
+            fw_table.add_column("Framework", style="cyan")
+            fw_table.add_column("Version", style="yellow")
+            fw_table.add_column("Evidence", style="green")
+            for fw_name in framework_names:
+                detail = framework_details.get(fw_name, {})
+                fw_table.add_row(
+                    fw_name,
+                    detail.get('version', 'Unknown'),
+                    ', '.join(detail.get('detection_methods', ['detected']))[:60]
+                )
+            console.print(fw_table)
+        else:
+            console.print("[yellow][!] No frameworks detected on main page (try scan on login portals)[/yellow]")
+
+        # Display framework-specific findings
+        findings = result.get('findings', [])
+        if findings:
+            console.print("\n[bold red]Framework-Specific Findings:[/bold red]")
+            for f in findings:
+                sev = f.get('severity', 'Medium')
+                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
+                console.print(f"  [{color}]*[/{color}] {f['type']} - {f.get('note', '')[:80]}")
+
+    def _scan_js_libraries(self):
+        """Scan 80: Client-Side JS Library Vulnerability Scanner"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] Client-Side JS Library Vulnerability Scan on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Scanning JavaScript libraries for known vulnerabilities...[/bold cyan]"):
+            result = self.v4_hunting.scan_js_libraries(url)
+        self.results['findings']['js_libraries'] = result
+
+        # Display detected libraries
+        libs = result.get('libraries_found', result.get('libraries_detected', []))
+        if libs:
+            lib_table = Table(title="Detected JS Libraries", box=box.ROUNDED, border_style="cyan")
+            lib_table.add_column("Library", style="cyan")
+            lib_table.add_column("Version", style="yellow")
+            lib_table.add_column("Status", style="green")
+            for lib in libs:
+                status = "[red]Vulnerable[/red]" if lib.get('vulnerable') else "[green]OK[/green]"
+                lib_table.add_row(lib.get('name', ''), lib.get('version', '?'), status)
+            console.print(lib_table)
+
+        # Display vulnerabilities
+        if result.get('vulnerable'):
+            console.print("\n[bold red]Vulnerable JS Libraries Found![/bold red]")
+            for f in result.get('findings', []):
+                sev = f.get('severity', 'Medium')
+                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
+                console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
+                console.print(f"      {f.get('note', '')[:80]}")
+        else:
+            console.print(f"[green][+] No vulnerable JS libraries detected ({result.get('tested', 0)} checked)[/green]")
+
+    def _scan_403_bypass(self):
+        """Scan 81: 403 Bypass Tester"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] 403 Bypass Test on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Testing 403 bypass techniques...[/bold cyan]"):
+            result = self.v4_hunting.scan_403_bypass(url)
+        self.results['findings']['403_bypass'] = result
+
+        if result.get('bypassed'):
+            console.print("[bold red][!] 403 Bypass Found![/bold red]")
+            b_table = Table(title="Successful 403 Bypasses", box=box.HEAVY, border_style="red")
+            b_table.add_column("Technique", style="red")
+            b_table.add_column("Status", style="yellow")
+            b_table.add_column("Size", style="cyan")
+            for f in result.get('findings', []):
+                b_table.add_row(
+                    f.get('technique', ''),
+                    str(f.get('status', '')),
+                    str(f.get('size', ''))
+                )
+            console.print(b_table)
+        else:
+            console.print(f"[green][+] No 403 bypass found ({result.get('tested', 0)} techniques tested)[/green]")
+
+    def _scan_cross_domain(self):
+        """Scan 82: Cross-Domain Discovery"""
+        console.print(f"\n[bold cyan][*] Cross-Domain Discovery on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Finding sibling domains on same IP...[/bold cyan]"):
+            result = self.v4_hunting.scan_cross_domain(self.target)
+        self.results['findings']['cross_domain'] = result
+
+        domains = result.get('domains', [])
+        if domains:
+            cd_table = Table(title=f"Domains on Same IP ({result.get('ip', '')})", box=box.ROUNDED, border_style="yellow")
+            cd_table.add_column("Domain", style="cyan")
+            cd_table.add_column("Title", style="yellow")
+            cd_table.add_column("Server", style="green")
+            for d in domains:
+                cd_table.add_row(
+                    d.get('domain', ''),
+                    d.get('title', '')[:40],
+                    d.get('server', '')[:30]
+                )
+            console.print(cd_table)
+        else:
+            console.print(f"[yellow][!] No sibling domains found ({result.get('tested', 0)} checked)[/yellow]")
+
+        if result.get('findings'):
+            console.print("\n[bold red]Cross-Domain Findings:[/bold red]")
+            for f in result['findings']:
+                console.print(f"  [red]*[/red] {f.get('type', '')} - {f.get('note', '')[:80]}")
+
+    def _scan_cve_lookup(self):
+        """Scan 83: CVE-to-Exploit Lookup Engine"""
+        url = f"{self.protocol}{self.target}"
+        console.print(f"\n[bold cyan][*] CVE-to-Exploit Lookup on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Looking up CVEs and exploits...[/bold cyan]"):
+            result = self.v4_hunting.scan_cve_lookup(url)
+        self.results['findings']['cve_lookup'] = result
+
+        cve_groups = result.get('cve_groups', {})
+        techs = result.get('technologies', [])
+
+        if techs:
+            console.print(f"\n[bold]Detected Technologies for CVE Lookup:[/bold]")
+            for t in techs:
+                console.print(f"  [cyan]*[/cyan] {t.get('name', '')} {t.get('version', '')}")
+
+        total_cves = result.get('total_cves', 0)
+        if total_cves > 0:
+            console.print(f"\n[bold red]Total CVEs Found: {total_cves}[/bold red]")
+
+            for severity in ['Critical', 'High', 'Medium', 'Low']:
+                cves = cve_groups.get(severity, [])
+                if cves:
+                    color = 'red' if severity in ['Critical', 'High'] else 'yellow'
+                    console.print(f"\n[bold {color}]{severity} ({len(cves)} CVEs):[/{color}]")
+                    for cve in cves[:10]:
+                        cve_id = cve.get('id', '')
+                        cvss = cve.get('cvss', 'N/A')
+                        desc = cve.get('description', '')[:80]
+                        exploitable = '[red]EXPLOIT[/red]' if cve.get('exploitable') else ''
+                        console.print(f"  [{color}]*[/{color}] {cve_id} (CVSS: {cvss}) {exploitable}")
+                        console.print(f"      {desc}")
+        else:
+            console.print("[green][+] No critical CVEs found for detected technologies[/green]")
+
     def run_ai_analysis(self):
         """AI-powered vulnerability analysis"""
         if not self.results or not self.results.get('findings'):
@@ -2519,7 +2781,7 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-75, 99)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-83, 99)[/bold yellow]",
                             default="0"
                         )
                         if scan_type.isdigit() and 0 <= int(scan_type) <= 99:
