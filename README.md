@@ -32,7 +32,7 @@
 
 **ZYLON FUSION v2.0 NUCLEAR** is an enterprise-grade offensive security platform that combines the best of two legendary tools — **omino** (advanced recon/vuln suite) and **wizard** (Python security framework) — with brand new custom Zylon techniques, V2.0 Nuclear modules, and a powerful Origin IP Finder engine, all rebuilt from scratch to run on **Android Termux without root access**.
 
-|  🔥 77+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |
+|  🔥 77+ Scans  |  📱 Termux Ready  |  🤖 AI Ready  |  🎯 10+ Data Sources  |  🔒 Non-Root  |  ✅ All Tested  |
 |:-:|:-:|:-:|:-:|:-:|
 
 ---
@@ -190,7 +190,7 @@ ZYLON > exit                 # Quit
 
 1. Launch ZYLON: `python3 zylon.py`
 2. Enter your target domain
-3. Select scan type (0-55, 99)
+3. Select scan type (0-75, 99)
 4. View results in terminal
 5. Reports auto-saved to `~/.zylon/reports/`
 
@@ -392,7 +392,7 @@ zylon-fusion/
 └── requirements.txt          # Python dependencies
 ```
 
-**Total Codebase:** 13,500+ lines of Python
+**Total Codebase:** 14,000+ lines of Python | 77+ Scan Methods | 20 V3 Modules
 
 ---
 
