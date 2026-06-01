@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "3.1.0"
-ZYLON_CODENAME = "Nuclear Fusion - SSRFmap + Race-the-Web + GraphQL-Cop"
+ZYLON_VERSION = "4.0.0"
+ZYLON_CODENAME = "Nuclear Fusion v4.0 - Ciphey + jwt_tool + SSTImap + NoSQLMap + DEEPCE"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 

