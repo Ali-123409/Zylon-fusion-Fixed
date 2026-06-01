@@ -163,6 +163,19 @@ from core.recon_engines import ParamSpiderEngine, LinkFinderEngine, ArjunEngine,
 from core.recon_engines import run_paramspider, run_linkfinder, run_arjun, run_ghauri, run_cmseek, run_sherlock, run_tehqeeq
 from core.battle_engine import BattleEngine
 from core.ddos_engine import DDoSDefenseEngine
+from core.lfi_engine import LFIEngine, run_lfi_scan
+from core.xss_engine import XSSEngine, run_xss_scan
+from core.subdomain_engine import SubdomainEngine, run_subdomain_scan
+from core.crypto_engine import CryptoEngine, run_crypto_scan
+from core.shellgen_engine import ReverseShellEngine, run_shellgen_scan
+from core.cms_engine import CMSEngine, run_cms_scan
+from core.osint_engine import OSINTEngine, run_osint_scan
+from core.cloud_engine import CloudSecurityEngine, run_cloud_scan
+from core.cors_engine import CORSEngine, run_cors_scan
+from core.xxe_engine import XXEEngine, run_xxe_scan
+from core.advanced_web2_engine import AdvancedWebEngine, run_advanced_web_scan
+from core.git_exposure_engine import GitExposureEngine, run_git_scan
+from core.utility_engine import UtilityEngine, run_utility_scan
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -597,6 +610,51 @@ class ZylonFusion:
             '98c': self._scan_cmseek,
             '98d': self._scan_sherlock,
             '98e': self._scan_tehqeeq,
+            # v5.0 FUSION - LFI + XSS + Subdomain + Crypto + ShellGen + CMS + OSINT + Cloud + CORS + XXE + AdvWeb + Git + Utility
+            '100': self._scan_lfi_detect,
+            '101': self._scan_lfi_exploit,
+            '102': self._scan_lfi_rce,
+            '103': self._scan_xss_reflected,
+            '104': self._scan_xss_dom,
+            '105': self._scan_xss_blind,
+            '106': self._scan_xss_full,
+            '107': self._scan_subdomain_passive,
+            '108': self._scan_subdomain_bruteforce,
+            '109': self._scan_subdomain_full,
+            '110': self._scan_hash_identify,
+            '111': self._scan_hash_crack,
+            '112': self._scan_auto_decode,
+            '113': self._scan_reverse_shell,
+            '114': self._scan_hoaxshell,
+            '115': self._scan_cms_detect,
+            '116': self._scan_cms_wordpress,
+            '117': self._scan_cms_full,
+            '118': self._scan_osint_emails,
+            '119': self._scan_osint_dorks,
+            '120': self._scan_osint_full,
+            '121': self._scan_cloud_metadata,
+            '122': self._scan_cloud_s3,
+            '123': self._scan_cloud_gopherus,
+            '124': self._scan_cloud_full,
+            '125': self._scan_cors_misconfig,
+            '126': self._scan_open_redirect_adv,
+            '127': self._scan_xxe_detect,
+            '128': self._scan_xxe_extract,
+            '129': self._scan_xxe_deser,
+            '130': self._scan_ssti_sandbox,
+            '131': self._scan_proto_pollution,
+            '132': self._scan_csp_analysis,
+            '133': self._scan_cache_poison_adv,
+            '134': self._scan_blind_sqli_headers,
+            '135': self._scan_git_exposure,
+            '136': self._scan_sensitive_files_adv,
+            '137': self._scan_github_dork_adv,
+            '138': self._scan_oast_callback,
+            '139': self._scan_redos,
+            '140': self._scan_password_spray,
+            '141': self._scan_stealth,
+            '142': self._scan_wordlist_gen,
+            '143': self._scan_adv_web_full,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -3293,7 +3351,474 @@ class ZylonFusion:
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
-    
+
+    # ========================================================================
+    # v5.0 FUSION SCAN IMPLEMENTATIONS - ALL NEW ENGINES
+    # ========================================================================
+
+    def _scan_lfi_detect(self):
+        """LFI Detection (Multi-depth + Multi-encoding)"""
+        console.print(f"\n[bold cyan][*] LFI Detection on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing LFI with 8 depth levels + 8 encodings...[/bold cyan]"):
+            result = run_lfi_scan(url, parameter="file", scan_type="detect")
+        self.results['findings']['lfi_detect'] = result
+        if result.get('vulnerable'):
+            console.print(f"[bold red][!!!] LFI VULNERABLE! OS: {result.get('os_detected', 'Unknown')}[/bold red]")
+            for tech in result.get('techniques_found', [])[:3]:
+                console.print(f"  [yellow]Depth {tech['depth']}, Encoding: {tech['encoding']}, Payload: {tech['payload'][:50]}[/yellow]")
+        else:
+            console.print("[green][+] No LFI vulnerability detected[/green]")
+
+    def _scan_lfi_exploit(self):
+        """LFI PHP Wrapper Exploitation"""
+        console.print(f"\n[bold cyan][*] LFI PHP Wrapper Exploitation on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing PHP wrappers for source code extraction...[/bold cyan]"):
+            result = run_lfi_scan(url, parameter="file", scan_type="php_wrapper")
+        self.results['findings']['lfi_wrapper'] = result
+        if result.get('vulnerable'):
+            for w in result.get('wrappers_working', []):
+                console.print(f"  [green][+] Wrapper {w['wrapper']} works! Length: {w.get('decoded_length', w.get('content_length', 0))}[/green]")
+        else:
+            console.print("[yellow][!] No PHP wrappers working[/yellow]")
+
+    def _scan_lfi_rce(self):
+        """LFI to RCE (php://input + Log Poisoning)"""
+        console.print(f"\n[bold red][*] LFI to RCE on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold red]Attempting LFI to RCE via php://input + log poisoning...[/bold red]"):
+            rce_result = run_lfi_scan(url, parameter="file", scan_type="rce")
+            log_result = run_lfi_scan(url, parameter="file", scan_type="log_poison")
+        self.results['findings']['lfi_rce'] = {'rce': rce_result, 'log_poison': log_result}
+        if rce_result.get('rce_achieved'):
+            console.print(f"[bold red][!!!] RCE VIA PHP WRAPPER! Methods: {rce_result.get('rce_methods')}[/bold red]")
+            console.print(f"  Output: {str(rce_result.get('command_output', ''))[:100]}")
+        if log_result.get('rce_achieved'):
+            console.print(f"[bold red][!!!] RCE VIA LOG POISONING![/bold red]")
+
+    def _scan_xss_reflected(self):
+        """XSS Reflected (Context-Aware + WAF Bypass)"""
+        console.print(f"\n[bold cyan][*] Reflected XSS Detection on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing context-aware XSS with WAF bypass...[/bold cyan]"):
+            result = run_xss_scan(url, parameter="q", scan_type="reflected")
+        self.results['findings']['xss_reflected'] = result
+        if result.get('vulnerable'):
+            console.print(f"[bold red][!!!] XSS VULNERABLE! Context: {result.get('injection_context')}[/bold red]")
+            for p in result.get('successful_payloads', [])[:5]:
+                if p.get('executable'):
+                    console.print(f"  [red]EXECUTABLE: {p['payload'][:60]}[/red]")
+        else:
+            console.print("[green][+] No reflected XSS detected[/green]")
+
+    def _scan_xss_dom(self):
+        """DOM XSS Detection"""
+        console.print(f"\n[bold cyan][*] DOM XSS Detection on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Analyzing DOM sources and sinks...[/bold cyan]"):
+            result = run_xss_scan(url, scan_type="dom")
+        self.results['findings']['xss_dom'] = result
+        if result.get('vulnerable'):
+            console.print(f"[bold red][!!!] DOM XSS VULNERABLE![/bold red]")
+            for flow in result.get('potential_flows', [])[:3]:
+                console.print(f"  [yellow]Source: {flow['source']} -> Sink: {flow['sink']}[/yellow]")
+
+    def _scan_xss_blind(self):
+        """Blind XSS Testing"""
+        console.print(f"\n[bold cyan][*] Blind XSS Testing on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Injecting blind XSS callbacks...[/bold cyan]"):
+            result = run_xss_scan(url, scan_type="blind")
+        self.results['findings']['xss_blind'] = result
+        console.print(f"  [yellow]Payloads injected: {len(result.get('payloads_injected', []))}[/yellow]")
+
+    def _scan_xss_full(self):
+        """Full XSS Audit (Reflected + DOM + Blind)"""
+        console.print(f"\n[bold red][*] FULL XSS AUDIT on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold red]Running comprehensive XSS audit...[/bold red]"):
+            result = run_xss_scan(url, scan_type="full")
+        self.results['findings']['xss_full'] = result
+        console.print(f"  [yellow]Vulnerabilities found: {result.get('vulnerabilities_found', 0)}[/yellow]")
+        console.print(f"  [yellow]Total payloads tested: {result.get('total_payloads_tested', 0)}[/yellow]")
+
+    def _scan_subdomain_passive(self):
+        """Subdomain Passive Enumeration (10+ Sources)"""
+        console.print(f"\n[bold cyan][*] Passive Subdomain Enum on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Querying 10+ passive sources...[/bold cyan]"):
+            result = run_subdomain_scan(self.target, scan_type="passive")
+        self.results['findings']['subdomain_passive'] = result
+        console.print(f"  [green]Found {result.get('total_found', 0)} subdomains from {len(result.get('sources_used', {}))} sources[/green]")
+
+    def _scan_subdomain_bruteforce(self):
+        """Subdomain DNS Brute Force"""
+        console.print(f"\n[bold cyan][*] DNS Brute Force on {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Brute forcing subdomains...[/bold cyan]"):
+            result = run_subdomain_scan(self.target, scan_type="brute_force")
+        self.results['findings']['subdomain_brute'] = result
+        console.print(f"  [green]Found {result.get('total_found', 0)} subdomains[/green]")
+
+    def _scan_subdomain_full(self):
+        """Full Subdomain Recon (Passive + Brute + Permutation + Takeover)"""
+        console.print(f"\n[bold red][*] FULL SUBDOMAIN RECON on {self.target}[/bold red]")
+        with console.status("[bold red]Running full subdomain enumeration...[/bold red]"):
+            result = run_subdomain_scan(self.target, scan_type="full")
+        self.results['findings']['subdomain_full'] = result
+        console.print(f"  [green]Total: {result.get('total_subdomains', 0)} subdomains, {result.get('total_live', 0)} live, {result.get('total_takeover', 0)} takeover[/green]")
+
+    def _scan_hash_identify(self):
+        """Hash Type Identification (300+ types)"""
+        console.print(f"\n[bold cyan][*] Hash Identification[/bold cyan]")
+        hash_val = Prompt.ask("[yellow]Enter hash to identify[/yellow]")
+        with console.status("[bold cyan]Identifying hash type...[/bold cyan]"):
+            result = run_crypto_scan(hash_val, scan_type="identify")
+        self.results['findings']['hash_identify'] = result
+        if result.get('possible_types'):
+            for t in result['possible_types'][:10]:
+                console.print(f"  [green]Possible: {t}[/green]")
+        else:
+            console.print("[yellow][!] Could not identify hash type[/yellow]")
+
+    def _scan_hash_crack(self):
+        """Hash Cracking (Dictionary + Rules)"""
+        console.print(f"\n[bold red][*] Hash Cracking[/bold red]")
+        hash_val = Prompt.ask("[yellow]Enter hash to crack[/yellow]")
+        with console.status("[bold red]Cracking hash with dictionary + 18 mutation rules...[/bold red]"):
+            result = run_crypto_scan(hash_val, scan_type="crack")
+        self.results['findings']['hash_crack'] = result
+        if result.get('cracked'):
+            console.print(f"[bold green][+] CRACKED! Plaintext: {result['plaintext']}[/bold green]")
+        else:
+            console.print(f"[yellow][!] Not cracked. Tested {result.get('mutations_tested', 0)} mutations[/yellow]")
+
+    def _scan_auto_decode(self):
+        """Auto-Decode (Base64/Hex/ROT13/Caesar/URL)"""
+        console.print(f"\n[bold cyan][*] Auto-Decode[/bold cyan]")
+        encoded = Prompt.ask("[yellow]Enter encoded string[/yellow]")
+        with console.status("[bold cyan]Auto-detecting encoding...[/bold cyan]"):
+            result = run_crypto_scan(encoded, scan_type="decode")
+        self.results['findings']['auto_decode'] = result
+        for dec in result.get('decodings', []):
+            console.print(f"  [green]{dec['type']}: {dec['decoded'][:80]}[/green]")
+
+    def _scan_reverse_shell(self):
+        """Reverse Shell Generator (15+ languages)"""
+        console.print(f"\n[bold red][*] Reverse Shell Generator[/bold red]")
+        lhost = Prompt.ask("[yellow]LHOST (your IP)[/yellow]", default="10.0.0.1")
+        lport = Prompt.ask("[yellow]LPORT[/yellow]", default="4444")
+        shell_type = Prompt.ask("[yellow]Shell type[/yellow]", default="bash_tcp",
+                               choices=["bash_tcp", "python3", "perl", "php_exec", "nc_mkfifo",
+                                        "powershell", "socat", "ruby", "java"])
+        engine = ReverseShellEngine(lhost=lhost, lport=int(lport), shell_type=shell_type)
+        result = engine.generate()
+        self.results['findings']['reverse_shell'] = result
+        console.print(f"\n[bold green]Payload:[/bold green]")
+        console.print(f"  {result.get('payload', '')[:200]}")
+        if result.get('obfuscated'):
+            console.print(f"\n[bold yellow]Obfuscated:[/bold yellow]")
+            console.print(f"  {result['obfuscated'][:200]}")
+
+    def _scan_hoaxshell(self):
+        """HoaxShell Undetectable Reverse Shell"""
+        console.print(f"\n[bold red][*] HoaxShell Undetectable Shell Generator[/bold red]")
+        lhost = Prompt.ask("[yellow]LHOST (your IP)[/yellow]", default="10.0.0.1")
+        lport = Prompt.ask("[yellow]LPORT[/yellow]", default="4443")
+        engine = ReverseShellEngine(lhost=lhost, lport=int(lport))
+        result = engine.generate_hoaxshell()
+        self.results['findings']['hoaxshell'] = result
+        console.print(f"[bold green]Session ID: {result['session_id']}[/bold green]")
+        console.print(f"[yellow]Server code saved - run on attacker machine[/yellow]")
+        console.print(f"[yellow]Client payload - deploy on target[/yellow]")
+
+    def _scan_cms_detect(self):
+        """CMS Detection (180+ CMS)"""
+        console.print(f"\n[bold cyan][*] CMS Detection on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Detecting CMS from 180+ signatures...[/bold cyan]"):
+            result = run_cms_scan(url, scan_type="detect")
+        self.results['findings']['cms_detect'] = result
+        for cms in result.get('detected_cms', []):
+            console.print(f"  [green][+] {cms['name']} v{cms.get('version', '?')} (via {cms['method']})[/green]")
+        for tech in result.get('technologies', []):
+            console.print(f"  [cyan]{tech}[/cyan]")
+
+    def _scan_cms_wordpress(self):
+        """WordPress Deep Scan"""
+        console.print(f"\n[bold red][*] WordPress Deep Scan on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold red]Scanning WordPress (plugins, users, config)...[/bold red]"):
+            result = run_cms_scan(url, scan_type="wordpress")
+        self.results['findings']['cms_wordpress'] = result
+        for f in result.get('findings', []):
+            color = "red" if f['risk'] in ['critical', 'high'] else "yellow"
+            console.print(f"  [{color}][{f['risk'].upper()}] {f['finding']}[/{color}]")
+
+    def _scan_cms_full(self):
+        """Full CMS Audit (Auto-detect + Deep Scan)"""
+        console.print(f"\n[bold red][*] FULL CMS AUDIT on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold red]Running full CMS audit...[/bold red]"):
+            result = run_cms_scan(url, scan_type="full")
+        self.results['findings']['cms_full'] = result
+
+    def _scan_osint_emails(self):
+        """OSINT Email Harvesting"""
+        console.print(f"\n[bold cyan][*] OSINT Email Harvesting for {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Harvesting emails from multiple sources...[/bold cyan]"):
+            result = run_osint_scan(self.target, scan_type="emails")
+        self.results['findings']['osint_emails'] = result
+        console.print(f"  [green]Found {len(result.get('emails', []))} emails from {len(result.get('sources', {}))} sources[/green]")
+
+    def _scan_osint_dorks(self):
+        """Google Dork Scanner"""
+        console.print(f"\n[bold cyan][*] Google Dork Scanner for {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Running Google dork scans...[/bold cyan]"):
+            result = run_osint_scan(self.target, scan_type="dorks")
+        self.results['findings']['osint_dorks'] = result
+        for finding in result.get('findings', [])[:10]:
+            console.print(f"  [yellow][{finding['category']}] {finding.get('results_count', 0)} results[/yellow]")
+
+    def _scan_osint_full(self):
+        """Full OSINT Recon"""
+        console.print(f"\n[bold red][*] FULL OSINT RECON on {self.target}[/bold red]")
+        with console.status("[bold red]Running comprehensive OSINT reconnaissance...[/bold red]"):
+            result = run_osint_scan(self.target, scan_type="full")
+        self.results['findings']['osint_full'] = result
+
+    def _scan_cloud_metadata(self):
+        """Cloud Metadata Extraction (SSRF)"""
+        console.print(f"\n[bold cyan][*] Cloud Metadata Extraction on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Extracting cloud metadata (AWS/GCE/Azure/DO/Oracle)...[/bold cyan]"):
+            result = run_cloud_scan(url, scan_type="metadata")
+        self.results['findings']['cloud_metadata'] = result
+        if result.get('cloud_provider'):
+            console.print(f"  [green][+] Cloud Provider: {result['cloud_provider']}[/green]")
+            for key, val in result.get('metadata_extracted', {}).items():
+                console.print(f"  [cyan]{key}: {str(val)[:80]}[/cyan]")
+
+    def _scan_cloud_s3(self):
+        """AWS S3 Bucket Enumeration"""
+        console.print(f"\n[bold cyan][*] S3 Bucket Enumeration for {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Enumerating S3 buckets...[/bold cyan]"):
+            result = run_cloud_scan(self.target, scan_type="s3")
+        self.results['findings']['cloud_s3'] = result
+        for bucket in result.get('buckets_found', []):
+            console.print(f"  [green][+] {bucket['name']} ({bucket['status']})[/green]")
+
+    def _scan_cloud_gopherus(self):
+        """Gopherus SSRF-to-RCE Payloads"""
+        console.print(f"\n[bold red][*] Gopherus SSRF-to-RCE Payload Generator[/bold red]")
+        service = Prompt.ask("[yellow]Service[/yellow]", default="redis",
+                           choices=["mysql", "redis", "fastcgi", "postgresql", "smtp", "zabbix"])
+        host = Prompt.ask("[yellow]Target host[/yellow]", default="127.0.0.1")
+        engine = CloudSecurityEngine(target=self.target)
+        result = engine.generate_gopherus_payload(service=service, host=host)
+        self.results['findings']['gopherus'] = result
+        for p in result.get('payloads', []):
+            console.print(f"  [red]{p['type']}: {p.get('payload', '')[:100]}[/red]")
+
+    def _scan_cloud_full(self):
+        """Full Cloud Security Audit"""
+        console.print(f"\n[bold red][*] FULL CLOUD SECURITY AUDIT on {self.target}[/bold red]")
+        with console.status("[bold red]Running comprehensive cloud audit...[/bold red]"):
+            result = run_cloud_scan(self.target, scan_type="full")
+        self.results['findings']['cloud_full'] = result
+
+    def _scan_cors_misconfig(self):
+        """CORS Misconfiguration Detection"""
+        console.print(f"\n[bold cyan][*] CORS Misconfiguration on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing CORS with 15+ origin payloads...[/bold cyan]"):
+            result = run_cors_scan(url, scan_type="cors")
+        self.results['findings']['cors_misconfig'] = result
+        if result.get('vulnerable'):
+            for m in result.get('misconfigurations', []):
+                console.print(f"  [red][{m.get('severity', '?').upper()}] {m.get('type', 'unknown')}: {m['origin_tested']}[/red]")
+        else:
+            console.print("[green][+] No CORS misconfiguration detected[/green]")
+
+    def _scan_open_redirect_adv(self):
+        """Advanced Open Redirect (30+ Bypass Techniques)"""
+        console.print(f"\n[bold cyan][*] Advanced Open Redirect on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing 30+ redirect bypass techniques...[/bold cyan]"):
+            result = run_cors_scan(url, scan_type="redirect")
+        self.results['findings']['open_redirect_adv'] = result
+        if result.get('vulnerable'):
+            for v in result.get('vulnerable_params', []):
+                console.print(f"  [red]Param '{v['parameter']}': {v['payload'][:50]} -> {v['redirect_to'][:50]}[/red]")
+        else:
+            console.print("[green][+] No open redirect detected[/green]")
+
+    def _scan_xxe_detect(self):
+        """XXE Detection"""
+        console.print(f"\n[bold cyan][*] XXE Detection on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing XXE payloads (in-band, error, PHP wrappers)...[/bold cyan]"):
+            result = run_xxe_scan(url, scan_type="detect")
+        self.results['findings']['xxe_detect'] = result
+        if result.get('vulnerable'):
+            console.print(f"[bold red][!!!] XXE VULNERABLE! Type: {result.get('type')}[/bold red]")
+        else:
+            console.print("[green][+] No XXE detected[/green]")
+
+    def _scan_xxe_extract(self):
+        """XXE File Extraction"""
+        console.print(f"\n[bold red][*] XXE File Extraction on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        file_path = Prompt.ask("[yellow]File to extract[/yellow]", default="/etc/passwd")
+        with console.status("[bold red]Extracting file via XXE...[/bold red]"):
+            result = run_xxe_scan(url, scan_type="extract", file_path=file_path)
+        self.results['findings']['xxe_extract'] = result
+        if result.get('extracted'):
+            console.print(f"[bold green][+] File extracted! Length: {len(result.get('content', ''))}[/bold green]")
+            console.print(f"  Preview: {str(result.get('content', ''))[:200]}")
+
+    def _scan_xxe_deser(self):
+        """XXE + Deserialization Detection"""
+        console.print(f"\n[bold cyan][*] XXE + Deserialization Scan on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing XXE and deserialization...[/bold cyan]"):
+            result = run_xxe_scan(url, scan_type="full")
+        self.results['findings']['xxe_deser'] = result
+
+    def _scan_ssti_sandbox(self):
+        """SSTI Sandbox Escape (Tplmap + SSTI-Finder)"""
+        console.print(f"\n[bold red][*] SSTI Sandbox Escape on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold red]Testing SSTI sandbox escapes for 17+ engines...[/bold red]"):
+            result = run_advanced_web_scan(url, scan_type="ssti")
+        self.results['findings']['ssti_sandbox'] = result
+        if result.get('rce_achieved'):
+            console.print(f"[bold red][!!!] SSTI RCE ACHIEVED! Engine: {result.get('engine')}[/bold red]")
+
+    def _scan_proto_pollution(self):
+        """Prototype Pollution Detection"""
+        console.print(f"\n[bold cyan][*] Prototype Pollution on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing prototype pollution + DOM clobbering...[/bold cyan]"):
+            result = run_advanced_web_scan(url, scan_type="prototype_pollution")
+        self.results['findings']['proto_pollution'] = result
+
+    def _scan_csp_analysis(self):
+        """CSP Bypass Analysis"""
+        console.print(f"\n[bold cyan][*] CSP Bypass Analysis on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Analyzing Content Security Policy...[/bold cyan]"):
+            result = run_advanced_web_scan(url, scan_type="csp")
+        self.results['findings']['csp_analysis'] = result
+        for opp in result.get('bypass_opportunities', []):
+            console.print(f"  [yellow][{opp.get('severity', '?').upper()}] {opp['technique']}: {opp['description'][:60]}[/yellow]")
+
+    def _scan_cache_poison_adv(self):
+        """Advanced Cache Poisoning Detection"""
+        console.print(f"\n[bold cyan][*] Cache Poisoning on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing cache poisoning with unkeyed headers...[/bold cyan]"):
+            result = run_advanced_web_scan(url, scan_type="cache_poison")
+        self.results['findings']['cache_poison_adv'] = result
+
+    def _scan_blind_sqli_headers(self):
+        """Blind SQLi via HTTP Headers (Blisqy + SqliSniper)"""
+        console.print(f"\n[bold cyan][*] Blind SQLi Header Testing on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Testing blind SQLi via HTTP headers...[/bold cyan]"):
+            result = run_advanced_web_scan(url, scan_type="blind_sqli_headers")
+        self.results['findings']['blind_sqli_headers'] = result
+        if result.get('vulnerable'):
+            for v in result.get('vulnerable_headers', []):
+                console.print(f"  [red]Header '{v['header']}': Delay {v.get('delay', '?')}s[/red]")
+
+    def _scan_git_exposure(self):
+        """Git/SVN/HG Exposure Detection"""
+        console.print(f"\n[bold cyan][*] Git/SVN/HG Exposure on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Checking for VCS directory exposure...[/bold cyan]"):
+            result = run_git_scan(url, scan_type="vcs")
+        self.results['findings']['git_exposure'] = result
+        for vcs in result.get('vcs_exposed', []):
+            console.print(f"  [red][!!!] {vcs['vcs'].upper()} exposed: {vcs['path']} (Risk: {vcs['risk']})[/red]")
+
+    def _scan_sensitive_files_adv(self):
+        """Advanced Sensitive File Detection (30+ files)"""
+        console.print(f"\n[bold cyan][*] Sensitive File Detection on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Scanning 30+ sensitive file paths...[/bold cyan]"):
+            result = run_git_scan(url, scan_type="sensitive")
+        self.results['findings']['sensitive_files_adv'] = result
+        for f in result.get('files_found', []):
+            console.print(f"  [yellow][{f['risk'].upper()}] {f['path']} ({f['size']} bytes)[/yellow]")
+
+    def _scan_github_dork_adv(self):
+        """GitHub Secret Dorking (GitDorker-style)"""
+        console.print(f"\n[bold cyan][*] GitHub Secret Dorking for {self.target}[/bold cyan]")
+        with console.status("[bold cyan]Searching GitHub for leaked secrets...[/bold cyan]"):
+            result = run_git_scan(self.target, scan_type="github_dork")
+        self.results['findings']['github_dork_adv'] = result
+        for finding in result.get('findings', [])[:10]:
+            console.print(f"  [red]{finding.get('file', '?')} in {finding.get('repo', '?')}[/red]")
+
+    def _scan_oast_callback(self):
+        """OAST Blind Callback Testing"""
+        console.print(f"\n[bold cyan][*] OAST Blind Callback Testing on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Injecting OAST callbacks...[/bold cyan]"):
+            result = run_utility_scan(url, scan_type="oast", parameter="url")
+        self.results['findings']['oast_callback'] = result
+        console.print(f"  [yellow]Payloads injected: {len(result.get('payloads_injected', []))}[/yellow]")
+        console.print(f"  [yellow]{result.get('note', '')}[/yellow]")
+
+    def _scan_redos(self):
+        """ReDoS Vulnerability Detection"""
+        console.print(f"\n[bold cyan][*] ReDoS Vulnerability Detection[/bold cyan]")
+        with console.status("[bold cyan]Testing regex patterns for catastrophic backtracking...[/bold cyan]"):
+            result = run_utility_scan(self.target, scan_type="redos")
+        self.results['findings']['redos'] = result
+        for p in result.get('vulnerable_patterns', []):
+            console.print(f"  [red][{p['severity'].upper()}] {p['name']}: {p['pattern']} ({p['max_eval_time']}s)[/red]")
+
+    def _scan_password_spray(self):
+        """Password Spraying / Credential Testing"""
+        console.print(f"\n[bold red][*] Password Spraying on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        usernames = Prompt.ask("[yellow]Usernames (comma-separated)[/yellow]", default="admin")
+        user_list = [u.strip() for u in usernames.split(",")]
+        with console.status("[bold red]Testing credentials...[/bold red]"):
+            result = run_utility_scan(url, scan_type="spray", usernames=user_list)
+        self.results['findings']['password_spray'] = result
+        for login in result.get('successful_logins', []):
+            console.print(f"  [bold red][!!!] CREDS: {login['username']}:{login['password']}[/bold red]")
+
+    def _scan_stealth(self):
+        """Stealth Scanning (Evasion + Timing)"""
+        console.print(f"\n[bold cyan][*] Stealth Scan on {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        profile = Prompt.ask("[yellow]Stealth profile[/yellow]", default="cautious",
+                           choices=["normal", "cautious", "sneaky", "paranoid"])
+        with console.status("[bold cyan]Scanning with stealth profile...[/bold cyan]"):
+            result = run_utility_scan(url, scan_type="stealth", profile=profile)
+        self.results['findings']['stealth'] = result
+
+    def _scan_wordlist_gen(self):
+        """Custom Wordlist Generation"""
+        console.print(f"\n[bold cyan][*] Wordlist Generator for {self.target}[/bold cyan]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold cyan]Crawling target and generating wordlist...[/bold cyan]"):
+            result = run_utility_scan(url, scan_type="wordlist")
+        self.results['findings']['wordlist'] = result
+        console.print(f"  [green]Generated {result.get('words_collected', 0)} words[/green]")
+
+    def _scan_adv_web_full(self):
+        """Full Advanced Web Audit (SSTI + PP + CSP + Cache + BlindSQLi)"""
+        console.print(f"\n[bold red][*] FULL ADVANCED WEB AUDIT on {self.target}[/bold red]")
+        url = f"{self.protocol}{self.target}"
+        with console.status("[bold red]Running comprehensive advanced web audit...[/bold red]"):
+            result = run_advanced_web_scan(url, scan_type="full")
+        self.results['findings']['adv_web_full'] = result
+        console.print(f"[bold green][+] Advanced Web Audit Complete![/bold green]")
+
     def run_ai_analysis(self):
         """AI-powered vulnerability analysis"""
         if not self.results or not self.results.get('findings'):

@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "4.3.0"
-ZYLON_CODENAME = "Nuclear Fusion v4.3 - BattleEngine + DDoSEngine Connected + All Batches Complete"
+ZYLON_VERSION = "5.0.0"
+ZYLON_CODENAME = "Nuclear Fusion v5.0 - MEGA FUSION: 15 New Engines + 44 New Scan Types + 75+ Tools Fused"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
