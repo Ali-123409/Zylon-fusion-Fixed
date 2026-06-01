@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "2.5.0"
-ZYLON_CODENAME = "Nuclear V8 + DDoS Defense Suite + Beast Mode + Gemini AI Unlocked"
+ZYLON_VERSION = "3.0.0"
+ZYLON_CODENAME = "Nuclear Fusion"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
@@ -54,36 +54,8 @@ DEFAULT_TIMEOUT = 10
 MAX_RETRIES = 3
 VERIFY_SSL = False
 FOLLOW_REDIRECTS = True
-MAX_THREADS = 100  # Increased from 50 for faster scanning
-REQUEST_DELAY = 0.02  # Reduced from 0.05 for speed
-ENABLE_DNS_CACHE = True  # New: DNS caching for 3-5x speedup
-ENABLE_PERF_STATS = True  # New: Performance statistics
-
-# ============================================================================
-# GEMINI API KEY (AI-Powered Features)
-# ============================================================================
-
-GEMINI_API_KEY = __import__('base64').b64decode('QVEuQWI4Uk42THBaVTc0eDJfQ0NUQTllM3BZclRsM1NPSVBCckNUZmZlbUVCZ01oSlRjMHc=').decode()  # Built-in Gemini API key
-GEMINI_MODEL = "gemini-flash-latest"
-GEMINI_FALLBACK_MODEL = "gemini-2.0-flash"
-
-# ============================================================================
-# WORDLIST LOADER - Auto-loads from data/wordlists/ files
-# ============================================================================
-
-def load_wordlist(filename):
-    """Load a wordlist file from data/wordlists/ directory"""
-    filepath = os.path.join(WORDLISTS_DIR, filename)
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, 'r', errors='ignore') as f:
-                return [line.strip() for line in f if line.strip() and not line.startswith('#')]
-        except Exception:
-            return []
-    return []
-
-# Wordlists will be loaded after COMMON_DIRS and ORIGIN_CHECK_SUBDOMAINS are defined
-# See _init_wordlists() below - called at end of file
+MAX_THREADS = 20
+REQUEST_DELAY = 0.1
 
 # ============================================================================
 # PORT SCANNING (CONNECT SCAN - NO ROOT NEEDED)
@@ -751,30 +723,3 @@ ORIGIN_CHECK_SUBDOMAINS = [
     'app', 'portal', 'test', 'old', 'beta', 'blog', 'shop', 'cdn',
     'ns1', 'ns2', 'mx', 'smtp', 'pop', 'imap', 'vpn', 'remote',
 ]
-
-# ============================================================================
-# WORDLIST INITIALIZATION - Load from files after all constants defined
-# ============================================================================
-
-WORDLIST_DIRS = load_wordlist('directories.txt') or COMMON_DIRS
-WORDLIST_SUBDOMAINS = load_wordlist('subdomains.txt') or ORIGIN_CHECK_SUBDOMAINS
-WORDLIST_USERNAMES = load_wordlist('usernames.txt')
-WORDLIST_PASSWORDS = load_wordlist('passwords.txt')
-WORDLIST_JWT_SECRETS = load_wordlist('jwt_secrets.txt')
-WORDLIST_SSRF = load_wordlist('ssrf_payloads.txt')
-WORDLIST_LFI = load_wordlist('lfi_payloads.txt')
-
-WORDLIST_API_PATHS = load_wordlist('api_paths.txt')
-WORDLIST_FILE_EXTENSIONS = load_wordlist('file_extensions.txt')
-
-WORDLIST_SIZES = {
-    'directories': len(WORDLIST_DIRS),
-    'subdomains': len(WORDLIST_SUBDOMAINS),
-    'usernames': len(WORDLIST_USERNAMES),
-    'passwords': len(WORDLIST_PASSWORDS),
-    'jwt_secrets': len(WORDLIST_JWT_SECRETS),
-    'ssrf_payloads': len(WORDLIST_SSRF),
-    'lfi_payloads': len(WORDLIST_LFI),
-    'api_paths': len(WORDLIST_API_PATHS),
-    'file_extensions': len(WORDLIST_FILE_EXTENSIONS),
-}
