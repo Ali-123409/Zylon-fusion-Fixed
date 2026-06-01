@@ -159,6 +159,8 @@ from core.container_engine import ContainerEngine, run_container_scan
 from core.waf_evasion_engine import WAFFingerprinter, WAFBypassEngine, run_waf_scan
 from core.advanced_attacks_engine import WebSocketSecurityEngine, HTTPSmugglingEngine, CRLFEngine, OpenRedirectEngine, Bypass403Engine
 from core.advanced_attacks_engine import run_websocket_scan, run_smuggling_scan, run_crlf_scan, run_openredirect_scan, run_403bypass_scan
+from core.recon_engines import ParamSpiderEngine, LinkFinderEngine, ArjunEngine, GhauriEngine, CMSeeKEngine, SherlockEngine, TehqeeqEngine
+from core.recon_engines import run_paramspider, run_linkfinder, run_arjun, run_ghauri, run_cmseek, run_sherlock, run_tehqeeq
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -335,6 +337,14 @@ class ZylonUI:
             ("94", "CRLF Injection Scanner"),
             ("95", "Open Redirect Scanner"),
             ("96", "403 Bypass (Methods + Headers + Path)"),
+            # v4.2 FUSION - Recon Engines Batch 3
+            ("97", "ParamSpider (Historical Parameter Mining)"),
+            ("98", "LinkFinder + SecretFinder (JS Analysis)"),
+            ("98a", "Arjun (Hidden Parameter Discovery)"),
+            ("98b", "Ghauri (WAF Bypass SQLi)"),
+            ("98c", "CMSeeK (CMS Detection)"),
+            ("98d", "Sherlock (Username Hunter)"),
+            ("98e", "TEHQEEQ (Pakistani Recon)"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
@@ -577,6 +587,14 @@ class ZylonFusion:
             '94': self._scan_crlf,
             '95': self._scan_openredirect,
             '96': self._scan_403bypass,
+            # v4.2 FUSION - Recon Engines Batch 3
+            '97': self._scan_paramspider,
+            '98': self._scan_linkfinder,
+            '98a': self._scan_arjun,
+            '98b': self._scan_ghauri,
+            '98c': self._scan_cmseek,
+            '98d': self._scan_sherlock,
+            '98e': self._scan_tehqeeq,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -2853,6 +2871,42 @@ class ZylonFusion:
         """403 Bypass Scanner"""
         console.print(f"\n[bold cyan][*] 403 BYPASS ENGINE[/bold cyan]")
         run_403bypass_scan(console)
+    
+    def _scan_paramspider(self):
+        """ParamSpider - Historical Parameter Mining"""
+        console.print(f"\n[bold cyan][*] PARAMSPIDER ENGINE[/bold cyan]")
+        run_paramspider(console)
+    
+    def _scan_linkfinder(self):
+        """LinkFinder + SecretFinder - JS Analysis"""
+        console.print(f"\n[bold cyan][*] LINKFINDER + SECRETFINDER[/bold cyan]")
+        run_linkfinder(console)
+    
+    def _scan_arjun(self):
+        """Arjun - Hidden Parameter Discovery"""
+        console.print(f"\n[bold cyan][*] ARJUN - HIDDEN PARAMETER DISCOVERY[/bold cyan]")
+        run_arjun(console)
+    
+    def _scan_ghauri(self):
+        """Ghauri - WAF Bypass SQLi"""
+        console.print(f"\n[bold cyan][*] GHAURI - WAF BYPASS SQLI[/bold cyan]")
+        run_ghauri(console)
+    
+    def _scan_cmseek(self):
+        """CMSeeK - CMS Detection"""
+        console.print(f"\n[bold cyan][*] CMSEEK - CMS DETECTION[/bold cyan]")
+        run_cmseek(console)
+    
+    def _scan_sherlock(self):
+        """Sherlock - Username Hunter"""
+        console.print(f"\n[bold cyan][*] SHERLOCK - USERNAME HUNTER[/bold cyan]")
+        run_sherlock(console)
+    
+    def _scan_tehqeeq(self):
+        """TEHQEEQ - Pakistani Recon"""
+        console.print(f"\n[bold cyan][*] TEHQEEQ تحقیق - PAKISTANI RECON[/bold cyan]")
+        run_tehqeeq(console)
+
 
     def _scan_bounty_recon(self):
         """Bug Bounty Full Recon Pipeline - All recon modules"""

@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "4.1.0"
-ZYLON_CODENAME = "Nuclear Fusion v4.1 - WAFNinja + STEWS + HTTP Smuggling + CRLFuzz + OpenRedireX + 403-Bypass"
+ZYLON_VERSION = "4.2.0"
+ZYLON_CODENAME = "Nuclear Fusion v4.2 - ParamSpider + LinkFinder + Arjun + Ghauri + CMSeeK + Sherlock + TEHQEEQ"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
