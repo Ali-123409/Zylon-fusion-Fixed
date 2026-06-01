@@ -156,6 +156,9 @@ from core.jwt_engine import JWTEngine, run_jwt_scan
 from core.ssti_engine import SSTIEngine, run_ssti_scan
 from core.nosql_engine import NoSQLEngine, run_nosql_scan
 from core.container_engine import ContainerEngine, run_container_scan
+from core.waf_evasion_engine import WAFFingerprinter, WAFBypassEngine, run_waf_scan
+from core.advanced_attacks_engine import WebSocketSecurityEngine, HTTPSmugglingEngine, CRLFEngine, OpenRedirectEngine, Bypass403Engine
+from core.advanced_attacks_engine import run_websocket_scan, run_smuggling_scan, run_crlf_scan, run_openredirect_scan, run_403bypass_scan
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -325,6 +328,13 @@ class ZylonUI:
             ("88", "NoSQL Blind Data Extraction"),
             ("89", "Container Security Scan (DEEPCE)"),
             ("90", "Container Escape Check"),
+            # v4.1 FUSION - WAF Evasion + WebSocket + Smuggling + CRLF + OpenRedirect + 403Bypass
+            ("91", "WAF Detection + Bypass Generator"),
+            ("92", "WebSocket Security Scanner"),
+            ("93", "HTTP Request Smuggling (CL.TE + TE.CL)"),
+            ("94", "CRLF Injection Scanner"),
+            ("95", "Open Redirect Scanner"),
+            ("96", "403 Bypass (Methods + Headers + Path)"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
@@ -560,6 +570,13 @@ class ZylonFusion:
             '88': self._scan_nosql_extract,
             '89': self._scan_container_full,
             '90': self._scan_container_escape,
+            # v4.1 FUSION - WAF Evasion + WebSocket + Smuggling + CRLF + OpenRedirect + 403Bypass
+            '91': self._scan_waf_evasion,
+            '92': self._scan_websocket,
+            '93': self._scan_smuggling,
+            '94': self._scan_crlf,
+            '95': self._scan_openredirect,
+            '96': self._scan_403bypass,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -2803,6 +2820,40 @@ class ZylonFusion:
             if not engine.results['container_detected']:
                 console.print("[yellow]  Note: Not running inside a container.[/yellow]")
     
+    # ========================================================================
+    # v4.1 FUSION - WAF EVASION + WEBSOCKET + SMUGGLING + CRLF + REDIRECT + 403
+    # ========================================================================
+    
+    def _scan_waf_evasion(self):
+        """WAF Detection + Bypass Generator"""
+        console.print(f"\n[bold cyan][*] WAF EVASION ENGINE[/bold cyan]")
+        run_waf_scan(console)
+    
+    def _scan_websocket(self):
+        """WebSocket Security Scanner"""
+        console.print(f"\n[bold cyan][*] WEBSOCKET SECURITY SCANNER[/bold cyan]")
+        run_websocket_scan(console)
+    
+    def _scan_smuggling(self):
+        """HTTP Request Smuggling Detection"""
+        console.print(f"\n[bold cyan][*] HTTP REQUEST SMUGGLING ENGINE[/bold cyan]")
+        run_smuggling_scan(console)
+    
+    def _scan_crlf(self):
+        """CRLF Injection Scanner"""
+        console.print(f"\n[bold cyan][*] CRLF INJECTION SCANNER[/bold cyan]")
+        run_crlf_scan(console)
+    
+    def _scan_openredirect(self):
+        """Open Redirect Scanner"""
+        console.print(f"\n[bold cyan][*] OPEN REDIRECT SCANNER[/bold cyan]")
+        run_openredirect_scan(console)
+    
+    def _scan_403bypass(self):
+        """403 Bypass Scanner"""
+        console.print(f"\n[bold cyan][*] 403 BYPASS ENGINE[/bold cyan]")
+        run_403bypass_scan(console)
+
     def _scan_bounty_recon(self):
         """Bug Bounty Full Recon Pipeline - All recon modules"""
         console.print(f"\n[bold yellow][*] BUG BOUNTY RECON PIPELINE on {self.target}[/bold yellow]")

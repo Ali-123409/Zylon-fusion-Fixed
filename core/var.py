@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "4.0.0"
-ZYLON_CODENAME = "Nuclear Fusion v4.0 - Ciphey + jwt_tool + SSTImap + NoSQLMap + DEEPCE"
+ZYLON_VERSION = "4.1.0"
+ZYLON_CODENAME = "Nuclear Fusion v4.1 - WAFNinja + STEWS + HTTP Smuggling + CRLFuzz + OpenRedireX + 403-Bypass"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
