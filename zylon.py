@@ -148,6 +148,9 @@ from core.v2_vuln import V2VulnEngine
 from core.origin_ip import OriginIPEngine
 from core.hakuin_engine import HakuinEngine, BlindSQLiDetector
 from core.cmd_injection_engine import CommandInjectionEngine
+from core.ssrf_engine import SSRFEngine
+from core.race_engine import RaceEngine
+from core.graphql_engine import GraphQLEngine
 
 # ============================================================================
 # SIGNAL HANDLER
@@ -286,6 +289,22 @@ class ZylonUI:
             ("61", "Command Injection Detector (Commix Fusion)"),
             ("62", "Command Injection + OS Detection"),
             ("63", "Command Injection Shell (Interactive)"),
+            # SSRF Exploitation (SSRFmap Fusion v3.0)
+            ("64", "SSRF Vulnerability Detector (5-Level Bypass)"),
+            ("65", "SSRF Cloud Metadata Extraction (AWS/GCE/Azure)"),
+            ("66", "SSRF File Reader (file:// via SSRF)"),
+            ("67", "SSRF Port Scanner (Internal Network)"),
+            ("68", "SSRF Network Discovery (Ping Sweep)"),
+            # Race Condition (Race-the-Web Fusion v3.0)
+            ("69", "Race Condition Test (Single Endpoint - Barrier Fire)"),
+            ("70", "Race Condition Test (Multi-Endpoint)"),
+            ("71", "TOCTOU Race Condition (Check vs Use)"),
+            # GraphQL Security (GraphQL-Cop Fusion v3.0)
+            ("72", "GraphQL Full Security Audit (15 Tests)"),
+            ("73", "GraphQL Endpoint Discovery"),
+            ("74", "GraphQL Introspection + Schema Extraction"),
+            ("75", "GraphQL DoS Vector Testing"),
+            ("76", "GraphQL CSRF Testing"),
             ("42", "Bug Bounty Full Recon Pipeline"),
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
@@ -373,6 +392,15 @@ class ZylonFusion:
         
         # Command Injection Engine (Commix Fusion v3.0)
         self.cmd_inject = CommandInjectionEngine(self.session)
+        
+        # SSRF Exploitation Engine (SSRFmap Fusion v3.0)
+        self.ssrf_engine = SSRFEngine(console)
+        
+        # Race Condition Detection Engine (Race-the-Web Fusion v3.0)
+        self.race_engine = RaceEngine(console)
+        
+        # GraphQL Security Engine (GraphQL-Cop Fusion v3.0)
+        self.graphql_engine = GraphQLEngine(console)
     
     def set_target(self, target):
         """Validate and set target"""
@@ -466,6 +494,22 @@ class ZylonFusion:
             '61': self._scan_cmd_inject_detect,
             '62': self._scan_cmd_inject_os,
             '63': self._scan_cmd_inject_shell,
+            # SSRF Exploitation (SSRFmap Fusion v3.0)
+            '64': self._scan_ssrf_detect,
+            '65': self._scan_ssrf_cloud_meta,
+            '66': self._scan_ssrf_fileread,
+            '67': self._scan_ssrf_portscan,
+            '68': self._scan_ssrf_network,
+            # Race Condition (Race-the-Web Fusion v3.0)
+            '69': self._scan_race_single,
+            '70': self._scan_race_multi,
+            '71': self._scan_race_toctou,
+            # GraphQL Security (GraphQL-Cop Fusion v3.0)
+            '72': self._scan_graphql_full,
+            '73': self._scan_graphql_discover,
+            '74': self._scan_graphql_introspection,
+            '75': self._scan_graphql_dos,
+            '76': self._scan_graphql_csrf,
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
@@ -2096,6 +2140,394 @@ class ZylonFusion:
         
         self.cmd_inject.get_shell(inject_url, param)
     
+    # ========================================================================
+    # SSRF EXPLOITATION SCANS (SSRFmap Fusion v3.0)
+    # ========================================================================
+    
+    def _scan_ssrf_detect(self):
+        """SSRF Vulnerability Detector - 5-Level Bypass"""
+        console.print(f"\n[bold red][*] SSRF Detection on {self.target}[/bold red]")
+        console.print("[dim]SSRFmap Fusion Engine | 5-Level IP Obfuscation | Timing Analysis[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Target URL with parameter[/cyan]", default=url)
+        param = Prompt.ask("[cyan]Parameter to test[/cyan]", default="url")
+        
+        with console.status("[bold red]Detecting SSRF with 5-level bypass...[/bold red]"):
+            result = self.ssrf_engine.scan_ssrf_detect(inject_url, param)
+        
+        self.results['findings']['ssrf_detect'] = result
+        
+        if result.get('vulnerable'):
+            console.print("[bold red][!] SSRF VULNERABILITY DETECTED![/bold red]")
+            if result['basic'].get('findings'):
+                for f in result['basic']['findings']:
+                    console.print(f"  [red][+] {f['test']}: {f.get('evidence', '')[:80]}[/red]")
+            if result['bypass'].get('bypasses'):
+                console.print(f"  [yellow][+] {len(result['bypass']['bypasses'])} bypass techniques worked[/yellow]")
+        else:
+            console.print("[green][+] No SSRF detected[/green]")
+    
+    def _scan_ssrf_cloud_meta(self):
+        """SSRF Cloud Metadata Extraction - AWS/GCE/Azure/DigitalOcean/Alibaba"""
+        console.print(f"\n[bold red][*] SSRF Cloud Metadata Extraction on {self.target}[/bold red]")
+        console.print("[dim]Extracting: AWS IAM, GCE SSH Keys, Azure Managed Identity, Alibaba, DigitalOcean[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Target URL with SSRF param[/cyan]", default=url)
+        param = Prompt.ask("[cyan]SSRF Parameter[/cyan]", default="url")
+        
+        providers = Prompt.ask(
+            "[cyan]Cloud providers (comma-separated: AWS,GCE,Azure,DigitalOcean,Alibaba)[/cyan]",
+            default="AWS,GCE,Azure,DigitalOcean,Alibaba"
+        )
+        provider_list = [p.strip() for p in providers.split(",")]
+        
+        with console.status("[bold red]Extracting cloud metadata via SSRF...[/bold red]"):
+            result = self.ssrf_engine.scan_cloud_metadata(
+                inject_url, param, providers=provider_list)
+        
+        self.results['findings']['ssrf_cloud'] = result
+        
+        if result.get('extracted', {}).get('extracted'):
+            console.print("[bold red][!] CLOUD METADATA EXTRACTED![/bold red]")
+            for provider, data in result['extracted']['extracted'].items():
+                console.print(f"  [bold yellow][+] {provider}: {len(data)} endpoints leaked[/bold yellow]")
+                v_table = Table(title=f"{provider} Metadata", box=box.HEAVY, border_style="red")
+                v_table.add_column("Endpoint", style="red")
+                v_table.add_column("Data", style="yellow")
+                for endpoint, content in data.items():
+                    v_table.add_row(endpoint, content[:100])
+                console.print(v_table)
+        else:
+            console.print("[green][+] No cloud metadata extracted[/green]")
+    
+    def _scan_ssrf_fileread(self):
+        """SSRF File Reader - Read local files via file:// protocol"""
+        console.print(f"\n[bold red][*] SSRF File Reader on {self.target}[/bold red]")
+        console.print("[dim]Reading /etc/passwd, /proc/self/environ, .env, SSH keys via SSRF[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Target URL with SSRF param[/cyan]", default=url)
+        param = Prompt.ask("[cyan]SSRF Parameter[/cyan]", default="url")
+        
+        with console.status("[bold red]Reading files via SSRF...[/bold red]"):
+            result = self.ssrf_engine.scan_ssrf_fileread(inject_url, param)
+        
+        self.results['findings']['ssrf_fileread'] = result
+        
+        if result.get('files_read'):
+            console.print("[bold red][!] FILES READ VIA SSRF![/bold red]")
+            v_table = Table(title="SSRF File Read Results", box=box.HEAVY, border_style="red")
+            v_table.add_column("File Path", style="red")
+            v_table.add_column("Content Preview", style="yellow")
+            for filepath, content in result['files_read'].items():
+                v_table.add_row(filepath, content[:120])
+            console.print(v_table)
+        else:
+            console.print("[green][+] No files readable via SSRF[/green]")
+    
+    def _scan_ssrf_portscan(self):
+        """SSRF Port Scanner - Scan internal network ports"""
+        console.print(f"\n[bold red][*] SSRF Port Scanner on {self.target}[/bold red]")
+        console.print("[dim]Scanning internal services: MySQL, Redis, Docker API, etc.[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Target URL with SSRF param[/cyan]", default=url)
+        param = Prompt.ask("[cyan]SSRF Parameter[/cyan]", default="url")
+        target_ip = Prompt.ask("[cyan]Internal IP to scan[/cyan]", default="127.0.0.1")
+        
+        with console.status("[bold red]Scanning internal ports via SSRF...[/bold red]"):
+            result = self.ssrf_engine.scan_ssrf_portscan(
+                inject_url, param, target_ip=target_ip)
+        
+        self.results['findings']['ssrf_portscan'] = result
+        
+        if result.get('open_ports'):
+            console.print(f"[bold red][!] {len(result['open_ports'])} OPEN PORTS FOUND![/bold red]")
+            v_table = Table(title="SSRF Port Scan Results", box=box.HEAVY, border_style="red")
+            v_table.add_column("Port", style="bold red")
+            v_table.add_column("Status", style="yellow")
+            v_table.add_column("Diff Length", style="cyan")
+            for port_info in result['open_ports']:
+                v_table.add_row(
+                    str(port_info['port']),
+                    "OPEN",
+                    str(port_info.get('diff_length', 0)),
+                )
+            console.print(v_table)
+        else:
+            console.print("[green][+] No open ports found via SSRF[/green]")
+    
+    def _scan_ssrf_network(self):
+        """SSRF Network Discovery - Ping sweep internal networks"""
+        console.print(f"\n[bold red][*] SSRF Network Discovery on {self.target}[/bold red]")
+        console.print("[dim]Discovering alive hosts on 192.168.x.x, 10.x.x.x networks[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        inject_url = Prompt.ask("[cyan]Target URL with SSRF param[/cyan]", default=url)
+        param = Prompt.ask("[cyan]SSRF Parameter[/cyan]", default="url")
+        
+        ranges = Prompt.ask(
+            "[cyan]CIDR ranges (comma-separated)[/cyan]",
+            default="192.168.1.0/24,10.0.0.0/24"
+        )
+        cidr_list = [r.strip() for r in ranges.split(",")]
+        
+        with console.status("[bold red]Discovering internal hosts via SSRF...[/bold red]"):
+            result = self.ssrf_engine.scan_ssrf_network(
+                inject_url, param, cidr_ranges=cidr_list)
+        
+        self.results['findings']['ssrf_network'] = result
+        
+        if result.get('alive_hosts'):
+            console.print(f"[bold red][!] {len(result['alive_hosts'])} ALIVE HOSTS FOUND![/bold red]")
+            v_table = Table(title="SSRF Network Discovery", box=box.HEAVY, border_style="red")
+            v_table.add_column("IP", style="bold red")
+            v_table.add_column("Status", style="yellow")
+            for host in result['alive_hosts']:
+                v_table.add_row(host['ip'], "ALIVE")
+            console.print(v_table)
+        else:
+            console.print("[green][+] No alive hosts found[/green]")
+    
+    # ========================================================================
+    # RACE CONDITION SCANS (Race-the-Web Fusion v3.0)
+    # ========================================================================
+    
+    def _scan_race_single(self):
+        """Race Condition Test - Single Endpoint with Barrier Fire"""
+        console.print(f"\n[bold red][*] Race Condition Test on {self.target}[/bold red]")
+        console.print("[dim]Race-the-Web Fusion | Barrier-Based Simultaneous Fire | Semantic Comparison[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        target_url = Prompt.ask("[cyan]Target URL[/cyan]", default=url)
+        method = Prompt.ask("[cyan]HTTP Method[/cyan]", choices=['GET', 'POST', 'PUT', 'PATCH'], default='POST')
+        body = Prompt.ask("[cyan]Request Body (for POST)[/cyan]", default="")
+        count = int(Prompt.ask("[cyan]Number of concurrent requests[/cyan]", default="100"))
+        
+        with console.status(f"[bold red]Sending {count} simultaneous requests...[/bold red]"):
+            result = self.race_engine.scan_race_single(
+                target_url, method=method, body=body, count=count)
+        
+        self.results['findings']['race_single'] = result
+        
+        if result.get('race_detected'):
+            console.print("[bold red][!] RACE CONDITION DETECTED![/bold red]")
+            console.print(f"  [red]{result['race_evidence']}[/red]")
+            
+            v_table = Table(title="Race Condition - Response Clusters", box=box.HEAVY, border_style="red")
+            v_table.add_column("Cluster", style="bold")
+            v_table.add_column("Status Code", style="red")
+            v_table.add_column("Count", style="yellow")
+            v_table.add_column("Content Length", style="cyan")
+            for i, cluster in enumerate(result.get('unique_clusters', [])):
+                style_str = "bold red" if i > 0 else "green"
+                v_table.add_row(
+                    f"Cluster {i+1}",
+                    str(cluster['status_code']),
+                    str(cluster['count']),
+                    str(cluster['content_length']),
+                )
+            console.print(v_table)
+        else:
+            console.print("[green][+] No race condition detected[/green]")
+    
+    def _scan_race_multi(self):
+        """Race Condition Test - Multi-Endpoint"""
+        console.print(f"\n[bold red][*] Multi-Endpoint Race Condition Test on {self.target}[/bold red]")
+        console.print("[dim]Testing cross-endpoint race conditions[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        urls_input = Prompt.ask(
+            "[cyan]Target URLs (comma-separated)[/cyan]",
+            default=f"{url}/api/balance,{url}/api/transfer"
+        )
+        urls = [u.strip() for u in urls_input.split(",")]
+        method = Prompt.ask("[cyan]HTTP Method[/cyan]", choices=['GET', 'POST', 'PUT'], default='POST')
+        count = int(Prompt.ask("[cyan]Number of passes[/cyan]", default="50"))
+        
+        with console.status("[bold red]Testing multi-endpoint race conditions...[/bold red]"):
+            result = self.race_engine.scan_race_multi(
+                urls, method=method, count=count)
+        
+        self.results['findings']['race_multi'] = result
+        
+        if result.get('race_detected'):
+            console.print("[bold red][!] CROSS-ENDPOINT RACE CONDITION DETECTED![/bold red]")
+            for inc in result.get('inconsistencies', []):
+                console.print(f"  [red]Pass {inc['pass']}: {inc['unique_responses']} unique responses[/red]")
+        else:
+            console.print("[green][+] No cross-endpoint race condition detected[/green]")
+    
+    def _scan_race_toctou(self):
+        """TOCTOU Race Condition - Time-Of-Check vs Time-Of-Use"""
+        console.print(f"\n[bold red][*] TOCTOU Race Condition Test on {self.target}[/bold red]")
+        console.print("[dim]Simultaneous Read (check) + Write (use) to detect state inconsistency[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        read_url = Prompt.ask("[cyan]Read/Check URL[/cyan]", default=f"{url}/api/balance")
+        write_url = Prompt.ask("[cyan]Write/Use URL[/cyan]", default=f"{url}/api/withdraw")
+        write_body = Prompt.ask("[cyan]Write request body[/cyan]", default='amount=1')
+        count = int(Prompt.ask("[cyan]Number of concurrent pairs[/cyan]", default="100"))
+        
+        with console.status("[bold red]Testing TOCTOU race condition...[/bold red]"):
+            result = self.race_engine.scan_race_toctou(
+                read_url, write_url,
+                write_method="POST", write_body=write_body,
+                count=count)
+        
+        self.results['findings']['race_toctou'] = result
+        
+        if result.get('race_detected'):
+            console.print("[bold red][!] TOCTOU RACE CONDITION DETECTED![/bold red]")
+            console.print(f"  [red]{result['toctou_evidence']}[/red]")
+        else:
+            console.print("[green][+] No TOCTOU race condition detected[/green]")
+    
+    # ========================================================================
+    # GRAPHQL SECURITY SCANS (GraphQL-Cop Fusion v3.0)
+    # ========================================================================
+    
+    def _scan_graphql_full(self):
+        """GraphQL Full Security Audit - 15 Tests"""
+        console.print(f"\n[bold red][*] GraphQL Security Audit on {self.target}[/bold red]")
+        console.print("[dim]GraphQL-Cop Fusion | 15 Security Tests | Info + CSRF + DoS + Enhanced[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        graphql_url = Prompt.ask("[cyan]GraphQL endpoint URL[/cyan]", default=f"{url}/graphql")
+        
+        with console.status("[bold red]Running 15 GraphQL security tests...[/bold red]"):
+            result = self.graphql_engine.scan_graphql_full(graphql_url)
+        
+        self.results['findings']['graphql_full'] = result
+        
+        if result.get('is_graphql'):
+            summary = result.get('summary', {})
+            console.print(f"\n[bold yellow]Results: {summary.get('high', 0)} HIGH | "
+                         f"{summary.get('medium', 0)} MEDIUM | "
+                         f"{summary.get('low', 0)} LOW | "
+                         f"{summary.get('info', 0)} INFO | "
+                         f"{summary.get('passed', 0)} Passed[/bold yellow]")
+            
+            # Display findings table
+            v_table = Table(title="GraphQL Security Results", box=box.HEAVY, border_style="yellow")
+            v_table.add_column("Test", style="bold")
+            v_table.add_column("Severity", style="bold")
+            v_table.add_column("Result", style="bold")
+            v_table.add_column("Description", style="white")
+            
+            for r in result.get('results', []):
+                status = "VULN" if r['result'] else "SAFE"
+                severity_color = {'HIGH': 'red', 'MEDIUM': 'yellow', 'LOW': 'blue', 'INFO': 'dim'}.get(r['severity'], 'white')
+                v_table.add_row(
+                    r['title'],
+                    f"[{severity_color}]{r['severity']}[/{severity_color}]",
+                    f"[{'red' if r['result'] else 'green'}]{status}[/{'red' if r['result'] else 'green'}]",
+                    r['description'][:80],
+                )
+            console.print(v_table)
+        else:
+            console.print("[bold red][!] Not a GraphQL endpoint![/bold red]")
+    
+    def _scan_graphql_discover(self):
+        """GraphQL Endpoint Discovery"""
+        console.print(f"\n[bold red][*] GraphQL Endpoint Discovery on {self.target}[/bold red]")
+        console.print("[dim]Probing /graphql, /graphiql, /api/graphql, /playground, etc.[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        base_url = Prompt.ask("[cyan]Base URL[/cyan]", default=url)
+        
+        with console.status("[bold red]Discovering GraphQL endpoints...[/bold red]"):
+            result = self.graphql_engine.scan_graphql_discover(base_url)
+        
+        self.results['findings']['graphql_discover'] = result
+        
+        if result.get('endpoints_found'):
+            console.print(f"[bold green][+] Found {len(result['endpoints_found'])} GraphQL endpoints![/bold green]")
+            for ep in result['endpoints_found']:
+                console.print(f"  [green][+] {ep}[/green]")
+        else:
+            console.print("[yellow][!] No GraphQL endpoints discovered[/yellow]")
+    
+    def _scan_graphql_introspection(self):
+        """GraphQL Introspection + Schema Extraction"""
+        console.print(f"\n[bold red][*] GraphQL Introspection on {self.target}[/bold red]")
+        console.print("[dim]Extracting full schema: queries, mutations, types, enums[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        graphql_url = Prompt.ask("[cyan]GraphQL endpoint URL[/cyan]", default=f"{url}/graphql")
+        
+        with console.status("[bold red]Extracting GraphQL schema via introspection...[/bold red]"):
+            result = self.graphql_engine.scan_graphql_introspection(graphql_url)
+        
+        self.results['findings']['graphql_introspection'] = result
+        
+        if result.get('success'):
+            schema = result.get('schema', {})
+            console.print("[bold green][+] Schema extracted successfully![/bold green]")
+            console.print(f"  [green]Query Type: {schema.get('query_type', 'N/A')}[/green]")
+            console.print(f"  [green]Mutation Type: {schema.get('mutation_type', 'N/A')}[/green]")
+            console.print(f"  [green]Object Types: {schema.get('object_types', 0)}[/green]")
+            console.print(f"  [green]Queries: {len(schema.get('queries', []))}[/green]")
+            console.print(f"  [green]Mutations: {len(schema.get('mutations', []))}[/green]")
+            
+            # Show queries and mutations
+            if schema.get('queries'):
+                console.print("\n[bold cyan]Available Queries:[/bold cyan]")
+                for q in schema['queries'][:15]:
+                    args = f"({', '.join(q['args'])})" if q['args'] else ""
+                    console.print(f"  [cyan]{q['name']}{args}[/cyan]")
+            if schema.get('mutations'):
+                console.print("\n[bold red]Available Mutations:[/bold red]")
+                for m in schema['mutations'][:15]:
+                    args = f"({', '.join(m['args'])})" if m['args'] else ""
+                    console.print(f"  [red]{m['name']}{args}[/red]")
+        else:
+            console.print("[yellow][!] Introspection is disabled[/yellow]")
+    
+    def _scan_graphql_dos(self):
+        """GraphQL DoS Vector Testing"""
+        console.print(f"\n[bold red][*] GraphQL DoS Testing on {self.target}[/bold red]")
+        console.print("[dim]Testing: Alias overloading, Batch queries, Directive overloading, Circular introspection, Depth[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        graphql_url = Prompt.ask("[cyan]GraphQL endpoint URL[/cyan]", default=f"{url}/graphql")
+        
+        with console.status("[bold red]Testing GraphQL DoS vectors...[/bold red]"):
+            result = self.graphql_engine.scan_graphql_dos(graphql_url)
+        
+        self.results['findings']['graphql_dos'] = result
+        
+        v_count = result.get('vulnerable_count', 0)
+        console.print(f"\n[bold {'red' if v_count else 'green'}]"
+                      f"{v_count} DoS vectors found[/bold {'red' if v_count else 'green'}]")
+        
+        for r in result.get('dos_vectors', []):
+            status = "VULN" if r['result'] else "SAFE"
+            console.print(f"  [{'red' if r['result'] else 'green'}][{status}] {r['title']}: {r['description']}[/{'red' if r['result'] else 'green'}]")
+    
+    def _scan_graphql_csrf(self):
+        """GraphQL CSRF Testing"""
+        console.print(f"\n[bold red][*] GraphQL CSRF Testing on {self.target}[/bold red]")
+        console.print("[dim]Testing: GET method support, GET mutations, URL-encoded POST[/dim]")
+        
+        url = f"{self.protocol}{self.target}"
+        graphql_url = Prompt.ask("[cyan]GraphQL endpoint URL[/cyan]", default=f"{url}/graphql")
+        
+        with console.status("[bold red]Testing GraphQL CSRF vectors...[/bold red]"):
+            result = self.graphql_engine.scan_graphql_csrf(graphql_url)
+        
+        self.results['findings']['graphql_csrf'] = result
+        
+        v_count = result.get('vulnerable_count', 0)
+        console.print(f"\n[bold {'red' if v_count else 'green'}]"
+                      f"{v_count} CSRF vectors found[/bold {'red' if v_count else 'green'}]")
+        
+        for r in result.get('csrf_vectors', []):
+            status = "VULN" if r['result'] else "SAFE"
+            console.print(f"  [{'red' if r['result'] else 'green'}][{status}] {r['title']}: {r['description']}[/{'red' if r['result'] else 'green'}]")
+    
     def _scan_bounty_recon(self):
         """Bug Bounty Full Recon Pipeline - All recon modules"""
         console.print(f"\n[bold yellow][*] BUG BOUNTY RECON PIPELINE on {self.target}[/bold yellow]")
@@ -2470,6 +2902,12 @@ class ZylonFusion:
         self._scan_tech_cve()
         # Origin IP Finder
         self._scan_origin_ip_quick()
+        # SSRF Exploitation (v3.0 Fusion)
+        self._scan_ssrf_detect()
+        # Race Condition (v3.0 Fusion)
+        self._scan_race_single()
+        # GraphQL Security (v3.0 Fusion)
+        self._scan_graphql_discover()
         # Generate mega report
         self.reports.generate_html_report(self.results, self.target)
         console.print(f"\n[bold green][+] MEGA SCAN COMPLETE! Full report generated.[/bold green]")
