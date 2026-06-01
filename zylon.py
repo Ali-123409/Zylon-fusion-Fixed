@@ -161,6 +161,8 @@ from core.advanced_attacks_engine import WebSocketSecurityEngine, HTTPSmugglingE
 from core.advanced_attacks_engine import run_websocket_scan, run_smuggling_scan, run_crlf_scan, run_openredirect_scan, run_403bypass_scan
 from core.recon_engines import ParamSpiderEngine, LinkFinderEngine, ArjunEngine, GhauriEngine, CMSeeKEngine, SherlockEngine, TehqeeqEngine
 from core.recon_engines import run_paramspider, run_linkfinder, run_arjun, run_ghauri, run_cmseek, run_sherlock, run_tehqeeq
+from core.battle_engine import BattleEngine
+from core.ddos_engine import DDoSDefenseEngine
 
 # ============================================================================
 # SIGNAL HANDLER

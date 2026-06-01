@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "4.2.0"
-ZYLON_CODENAME = "Nuclear Fusion v4.2 - ParamSpider + LinkFinder + Arjun + Ghauri + CMSeeK + Sherlock + TEHQEEQ"
+ZYLON_VERSION = "4.3.0"
+ZYLON_CODENAME = "Nuclear Fusion v4.3 - BattleEngine + DDoSEngine Connected + All Batches Complete"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
