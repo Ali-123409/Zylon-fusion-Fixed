@@ -1816,27 +1816,35 @@ class ZylonFusion:
             console.print(group_table)
 
             # Special options
-            console.print("\n[bold green]  [GALL]  RUN ALL GROUPS (355 scans)[/bold green]")
-            console.print("[bold cyan]  [G+G]  Multiple Groups (e.g. G1+G2+G5)[/bold cyan]")
+            console.print("\n[bold green]  [GALL]  RUN ALL GROUPS (355 scans) — PARALLEL[/bold green]")
+            console.print("[bold cyan]  [G+G]  Multiple Groups (e.g. G1+G2+G5) — PARALLEL[/bold cyan]")
+            console.print("[bold magenta]  [G1-S]  Run Group in SERIAL mode (safe, one-by-one)[/bold magenta]")
             console.print("[bold yellow]  [0]    Back to Main Menu[/bold yellow]")
 
-            choice = Prompt.ask("\n[bold red]ZYLON GROUP[/bold red] [bold yellow]>[/bold yellow]").strip().upper()
+            choice = Prompt.ask("\n[bold red]ZYLON GROUP[/bold red] [bold yellow]>[/bold yellow]").strip()
 
             if choice == '0':
                 console.print("[bold yellow][*] Returning to main menu...[/bold yellow]")
                 break
-            elif choice == 'GALL':
+            elif choice.upper() == 'GALL':
                 self._run_all_groups()
-            elif '+' in choice:
+            elif '+' in choice.upper():
                 # Multiple groups: G1+G2+G5
-                self._run_multi_groups(choice)
-            elif choice in self.SCAN_GROUPS:
-                self._run_group_scan(choice)
+                self._run_multi_groups(choice.upper())
+            elif choice.upper().endswith('-S'):
+                # Serial mode: G1-S
+                gid = choice.upper().replace('-S', '').strip()
+                if gid in self.SCAN_GROUPS:
+                    self._run_group_scan(gid, parallel_mode='serial')
+                else:
+                    console.print(f"[bold red][!] Invalid group: {gid}[/bold red]")
+            elif choice.upper() in self.SCAN_GROUPS:
+                self._run_group_scan(choice.upper(), parallel_mode='parallel')
             else:
                 console.print(f"[bold red][!] Invalid group: {choice}[/bold red]")
 
-    def _run_group_scan(self, group_id):
-        """Run all scans in a specific group"""
+    def _run_group_scan(self, group_id, parallel_mode='auto'):
+        """Run all scans in a specific group — PARALLEL by default"""
         if not self.target:
             target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
             success, msg = self.set_target(target)
@@ -1849,11 +1857,17 @@ class ZylonFusion:
         scan_ids = ginfo['scans']
         total = len(scan_ids)
 
+        # Determine parallel mode
+        if parallel_mode == 'auto':
+            # Auto: parallel if >3 scans, serial if <=3
+            parallel_mode = 'parallel' if total > 3 else 'serial'
+
         # Show group header
         console.print(Panel(
             f"[{ginfo['color']}]{ginfo['icon']} {ginfo['name']}[/{ginfo['color']}]\n\n"
             f"[cyan]Target:[/cyan] {self.target}\n"
             f"[cyan]Total Scans:[/cyan] {total}\n"
+            f"[cyan]Mode:[/cyan] {'PARALLEL (Fast)' if parallel_mode == 'parallel' else 'SERIAL (Safe)'}\n"
             f"[cyan]Description:[/cyan] {ginfo['desc']}\n\n"
             f"[bold yellow]Scans to run:[/bold yellow] {', '.join(['['+s+']' for s in scan_ids])}",
             title=f"[bold white] GROUP {group_id} [/bold white]",
@@ -1867,53 +1881,109 @@ class ZylonFusion:
             console.print("[yellow][*] Group scan cancelled.[/yellow]")
             return
 
-        # Run all scans in group
+        # Run scans
         group_results = []
         start_time = time.time()
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}[/bold blue]"),
-            BarColumn(bar_width=40),
-            TextColumn("[bold yellow]{task.completed}/{task.total}[/bold yellow]"),
-            console=console
-        ) as progress:
-            task = progress.add_task(f"[cyan]{ginfo['name']}[/cyan]", total=total)
+        if parallel_mode == 'parallel':
+            # ========== PARALLEL MODE (FAST) ==========
+            max_workers = min(total, 5)  # Max 5 concurrent scans (safe for Termux)
+            console.print(f"[bold cyan][*] PARALLEL mode: {max_workers} workers | {total} scans[/bold cyan]")
 
-            for idx, scan_id in enumerate(scan_ids, 1):
-                scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
-                progress.update(task, description=f"[cyan]{ginfo['name']} [{idx}/{total}] {scan_desc}[/cyan]")
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}[/bold blue]"),
+                BarColumn(bar_width=40),
+                TextColumn("[bold yellow]{task.completed}/{task.total}[/bold yellow]"),
+                console=console
+            ) as progress:
+                task = progress.add_task(f"[cyan]{ginfo['name']}[/cyan]", total=total)
+                lock = threading.Lock()
 
-                # Run the scan
-                scan_result = {
-                    'scan_id': scan_id,
-                    'scan_name': scan_desc,
-                    'status': 'pending',
-                    'findings': 0,
-                    'error': None
-                }
+                def _run_single_scan(scan_id):
+                    """Run a single scan and return result (thread-safe)"""
+                    scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
+                    scan_result = {
+                        'scan_id': scan_id,
+                        'scan_name': scan_desc,
+                        'status': 'pending',
+                        'findings': 0,
+                        'error': None
+                    }
+                    try:
+                        # Each thread gets its own results dict to avoid race conditions
+                        thread_results = {'target': self.target, 'scan_type': scan_id,
+                                         'timestamp': datetime.now().isoformat(), 'findings': {}}
+                        self.results = thread_results
+                        self.run_scan(scan_id)
+                        findings_count = len(self.results.get('findings', {}))
+                        scan_result['status'] = 'completed'
+                        scan_result['findings'] = findings_count
+                    except Exception as e:
+                        scan_result['status'] = 'error'
+                        scan_result['error'] = str(e)
 
-                try:
-                    self.results = {'target': self.target, 'scan_type': scan_id,
-                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
-                    self.run_scan(scan_id)
-                    findings_count = len(self.results.get('findings', {}))
-                    scan_result['status'] = 'completed'
-                    scan_result['findings'] = findings_count
-                except Exception as e:
-                    scan_result['status'] = 'error'
-                    scan_result['error'] = str(e)
+                    with lock:
+                        progress.advance(task)
 
-                group_results.append(scan_result)
-                progress.advance(task)
+                    return scan_result
+
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(_run_single_scan, sid): sid for sid in scan_ids}
+                    for future in as_completed(futures):
+                        result = future.result()
+                        group_results.append(result)
+
+            # Sort results by scan_id order
+            scan_order = {sid: i for i, sid in enumerate(scan_ids)}
+            group_results.sort(key=lambda r: scan_order.get(r['scan_id'], 999))
+
+        else:
+            # ========== SERIAL MODE (SAFE) ==========
+            console.print(f"[bold cyan][*] SERIAL mode: 1 worker | {total} scans[/bold cyan]")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}[/bold blue]"),
+                BarColumn(bar_width=40),
+                TextColumn("[bold yellow]{task.completed}/{task.total}[/bold yellow]"),
+                console=console
+            ) as progress:
+                task = progress.add_task(f"[cyan]{ginfo['name']}[/cyan]", total=total)
+
+                for idx, scan_id in enumerate(scan_ids, 1):
+                    scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
+                    progress.update(task, description=f"[cyan]{ginfo['name']} [{idx}/{total}] {scan_desc}[/cyan]")
+
+                    scan_result = {
+                        'scan_id': scan_id,
+                        'scan_name': scan_desc,
+                        'status': 'pending',
+                        'findings': 0,
+                        'error': None
+                    }
+
+                    try:
+                        self.results = {'target': self.target, 'scan_type': scan_id,
+                                       'timestamp': datetime.now().isoformat(), 'findings': {}}
+                        self.run_scan(scan_id)
+                        findings_count = len(self.results.get('findings', {}))
+                        scan_result['status'] = 'completed'
+                        scan_result['findings'] = findings_count
+                    except Exception as e:
+                        scan_result['status'] = 'error'
+                        scan_result['error'] = str(e)
+
+                    group_results.append(scan_result)
+                    progress.advance(task)
 
         elapsed = time.time() - start_time
 
         # Display combined results
-        self._display_group_results(group_id, ginfo, group_results, elapsed)
+        self._display_group_results(group_id, ginfo, group_results, elapsed, parallel_mode)
 
     def _run_multi_groups(self, choice):
-        """Run multiple groups (e.g. G1+G2+G5)"""
+        """Run multiple groups (e.g. G1+G2+G5) — PARALLEL within each group"""
         group_ids = [g.strip() for g in choice.split('+') if g.strip() in self.SCAN_GROUPS]
 
         if not group_ids:
@@ -1933,9 +2003,10 @@ class ZylonFusion:
         group_names = ' + '.join([f"{self.SCAN_GROUPS[gid]['icon']} {gid}:{self.SCAN_GROUPS[gid]['name']}" for gid in group_ids])
 
         console.print(Panel(
-            f"[bold yellow]MULTI-GROUP SCAN[/bold yellow]\n\n"
+            f"[bold yellow]MULTI-GROUP SCAN (PARALLEL)[/bold yellow]\n\n"
             f"[cyan]Groups:[/cyan] {group_names}\n"
             f"[cyan]Total Scans:[/cyan] {total_scans}\n"
+            f"[cyan]Mode:[/cyan] PARALLEL (5 workers per group)\n"
             f"[cyan]Target:[/cyan] {self.target}",
             border_style="bright_yellow"
         ))
@@ -1949,10 +2020,16 @@ class ZylonFusion:
 
         for gid in group_ids:
             ginfo = self.SCAN_GROUPS[gid]
-            console.print(f"\n[bold cyan][*] Starting Group {gid}: {ginfo['name']} ({len(ginfo['scans'])} scans)...[/bold cyan]")
+            scan_ids = ginfo['scans']
+            total = len(scan_ids)
+            max_workers = min(total, 5)
+
+            console.print(f"\n[bold cyan][*] Group {gid}: {ginfo['name']} — PARALLEL ({max_workers} workers, {total} scans)[/bold cyan]")
 
             group_results = []
-            for scan_id in ginfo['scans']:
+            lock = threading.Lock()
+
+            def _run_scan_thread(scan_id):
                 scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
                 scan_result = {
                     'scan_id': scan_id,
@@ -1962,8 +2039,9 @@ class ZylonFusion:
                     'error': None
                 }
                 try:
-                    self.results = {'target': self.target, 'scan_type': scan_id,
-                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    thread_results = {'target': self.target, 'scan_type': scan_id,
+                                     'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    self.results = thread_results
                     self.run_scan(scan_id)
                     findings_count = len(self.results.get('findings', {}))
                     scan_result['status'] = 'completed'
@@ -1971,7 +2049,17 @@ class ZylonFusion:
                 except Exception as e:
                     scan_result['status'] = 'error'
                     scan_result['error'] = str(e)
-                group_results.append(scan_result)
+                return scan_result
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_run_scan_thread, sid): sid for sid in scan_ids}
+                for future in as_completed(futures):
+                    result = future.result()
+                    group_results.append(result)
+
+            # Sort by original order
+            scan_order = {sid: i for i, sid in enumerate(scan_ids)}
+            group_results.sort(key=lambda r: scan_order.get(r['scan_id'], 999))
 
             all_results[gid] = (ginfo, group_results)
 
@@ -1981,7 +2069,7 @@ class ZylonFusion:
         self._display_multi_group_results(all_results, elapsed)
 
     def _run_all_groups(self):
-        """Run ALL groups (GALL)"""
+        """Run ALL groups (GALL) — PARALLEL within each group"""
         if not self.target:
             target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
             success, msg = self.set_target(target)
@@ -1993,10 +2081,11 @@ class ZylonFusion:
         total_scans = sum(len(g['scans']) for g in self.SCAN_GROUPS.values())
 
         console.print(Panel(
-            f"[bold red]MEGA GROUP SCAN - ALL 51 GROUPS[/bold red]\n\n"
+            f"[bold red]MEGA GROUP SCAN - ALL 51 GROUPS (PARALLEL)[/bold red]\n\n"
             f"[bold yellow]WARNING: This will run {total_scans} scans![/bold yellow]\n"
             f"[cyan]Target:[/cyan] {self.target}\n"
-            f"[cyan]Estimated Time:[/cyan] {total_scans * 15 // 60}+ minutes",
+            f"[cyan]Mode:[/cyan] PARALLEL (5 workers per group)\n"
+            f"[cyan]Estimated Time:[/cyan] {total_scans * 5 // 60}+ minutes (parallel speedup)",
             border_style="bright_red",
             box=box.HEAVY
         ))
@@ -2012,10 +2101,15 @@ class ZylonFusion:
 
         for gid, ginfo in self.SCAN_GROUPS.items():
             completed_groups += 1
-            console.print(f"\n[bold cyan][{completed_groups}/{total_groups}] Group {gid}: {ginfo['name']}...[/bold cyan]")
+            scan_ids = ginfo['scans']
+            total = len(scan_ids)
+            max_workers = min(total, 5)
+
+            console.print(f"\n[bold cyan][{completed_groups}/{total_groups}] Group {gid}: {ginfo['name']} — PARALLEL ({max_workers} workers)[/bold cyan]")
 
             group_results = []
-            for scan_id in ginfo['scans']:
+
+            def _run_scan_mega(scan_id):
                 scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
                 scan_result = {
                     'scan_id': scan_id,
@@ -2025,8 +2119,9 @@ class ZylonFusion:
                     'error': None
                 }
                 try:
-                    self.results = {'target': self.target, 'scan_type': scan_id,
-                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    thread_results = {'target': self.target, 'scan_type': scan_id,
+                                     'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    self.results = thread_results
                     self.run_scan(scan_id)
                     findings_count = len(self.results.get('findings', {}))
                     scan_result['status'] = 'completed'
@@ -2034,24 +2129,37 @@ class ZylonFusion:
                 except Exception as e:
                     scan_result['status'] = 'error'
                     scan_result['error'] = str(e)
-                group_results.append(scan_result)
+                return scan_result
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_run_scan_mega, sid): sid for sid in scan_ids}
+                for future in as_completed(futures):
+                    result = future.result()
+                    group_results.append(result)
+
+            # Sort by original order
+            scan_order = {sid: i for i, sid in enumerate(scan_ids)}
+            group_results.sort(key=lambda r: scan_order.get(r['scan_id'], 999))
 
             all_results[gid] = (ginfo, group_results)
 
         elapsed = time.time() - start_time
         self._display_multi_group_results(all_results, elapsed, is_mega=True)
 
-    def _display_group_results(self, group_id, ginfo, group_results, elapsed):
+    def _display_group_results(self, group_id, ginfo, group_results, elapsed, parallel_mode='parallel'):
         """Display combined results for a single group"""
         completed = sum(1 for r in group_results if r['status'] == 'completed')
         errors = sum(1 for r in group_results if r['status'] == 'error')
         total_findings = sum(r['findings'] for r in group_results)
+
+        mode_label = 'PARALLEL' if parallel_mode == 'parallel' else 'SERIAL'
 
         # Header
         console.print(Panel(
             f"[{ginfo['color']}]{ginfo['icon']} GROUP {group_id}: {ginfo['name']} — COMBINED RESULTS[/{ginfo['color']}]\n\n"
             f"[cyan]Target:[/cyan] {self.target}\n"
             f"[cyan]Total Scans:[/cyan] {len(group_results)}\n"
+            f"[cyan]Mode:[/cyan] {mode_label}\n"
             f"[green]Completed:[/green] {completed}\n"
             f"[red]Errors:[/red] {errors}\n"
             f"[yellow]Total Findings:[/yellow] {total_findings}\n"
