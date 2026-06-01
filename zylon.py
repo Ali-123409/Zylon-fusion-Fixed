@@ -405,6 +405,7 @@ class ZylonUI:
             ("43", "Bug Bounty Full Vuln Pipeline"),
             ("99", "MEGA SCAN (Every Single Module)"),
             ("ai", "AI-Powered Vulnerability Analysis (Experimental)"),
+            ("group", "Group-Based Scanning (51 Groups - Run All Scans in a Category)"),
             ("scope", "Set/Check Bug Bounty Scope"),
             ("poc", "Generate PoC for Last Finding"),
             ("config", "Configuration Manager (API Keys)"),
@@ -1243,7 +1244,974 @@ class ZylonFusion:
                 console.print(f"[bold red][!] Scan error: {str(e)}[/bold red]")
         else:
             console.print(f"[bold red][!] Unknown scan type: {scan_type}[/bold red]")
-    
+
+    # ========================================================================
+    # GROUP-BASED SCANNING SYSTEM (v6.0 ULTIMATE)
+    # ========================================================================
+
+    # All 51 vulnerability/tool groups with their scan IDs
+    SCAN_GROUPS = {
+        'G1': {
+            'name': 'SQL Injection',
+            'icon': '🔥',
+            'color': 'bold red',
+            'scans': ['9', '56', '57', '58', '59', '60', '144', '145', '146', '147', '153', '98b', '175', '320'],
+            'desc': 'All SQL Injection attacks — Basic, Blind, SQLMap, Ghauri, Wapiti, Mass'
+        },
+        'G2': {
+            'name': 'XSS Attack',
+            'icon': '⚡',
+            'color': 'bold yellow',
+            'scans': ['10', '148', '149', '150', '151', '152', '174', '314', '315', '316', '317', '318', '321', '237'],
+            'desc': 'All XSS attacks — Basic, Reflected, DOM, Blind, Context-Aware, Dalfox, Wapiti'
+        },
+        'G3': {
+            'name': 'LFI / Path Traversal',
+            'icon': '📂',
+            'color': 'bold green',
+            'scans': ['32', '154', '155', '156', '157', '158', '159', '160', '161', '162', '163'],
+            'desc': 'All LFI + Path Traversal — Advanced, PHP Wrappers, Log Poisoning, WAF Bypass'
+        },
+        'G4': {
+            'name': 'SSRF Attack',
+            'icon': '🌐',
+            'color': 'bold blue',
+            'scans': ['30', '64', '65', '66', '67', '68', '176', '234'],
+            'desc': 'All SSRF attacks — Detection, Cloud Metadata, File Read, Port Scan, Network'
+        },
+        'G5': {
+            'name': 'SSTI / Template Injection',
+            'icon': '🧪',
+            'color': 'bold magenta',
+            'scans': ['31', '84', '85', '184', '185', '186', '187', '188'],
+            'desc': 'All SSTI attacks — Detection, Exploit, TPLmap Engine, Sandbox Escape'
+        },
+        'G6': {
+            'name': 'Subdomain Discovery',
+            'icon': '🔍',
+            'color': 'bold cyan',
+            'scans': ['4', '164', '165', '166', '168', '169', '54'],
+            'desc': 'All Subdomain Discovery — Passive, Brute Force, Cert Transparency, Cloud'
+        },
+        'G7': {
+            'name': 'Subdomain Takeover',
+            'icon': '🏴',
+            'color': 'bold red',
+            'scans': ['29', '167', '218', '219', '220', '230', '221'],
+            'desc': 'All Subdomain Takeover — Check, Mass, CNAME, Service Verify'
+        },
+        'G8': {
+            'name': 'CORS Attack',
+            'icon': '🔓',
+            'color': 'bold yellow',
+            'scans': ['13', '222', '223', '224', '225', '231', '232', '226'],
+            'desc': 'All CORS attacks — Origin Test, Null, Subdomain Bypass, CSRF Chain'
+        },
+        'G9': {
+            'name': 'HTTP Smuggling',
+            'icon': '🚢',
+            'color': 'bold green',
+            'scans': ['38', '93', '339', '340', '341', '342', '348', '349'],
+            'desc': 'All HTTP Smuggling — CL.TE, TE.CL, H2C, H2.CL, Timing Analysis'
+        },
+        'G10': {
+            'name': 'CRLF Injection',
+            'icon': '↩️',
+            'color': 'bold blue',
+            'scans': ['15', '94', '182'],
+            'desc': 'All CRLF Injection — Basic, Advanced, Wapiti CRLF'
+        },
+        'G11': {
+            'name': 'Open Redirect',
+            'icon': '➡️',
+            'color': 'bold magenta',
+            'scans': ['14', '95'],
+            'desc': 'All Open Redirect — Detection and Advanced Scanning'
+        },
+        'G12': {
+            'name': 'WAF Detection',
+            'icon': '🛡️',
+            'color': 'bold cyan',
+            'scans': ['19', '52', '91', '357'],
+            'desc': 'All WAF Detection — Fingerprinting, CDN Detection, Bypass Payloads'
+        },
+        'G13': {
+            'name': 'WebSocket Attack',
+            'icon': '🔌',
+            'color': 'bold red',
+            'scans': ['92', '334', '335', '336', '337', '338', '347', '351'],
+            'desc': 'All WebSocket — Endpoint Discovery, Auth, Fuzzing, DoS, Replay'
+        },
+        'G14': {
+            'name': 'Prototype Pollution',
+            'icon': '☢️',
+            'color': 'bold yellow',
+            'scans': ['36', '343', '344', '345', '350', '352', '346'],
+            'desc': 'All Prototype Pollution — Server-Side, Client-Side, DOM Clobber, Gadgets'
+        },
+        'G15': {
+            'name': 'Cache Poisoning',
+            'icon': '🧪',
+            'color': 'bold green',
+            'scans': ['37', '379', '380', '381', '382', '389', '390', '383'],
+            'desc': 'All Cache Poisoning — Detection, Unkeyed Input, Header Poison, Deception'
+        },
+        'G16': {
+            'name': 'JWT Attack',
+            'icon': '🔑',
+            'color': 'bold blue',
+            'scans': ['40', '79', '80', '81', '82', '83'],
+            'desc': 'All JWT attacks — Full Playbook, Key Confusion, alg:none, kid Inject, Crack'
+        },
+        'G17': {
+            'name': 'Hash / Crypto',
+            'icon': '🔐',
+            'color': 'bold magenta',
+            'scans': ['78', '265', '266', '267', '268', '269', '287', '288', '289', '290', '291', '292'],
+            'desc': 'All Hash & Crypto — Identify, Crack, Batch, Online, Decode, XOR, Caesar'
+        },
+        'G18': {
+            'name': 'NoSQL Injection',
+            'icon': '🍃',
+            'color': 'bold cyan',
+            'scans': ['86', '87', '88', '270'],
+            'desc': 'All NoSQL Injection — Detection, Auth Bypass, Blind Extraction, JSON Fuzz'
+        },
+        'G19': {
+            'name': 'Cloud / Container Security',
+            'icon': '☁️',
+            'color': 'bold red',
+            'scans': ['18', '89', '90', '204', '205', '206', '207', '211', '212'],
+            'desc': 'All Cloud & Container — S3, Azure, GCP, Metadata, Docker, Escape'
+        },
+        'G20': {
+            'name': 'Credential / Auth',
+            'icon': '👤',
+            'color': 'bold yellow',
+            'scans': ['41', '214', '215', '216', '217', '227', '228', '229', '233'],
+            'desc': 'All Credential & Auth — Password Spray, Stuffing, Username Enum, API Auth'
+        },
+        'G21': {
+            'name': 'Parameter Mining',
+            'icon': '⛏️',
+            'color': 'bold green',
+            'scans': ['24', '97', '98a', '256', '329'],
+            'desc': 'All Parameter Mining — ParamSpider, Arjun, Fuzzing, Dalfox Params'
+        },
+        'G22': {
+            'name': 'JS Analysis',
+            'icon': '📜',
+            'color': 'bold blue',
+            'scans': ['17', '28', '98'],
+            'desc': 'All JS Analysis — Sensitive Data, Deep Analysis, LinkFinder'
+        },
+        'G23': {
+            'name': 'Git Exposure',
+            'icon': '📦',
+            'color': 'bold magenta',
+            'scans': ['27', '243', '244', '245', '246', '251', '252'],
+            'desc': 'All Git Exposure — Detection, Repo Dump, Dork, Secret Scan, Code Search'
+        },
+        'G24': {
+            'name': 'Race Condition',
+            'icon': '🏁',
+            'color': 'bold cyan',
+            'scans': ['35', '69', '70', '71', '327'],
+            'desc': 'All Race Condition — Single, Multi-Endpoint, TOCTOU, Business Logic'
+        },
+        'G25': {
+            'name': 'Dir / Fuzzing',
+            'icon': '🗂️',
+            'color': 'bold red',
+            'scans': ['11', '178', '179', '180', '181', '254', '255', '259', '44'],
+            'desc': 'All Dir & Fuzzing — Brute Force, Dirsearch, FFUF, API Endpoint, Recursive'
+        },
+        'G26': {
+            'name': 'CMS Scanning',
+            'icon': '🏗️',
+            'color': 'bold yellow',
+            'scans': ['12', '98c', '280', '281', '282', '283', '284', '285', '286'],
+            'desc': 'All CMS Scanning — WordPress, Joomla, Drupal, Magento, Default Creds'
+        },
+        'G27': {
+            'name': 'OSINT / Recon',
+            'icon': '🕵️',
+            'color': 'bold green',
+            'scans': ['1', '2', '3', '26', '47', '170', '171', '172'],
+            'desc': 'All OSINT & Recon — WHOIS, GeoIP, DNS, Google Dork, Email Harvest'
+        },
+        'G28': {
+            'name': 'Session Security',
+            'icon': '🍪',
+            'color': 'bold blue',
+            'scans': ['16', '194', '195', '196', '197'],
+            'desc': 'All Session Security — Cookie Security, Flask Session, Fixation, Full Scan'
+        },
+        'G29': {
+            'name': 'Command Injection',
+            'icon': '💻',
+            'color': 'bold magenta',
+            'scans': ['61', '62', '63', '183', '236'],
+            'desc': 'All Command Injection — Detection, OS Detect, Shell, Wapiti, OAST Blind'
+        },
+        'G30': {
+            'name': 'Origin IP / CDN Bypass',
+            'icon': '🎯',
+            'color': 'bold cyan',
+            'scans': ['50', '51', '52', '53', '54', '55'],
+            'desc': 'All Origin IP & CDN — Quick Find, Full 22 Techniques, DNS History, Verify'
+        },
+        'G31': {
+            'name': 'Deserialization',
+            'icon': '🔄',
+            'color': 'bold red',
+            'scans': ['198', '199', '200', '201', '202', '203'],
+            'desc': 'All Deserialization — Java, PHP, Python, Payload Gen, Blind, Full'
+        },
+        'G32': {
+            'name': 'Mass Scanning',
+            'icon': '🌐',
+            'color': 'bold yellow',
+            'scans': ['319', '320', '321', '322', '323', '330'],
+            'desc': 'All Mass Scanning — Dork, SQLi, XSS, Multi-Vuln, File, Classification'
+        },
+        'G33': {
+            'name': 'Mobile Security',
+            'icon': '📱',
+            'color': 'bold green',
+            'scans': ['384', '385', '386', '387', '388', '391', '392'],
+            'desc': 'All Mobile Security — API Test, SSL Pinning, Deep Links, WebView, APK'
+        },
+        'G34': {
+            'name': 'AI Pentest',
+            'icon': '🤖',
+            'color': 'bold blue',
+            'scans': ['294', '295', '296', '297', '298', '299', '312'],
+            'desc': 'All AI Pentest — Target Analysis, Strategy, Payload Gen, Prioritization'
+        },
+        'G35': {
+            'name': 'Stealth / Anonymity',
+            'icon': '👻',
+            'color': 'bold magenta',
+            'scans': ['300', '301', '302', '303', '311'],
+            'desc': 'All Stealth — TOR, Proxy Chain, Slow Mode, Identity Rotation'
+        },
+        'G36': {
+            'name': 'XXE Attack',
+            'icon': '📄',
+            'color': 'bold cyan',
+            'scans': ['33', '235'],
+            'desc': 'All XXE attacks — Basic Detection, OAST Blind XXE'
+        },
+        'G37': {
+            'name': 'GraphQL Attack',
+            'icon': '◈',
+            'color': 'bold red',
+            'scans': ['72', '73', '74', '75', '76'],
+            'desc': 'All GraphQL — Full Audit, Endpoint, Introspection, DoS, CSRF'
+        },
+        'G38': {
+            'name': 'Business Logic',
+            'icon': '💰',
+            'color': 'bold yellow',
+            'scans': ['324', '325', '326', '327', '328', '331', '332'],
+            'desc': 'All Business Logic — Price, Payment, Privilege, Cart, Discount'
+        },
+        'G39': {
+            'name': 'Payload / Exploit Dev',
+            'icon': '💣',
+            'color': 'bold green',
+            'scans': ['354', '355', '356', '357', '358', '359', '360', '361', '362', '363'],
+            'desc': 'All Payload & Exploit Dev — DB, Search, ROP, Shellcode, Format String'
+        },
+        'G40': {
+            'name': 'Bounty Management',
+            'icon': '🏆',
+            'color': 'bold blue',
+            'scans': ['374', '375', '376', '377', '378'],
+            'desc': 'All Bounty Management — Programs, Classification, Reports, Scope'
+        },
+        'G41': {
+            'name': 'Metadata / OPSEC',
+            'icon': '📋',
+            'color': 'bold magenta',
+            'scans': ['365', '366', '367', '368', '369', '370'],
+            'desc': 'All Metadata & OPSEC — EXIF, Document, Strip, OPSEC Check, Privacy'
+        },
+        'G42': {
+            'name': 'Wordlist Generation',
+            'icon': '📝',
+            'color': 'bold cyan',
+            'scans': ['305', '306', '307', '308', '309'],
+            'desc': 'All Wordlist Gen — Target, Password, Subdomain, Username, Full'
+        },
+        'G43': {
+            'name': 'DDoS Testing',
+            'icon': '💥',
+            'color': 'bold red',
+            'scans': ['274', '275', '276', '277', '278', '279'],
+            'desc': 'All DDoS Testing — HTTP Flood, Slowloris, TCP Flood, Rate Limit'
+        },
+        'G44': {
+            'name': 'Dalfox XSS Engine',
+            'icon': '🦊',
+            'color': 'bold yellow',
+            'scans': ['314', '315', '316', '317', '318', '329'],
+            'desc': 'All Dalfox XSS — Quick, Mass, Blind, DOM, Full, Param Analysis'
+        },
+        'G45': {
+            'name': 'Nuclei-Style Scanner',
+            'icon': '🧬',
+            'color': 'bold green',
+            'scans': ['189', '190', '191', '192', '193'],
+            'desc': 'All Nuclei-Style — Template, CVE, Exposed Panels, Default Creds'
+        },
+        'G46': {
+            'name': 'Wapiti Scanner',
+            'icon': '🕷️',
+            'color': 'bold blue',
+            'scans': ['174', '175', '176', '177', '182', '183'],
+            'desc': 'All Wapiti — XSS, SQLi, SSRF, CRLF, Cmd Injection, Full Scan'
+        },
+        'G47': {
+            'name': 'Dirsearch Engine',
+            'icon': '📁',
+            'color': 'bold magenta',
+            'scans': ['178', '179', '180', '181'],
+            'desc': 'All Dirsearch — Quick, Recursive, Extension, Deep Scan'
+        },
+        'G48': {
+            'name': 'Crypto Advanced',
+            'icon': '🔐',
+            'color': 'bold cyan',
+            'scans': ['287', '288', '289', '290', '291', '292'],
+            'desc': 'All Crypto Advanced — Decode, Encoding Chain, XOR, Caesar, Frequency'
+        },
+        'G49': {
+            'name': 'Shell Generation',
+            'icon': '🐚',
+            'color': 'bold red',
+            'scans': ['261', '262', '263', '264', '271'],
+            'desc': 'All Shell Gen — Reverse, Bind, Obfuscation, Staged Payload'
+        },
+        'G50': {
+            'name': 'OAST / Callback',
+            'icon': '📡',
+            'color': 'bold yellow',
+            'scans': ['234', '235', '236', '237', '238', '248'],
+            'desc': 'All OAST Callback — Blind SSRF, XXE, Cmdi, XSS, Full, Server'
+        },
+        'G51': {
+            'name': 'ReDoS / CSP',
+            'icon': '🧶',
+            'color': 'bold green',
+            'scans': ['239', '240', '241', '249', '250', '242'],
+            'desc': 'All ReDoS & CSP — Detection, Analysis, Bypass, Exploit Gen, XSS Test'
+        },
+    }
+
+    # Scan ID to description mapping for group results
+    SCAN_DESCRIPTIONS = {
+        '0': 'Full Recon', '1': 'WHOIS', '2': 'Geo-IP', '3': 'DNS Records',
+        '4': 'Subdomain Discovery', '5': 'Port Scanner', '6': 'Banner Grab',
+        '7': 'Security Headers', '8': 'SSL/TLS', '9': 'SQLi Basic',
+        '10': 'XSS Basic', '11': 'Dir Brute Force', '12': 'WordPress',
+        '13': 'CORS Basic', '14': 'Open Redirect', '15': 'CRLF Basic',
+        '16': 'Cookie Security', '17': 'JS Extractor', '18': 'Cloud Bucket',
+        '19': 'WAF Detect', '20': 'Tech Stack', '21': 'Full Vuln',
+        '22': 'Nuclear Scan', '23': 'Deep Crawl', '24': 'Param Miner',
+        '25': 'Wayback URLs', '26': 'Google Dork', '27': 'GitHub Dork',
+        '28': 'Deep JS', '29': 'Takeover Basic', '30': 'SSRF Basic',
+        '31': 'SSTI Basic', '32': 'LFI/PathTrav', '33': 'XXE Basic',
+        '34': 'IDOR', '35': 'Race Condition', '36': 'Prototype Pollution',
+        '37': 'Cache Poison', '38': 'HTTP Smuggling', '39': 'Host Header',
+        '40': 'JWT Basic', '41': 'Broken Auth', '42': 'Bounty Recon',
+        '43': 'Bounty Vuln', '44': 'API Fuzzer', '45': 'Rate Limit',
+        '46': 'Sensitive Files', '47': 'Email Enum', '48': 'Broken Links',
+        '49': 'Tech CVE', '50': 'Origin IP Quick', '51': 'Origin IP Full',
+        '52': 'CDN/WAF Detect', '53': 'DNS+CT IP', '54': 'Subdomain Resolve',
+        '55': 'IP Verify', '56': 'Blind SQLi Detect', '57': 'Blind SQLi Schema',
+        '58': 'Blind SQLi Meta', '59': 'Blind SQLi Data', '60': 'Blind SQLi Full',
+        '61': 'Cmd Inject Detect', '62': 'Cmd Inject+OS', '63': 'Cmd Inject Shell',
+        '64': 'SSRF Detect 5-Level', '65': 'SSRF Cloud Meta', '66': 'SSRF File Read',
+        '67': 'SSRF Port Scan', '68': 'SSRF Network', '69': 'Race Single',
+        '70': 'Race Multi', '71': 'Race TOCTOU', '72': 'GraphQL Full',
+        '73': 'GraphQL Discover', '74': 'GraphQL Schema', '75': 'GraphQL DoS',
+        '76': 'GraphQL CSRF', '77': 'Ciphey Decode', '78': 'Hash Identify',
+        '79': 'JWT Full Playbook', '80': 'JWT Key Confusion', '81': 'JWT alg:none',
+        '82': 'JWT kid Inject', '83': 'JWT Crack', '84': 'SSTI Detect 17+',
+        '85': 'SSTI Exploit RCE', '86': 'NoSQL Detect', '87': 'NoSQL Auth Bypass',
+        '88': 'NoSQL Blind Extract', '89': 'Container Security', '90': 'Container Escape',
+        '91': 'WAF+Bypass Gen', '92': 'WebSocket Basic', '93': 'Smuggling CL.TE+TE.CL',
+        '94': 'CRLF Advanced', '95': 'Open Redirect Adv', '96': '403 Bypass',
+        '97': 'ParamSpider', '98': 'LinkFinder+Secret', '98a': 'Arjun',
+        '98b': 'Ghauri SQLi', '98c': 'CMSeeK', '98d': 'Sherlock', '98e': 'Tehqeeq',
+        '99': 'MEGA SCAN',
+        '100': 'LFI Detect v5', '101': 'LFI Exploit v5', '102': 'LFI RCE v5',
+        '103': 'XSS Reflected v5', '104': 'XSS DOM v5', '105': 'XSS Blind v5',
+        '106': 'XSS Full v5', '107': 'Subdomain Passive v5', '108': 'Subdomain Brute v5',
+        '109': 'Subdomain Full v5', '110': 'Hash ID v5', '111': 'Hash Crack v5',
+        '112': 'Auto Decode v5', '113': 'Reverse Shell v5', '114': 'HoaxShell',
+        '115': 'CMS Detect v5', '116': 'WP Scan v5', '117': 'CMS Full v5',
+        '118': 'OSINT Email v5', '119': 'OSINT Dorks v5', '120': 'OSINT Full v5',
+        '121': 'Cloud Meta v5', '122': 'Cloud S3 v5', '123': 'Cloud Gopherus',
+        '124': 'Cloud Full v5', '125': 'CORS Misconfig v5', '126': 'Open Redirect v5',
+        '127': 'XXE Detect v5', '128': 'XXE Extract v5', '129': 'XXE Deser v5',
+        '130': 'SSTI Sandbox v5', '131': 'Proto Pollution v5', '132': 'CSP Analysis v5',
+        '133': 'Cache Poison Adv v5', '134': 'Blind SQLi Headers', '135': 'Git Exposure v5',
+        '136': 'Sensitive Files Adv', '137': 'GitHub Dork Adv', '138': 'OAST Callback',
+        '139': 'ReDoS v5', '140': 'Password Spray v5', '141': 'Stealth v5',
+        '142': 'Wordlist v5', '143': 'Adv Web Full',
+        '144': 'SQLMap SQLi', '145': 'SQLi Exploit', '146': 'SQLi DIOS',
+        '147': 'SQLi WAF Bypass', '148': 'XSStrike Reflected', '149': 'XSStrike DOM',
+        '150': 'XSStrike Blind', '151': 'XSS Context-Aware', '152': 'XSS Full Adv',
+        '153': 'SQLi Full',
+        '154': 'LFI Adv Detect', '155': 'LFI PHP Wrapper', '156': 'LFI Log Poison',
+        '157': 'LFI /proc/self', '158': 'LFI WAF Bypass', '159': 'LFI Auto Exploit',
+        '160': 'Path Trav Detect', '161': 'Path Trav Config', '162': 'Path Trav Encode',
+        '163': 'LFI+PathTrav Full',
+        '164': 'Subdomain Passive Adv', '165': 'Subdomain Brute Adv',
+        '166': 'Subdomain Cert Adv', '167': 'Takeover Adv 25+',
+        '168': 'Subdomain Cloud Assets', '169': 'Subdomain Full Adv',
+        '170': 'OSINT Email Adv', '171': 'OSINT Dorks Adv', '172': 'OSINT DNS Adv',
+        '173': 'OSINT Full Adv',
+        '174': 'Wapiti XSS', '175': 'Wapiti SQLi', '176': 'Wapiti SSRF',
+        '177': 'Wapiti Full', '178': 'Dirsearch Quick', '179': 'Dirsearch Recursive',
+        '180': 'Dirsearch Extension', '181': 'Dirsearch Deep',
+        '182': 'Wapiti CRLF', '183': 'Wapiti CmdInj',
+        '184': 'TPLmap SSTI Detect', '185': 'TPLmap Engine ID',
+        '186': 'TPLmap Sandbox', '187': 'TPLmap Code Exec',
+        '188': 'TPLmap Blind',
+        '189': 'Nuclei Template', '190': 'Nuclei CVE', '191': 'Nuclei Panels',
+        '192': 'Nuclei Default Creds', '193': 'Nuclei Full',
+        '194': 'Flask Session', '195': 'Session Cookie', '196': 'Session Fixation',
+        '197': 'Session Full',
+        '198': 'Java Deser', '199': 'PHP Deser', '200': 'Python Deser',
+        '201': 'Deser Payload Gen', '202': 'Blind Deser', '203': 'Deser Full',
+        '204': 'Cloud S3 Adv', '205': 'Cloud Azure Adv', '206': 'Cloud GCP Adv',
+        '207': 'Cloud Meta Adv', '208': 'Cloud Cred Adv', '209': 'Cloud Misconfig',
+        '210': 'Cloud Full Adv', '211': 'Container Docker Adv',
+        '212': 'Container Escape Adv', '213': 'Container Full Adv',
+        '214': 'Password Spray', '215': 'Cred Stuffing', '216': 'Username Enum',
+        '217': 'Auth Testing Full', '218': 'Takeover Adv 30+',
+        '219': 'Takeover Mass', '220': 'Takeover CNAME', '221': 'Takeover Full',
+        '222': 'CORS Origin', '223': 'CORS Null', '224': 'CORS Subdomain',
+        '225': 'CORS Misconfig Adv', '226': 'CORS Full',
+        '227': 'Password Spray Stealth', '228': 'API Auth', '229': 'HTTP Form Auth',
+        '230': 'Takeover Service Verify', '231': 'CORS Cred', '232': 'CORS+CSRF Chain',
+        '233': 'Credential Full',
+        '234': 'OAST Blind SSRF', '235': 'OAST Blind XXE', '236': 'OAST Blind CmdI',
+        '237': 'OAST Blind XSS', '238': 'OAST Full', '239': 'ReDoS Detect',
+        '240': 'CSP Analysis', '241': 'CSP Bypass', '242': 'CSP+ReDoS Full',
+        '243': 'Git Exposure Adv', '244': 'Git Repo Dump', '245': 'GitHub Dork Search',
+        '246': 'SVN/HG/BZR', '247': 'Git Full Security', '248': 'OAST Server',
+        '249': 'ReDoS Exploit Gen', '250': 'CSP XSS Bypass', '251': 'Git Secret Scan',
+        '252': 'GitHub Code Search', '253': 'ReDoS+CSP+Git Combined',
+        '254': 'FFUF Content Fuzz', '255': 'API Endpoint Fuzz', '256': 'Param Fuzz',
+        '257': 'Header Fuzz', '258': 'VHost Discovery', '259': 'Recursive Fuzz',
+        '260': 'Fuzzer Full', '261': 'Reverse Shell Gen', '262': 'Bind Shell Gen',
+        '263': 'Shell Obfuscation', '264': 'Shell Payload Full',
+        '265': 'Hash Identify Adv', '266': 'Hash Crack Adv', '267': 'Hash Batch',
+        '268': 'Hash Online', '269': 'Hash Full',
+        '270': 'API JSON Fuzz', '271': 'Staged Payload', '272': 'Password Candidate',
+        '273': 'Fuzzer+Shell+Hash',
+        '274': 'HTTP Flood', '275': 'Slowloris', '276': 'TCP Flood',
+        '277': 'Rate Limit Adv', '278': 'DDoS Resilience', '279': 'DDoS Full',
+        '280': 'CMS Detect Adv', '281': 'WP Deep', '282': 'Joomla Deep',
+        '283': 'Drupal Deep', '284': 'Magento', '285': 'CMS Default Creds',
+        '286': 'CMS Full Adv',
+        '287': 'Auto Decode Adv', '288': 'Encoding Chain', '289': 'XOR Crack',
+        '290': 'Caesar Crack', '291': 'Crypto Frequency', '292': 'Crypto Full',
+        '293': 'DDoS+CMS+Crypto',
+        '294': 'AI Target Analysis', '295': 'AI Attack Strategy',
+        '296': 'AI Payload Gen', '297': 'AI Vuln Priority', '298': 'AI Report Gen',
+        '299': 'AI Full', '300': 'Stealth Mode', '301': 'TOR Routed',
+        '302': 'Proxy Chain', '303': 'Slow Mode', '304': 'Stealth Full',
+        '305': 'Wordlist Target', '306': 'Wordlist Password',
+        '307': 'Wordlist Subdomain', '308': 'Wordlist Username',
+        '309': 'Wordlist Full',
+        '310': 'AI+Stealth', '311': 'Stealth ID Rotation', '312': 'AI Interpret',
+        '313': 'AI+Stealth+Wordlist',
+        '314': 'Dalfox Quick', '315': 'Dalfox Mass', '316': 'Dalfox Blind',
+        '317': 'Dalfox DOM', '318': 'Dalfox Full', '319': 'Mass Dork',
+        '320': 'Mass SQLi', '321': 'Mass XSS', '322': 'Multi-Vuln',
+        '323': 'Mass File', '324': 'BizLogic Price', '325': 'BizLogic Payment',
+        '326': 'BizLogic Privilege', '327': 'BizLogic Race', '328': 'BizLogic Full',
+        '329': 'Dalfox Params', '330': 'Mass Classify', '331': 'BizLogic Cart',
+        '332': 'BizLogic Discount', '333': 'Mass+BizLogic',
+        '334': 'WS Endpoint', '335': 'WS Auth', '336': 'WS Fuzzing',
+        '337': 'WS Cross-Origin', '338': 'WS Full', '339': 'H2C Detect',
+        '340': 'CL.TE Detect', '341': 'TE.CL Detect', '342': 'Smuggling Full',
+        '343': 'Server-Side PP', '344': 'Client-Side PP', '345': 'DOM Clobber',
+        '346': 'PP Full', '347': 'WS DoS', '348': 'H2.CL Detect',
+        '349': 'Smuggling Timing', '350': 'PP Gadget Chains',
+        '351': 'WS Replay', '352': 'PP JSON Body', '353': 'WS+H2C+PP',
+        '354': 'Payload DB', '355': 'Payload Search', '356': 'GF Categorize',
+        '357': 'WAF Bypass Payloads', '358': 'Payload Full DB',
+        '359': 'Pattern Gen', '360': 'ROP Chain', '361': 'Shellcode Gen',
+        '362': 'Format String', '363': 'Integer Overflow', '364': 'Exploit Dev Tools',
+        '365': 'EXIF Extract', '366': 'Doc Metadata', '367': 'Metadata Strip',
+        '368': 'OPSEC Check', '369': 'Privacy Risk', '370': 'Metadata Full',
+        '371': 'Payload Import', '372': 'Payload Encode', '373': 'Payload+Exploit+Meta',
+        '374': 'Bounty Program Mgmt', '375': 'Finding Classification',
+        '376': 'Report Gen', '377': 'Scope Validation', '378': 'Bounty Full',
+        '379': 'Cache Detect', '380': 'Cache Unkeyed', '381': 'Cache Header Poison',
+        '382': 'Cache Deception', '383': 'Cache Poison Full',
+        '384': 'Mobile API', '385': 'SSL Pinning', '386': 'Deep Links',
+        '387': 'WebView Vulns', '388': 'Mobile Full',
+        '389': 'Cache Param Cloak', '390': 'Cache Fat GET', '391': 'Cert Pinning',
+        '392': 'APK Metadata', '393': 'Bounty+Cache+Mobile',
+    }
+
+    def group_menu(self):
+        """Display the Group-Based Scanning menu"""
+        while True:
+            console.print(Panel(
+                "[bold red]ZYLON FUSION v6.0 ULTIMATE[/bold red]\n"
+                "[bold yellow]GROUP-BASED SCANNING MODE[/bold yellow]\n\n"
+                f"[cyan]Target:[/cyan] {self.target or 'NOT SET'}\n"
+                f"[cyan]Total Groups:[/cyan] 51 | [cyan]Total Scans:[/cyan] 355",
+                title="[bold white] GROUP SCAN MODE [/bold white]",
+                border_style="bright_red",
+                box=box.HEAVY
+            ))
+
+            # Build group table - 3 columns for compact display
+            group_table = Table(
+                title="[bold yellow] Select a Group to Scan [/bold yellow]",
+                box=box.DOUBLE,
+                border_style="bright_magenta",
+                show_lines=True
+            )
+            group_table.add_column("Group", style="bold cyan", width=6)
+            group_table.add_column("Category", style="bold white", width=24)
+            group_table.add_column("Scans", style="yellow", width=6, justify="center")
+            group_table.add_column("Group", style="bold cyan", width=6)
+            group_table.add_column("Category", style="bold white", width=24)
+            group_table.add_column("Scans", style="yellow", width=6, justify="center")
+
+            # Sort groups and display in 2-column layout
+            sorted_groups = sorted(self.SCAN_GROUPS.items(), key=lambda x: int(x[0][1:]))
+            half = (len(sorted_groups) + 1) // 2
+
+            for i in range(half):
+                row_data = []
+                # Left column
+                gid, ginfo = sorted_groups[i]
+                row_data.append(f"{ginfo['icon']} {gid}")
+                row_data.append(ginfo['name'])
+                row_data.append(str(len(ginfo['scans'])))
+                # Right column
+                right_idx = i + half
+                if right_idx < len(sorted_groups):
+                    gid2, ginfo2 = sorted_groups[right_idx]
+                    row_data.append(f"{ginfo2['icon']} {gid2}")
+                    row_data.append(ginfo2['name'])
+                    row_data.append(str(len(ginfo2['scans'])))
+                else:
+                    row_data.extend(['', '', ''])
+
+                group_table.add_row(*row_data)
+
+            console.print(group_table)
+
+            # Special options
+            console.print("\n[bold green]  [GALL]  RUN ALL GROUPS (355 scans)[/bold green]")
+            console.print("[bold cyan]  [G+G]  Multiple Groups (e.g. G1+G2+G5)[/bold cyan]")
+            console.print("[bold yellow]  [0]    Back to Main Menu[/bold yellow]")
+
+            choice = Prompt.ask("\n[bold red]ZYLON GROUP[/bold red] [bold yellow]>[/bold yellow]").strip().upper()
+
+            if choice == '0':
+                console.print("[bold yellow][*] Returning to main menu...[/bold yellow]")
+                break
+            elif choice == 'GALL':
+                self._run_all_groups()
+            elif '+' in choice:
+                # Multiple groups: G1+G2+G5
+                self._run_multi_groups(choice)
+            elif choice in self.SCAN_GROUPS:
+                self._run_group_scan(choice)
+            else:
+                console.print(f"[bold red][!] Invalid group: {choice}[/bold red]")
+
+    def _run_group_scan(self, group_id):
+        """Run all scans in a specific group"""
+        if not self.target:
+            target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
+            success, msg = self.set_target(target)
+            if not success:
+                console.print(f"[bold red][!] {msg}[/bold red]")
+                return
+            console.print(f"[green][+] {msg}[/green]")
+
+        ginfo = self.SCAN_GROUPS[group_id]
+        scan_ids = ginfo['scans']
+        total = len(scan_ids)
+
+        # Show group header
+        console.print(Panel(
+            f"[{ginfo['color']}]{ginfo['icon']} {ginfo['name']}[/{ginfo['color']}]\n\n"
+            f"[cyan]Target:[/cyan] {self.target}\n"
+            f"[cyan]Total Scans:[/cyan] {total}\n"
+            f"[cyan]Description:[/cyan] {ginfo['desc']}\n\n"
+            f"[bold yellow]Scans to run:[/bold yellow] {', '.join(['['+s+']' for s in scan_ids])}",
+            title=f"[bold white] GROUP {group_id} [/bold white]",
+            border_style="bright_green",
+            box=box.HEAVY
+        ))
+
+        # Confirm
+        confirm = Prompt.ask("[bold yellow]Start group scan? (y/n)[/bold yellow]", default="y")
+        if confirm.lower() != 'y':
+            console.print("[yellow][*] Group scan cancelled.[/yellow]")
+            return
+
+        # Run all scans in group
+        group_results = []
+        start_time = time.time()
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}[/bold blue]"),
+            BarColumn(bar_width=40),
+            TextColumn("[bold yellow]{task.completed}/{task.total}[/bold yellow]"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"[cyan]{ginfo['name']}[/cyan]", total=total)
+
+            for idx, scan_id in enumerate(scan_ids, 1):
+                scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
+                progress.update(task, description=f"[cyan]{ginfo['name']} [{idx}/{total}] {scan_desc}[/cyan]")
+
+                # Run the scan
+                scan_result = {
+                    'scan_id': scan_id,
+                    'scan_name': scan_desc,
+                    'status': 'pending',
+                    'findings': 0,
+                    'error': None
+                }
+
+                try:
+                    self.results = {'target': self.target, 'scan_type': scan_id,
+                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    self.run_scan(scan_id)
+                    findings_count = len(self.results.get('findings', {}))
+                    scan_result['status'] = 'completed'
+                    scan_result['findings'] = findings_count
+                except Exception as e:
+                    scan_result['status'] = 'error'
+                    scan_result['error'] = str(e)
+
+                group_results.append(scan_result)
+                progress.advance(task)
+
+        elapsed = time.time() - start_time
+
+        # Display combined results
+        self._display_group_results(group_id, ginfo, group_results, elapsed)
+
+    def _run_multi_groups(self, choice):
+        """Run multiple groups (e.g. G1+G2+G5)"""
+        group_ids = [g.strip() for g in choice.split('+') if g.strip() in self.SCAN_GROUPS]
+
+        if not group_ids:
+            console.print("[bold red][!] No valid groups found in input![/bold red]")
+            return
+
+        if not self.target:
+            target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
+            success, msg = self.set_target(target)
+            if not success:
+                console.print(f"[bold red][!] {msg}[/bold red]")
+                return
+            console.print(f"[green][+] {msg}[/green]")
+
+        # Calculate total scans
+        total_scans = sum(len(self.SCAN_GROUPS[gid]['scans']) for gid in group_ids)
+        group_names = ' + '.join([f"{self.SCAN_GROUPS[gid]['icon']} {gid}:{self.SCAN_GROUPS[gid]['name']}" for gid in group_ids])
+
+        console.print(Panel(
+            f"[bold yellow]MULTI-GROUP SCAN[/bold yellow]\n\n"
+            f"[cyan]Groups:[/cyan] {group_names}\n"
+            f"[cyan]Total Scans:[/cyan] {total_scans}\n"
+            f"[cyan]Target:[/cyan] {self.target}",
+            border_style="bright_yellow"
+        ))
+
+        confirm = Prompt.ask("[bold yellow]Start multi-group scan? (y/n)[/bold yellow]", default="y")
+        if confirm.lower() != 'y':
+            return
+
+        all_results = {}
+        start_time = time.time()
+
+        for gid in group_ids:
+            ginfo = self.SCAN_GROUPS[gid]
+            console.print(f"\n[bold cyan][*] Starting Group {gid}: {ginfo['name']} ({len(ginfo['scans'])} scans)...[/bold cyan]")
+
+            group_results = []
+            for scan_id in ginfo['scans']:
+                scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
+                scan_result = {
+                    'scan_id': scan_id,
+                    'scan_name': scan_desc,
+                    'status': 'pending',
+                    'findings': 0,
+                    'error': None
+                }
+                try:
+                    self.results = {'target': self.target, 'scan_type': scan_id,
+                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    self.run_scan(scan_id)
+                    findings_count = len(self.results.get('findings', {}))
+                    scan_result['status'] = 'completed'
+                    scan_result['findings'] = findings_count
+                except Exception as e:
+                    scan_result['status'] = 'error'
+                    scan_result['error'] = str(e)
+                group_results.append(scan_result)
+
+            all_results[gid] = (ginfo, group_results)
+
+        elapsed = time.time() - start_time
+
+        # Display combined results for all groups
+        self._display_multi_group_results(all_results, elapsed)
+
+    def _run_all_groups(self):
+        """Run ALL groups (GALL)"""
+        if not self.target:
+            target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
+            success, msg = self.set_target(target)
+            if not success:
+                console.print(f"[bold red][!] {msg}[/bold red]")
+                return
+            console.print(f"[green][+] {msg}[/green]")
+
+        total_scans = sum(len(g['scans']) for g in self.SCAN_GROUPS.values())
+
+        console.print(Panel(
+            f"[bold red]MEGA GROUP SCAN - ALL 51 GROUPS[/bold red]\n\n"
+            f"[bold yellow]WARNING: This will run {total_scans} scans![/bold yellow]\n"
+            f"[cyan]Target:[/cyan] {self.target}\n"
+            f"[cyan]Estimated Time:[/cyan] {total_scans * 15 // 60}+ minutes",
+            border_style="bright_red",
+            box=box.HEAVY
+        ))
+
+        confirm = Prompt.ask("[bold red]Run ALL groups? This will take a LONG time! (y/n)[/bold red]", default="n")
+        if confirm.lower() != 'y':
+            return
+
+        all_results = {}
+        start_time = time.time()
+        completed_groups = 0
+        total_groups = len(self.SCAN_GROUPS)
+
+        for gid, ginfo in self.SCAN_GROUPS.items():
+            completed_groups += 1
+            console.print(f"\n[bold cyan][{completed_groups}/{total_groups}] Group {gid}: {ginfo['name']}...[/bold cyan]")
+
+            group_results = []
+            for scan_id in ginfo['scans']:
+                scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
+                scan_result = {
+                    'scan_id': scan_id,
+                    'scan_name': scan_desc,
+                    'status': 'pending',
+                    'findings': 0,
+                    'error': None
+                }
+                try:
+                    self.results = {'target': self.target, 'scan_type': scan_id,
+                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    self.run_scan(scan_id)
+                    findings_count = len(self.results.get('findings', {}))
+                    scan_result['status'] = 'completed'
+                    scan_result['findings'] = findings_count
+                except Exception as e:
+                    scan_result['status'] = 'error'
+                    scan_result['error'] = str(e)
+                group_results.append(scan_result)
+
+            all_results[gid] = (ginfo, group_results)
+
+        elapsed = time.time() - start_time
+        self._display_multi_group_results(all_results, elapsed, is_mega=True)
+
+    def _display_group_results(self, group_id, ginfo, group_results, elapsed):
+        """Display combined results for a single group"""
+        completed = sum(1 for r in group_results if r['status'] == 'completed')
+        errors = sum(1 for r in group_results if r['status'] == 'error')
+        total_findings = sum(r['findings'] for r in group_results)
+
+        # Header
+        console.print(Panel(
+            f"[{ginfo['color']}]{ginfo['icon']} GROUP {group_id}: {ginfo['name']} — COMBINED RESULTS[/{ginfo['color']}]\n\n"
+            f"[cyan]Target:[/cyan] {self.target}\n"
+            f"[cyan]Total Scans:[/cyan] {len(group_results)}\n"
+            f"[green]Completed:[/green] {completed}\n"
+            f"[red]Errors:[/red] {errors}\n"
+            f"[yellow]Total Findings:[/yellow] {total_findings}\n"
+            f"[dim]Time: {elapsed:.1f}s[/dim]",
+            title="[bold white] GROUP RESULTS [/bold white]",
+            border_style="bright_green",
+            box=box.HEAVY
+        ))
+
+        # Results table
+        results_table = Table(
+            title=f"[bold yellow]{ginfo['icon']} {ginfo['name']} — Scan Results[/bold yellow]",
+            box=box.ROUNDED,
+            border_style="bright_magenta",
+            show_lines=True
+        )
+        results_table.add_column("Scan ID", style="bold cyan", width=8)
+        results_table.add_column("Scan Name", style="white", width=22)
+        results_table.add_column("Status", style="bold", width=12)
+        results_table.add_column("Findings", style="bold yellow", width=10, justify="center")
+
+        for r in group_results:
+            if r['status'] == 'completed':
+                status = "[green]FOUND[/green]" if r['findings'] > 0 else "[dim]Clean[/dim]"
+            elif r['status'] == 'error':
+                status = "[red]ERROR[/red]"
+            else:
+                status = "[yellow]SKIP[/yellow]"
+
+            findings_str = str(r['findings']) if r['findings'] > 0 else "-"
+            results_table.add_row(
+                f"[{r['scan_id']}]",
+                r['scan_name'],
+                status,
+                findings_str
+            )
+
+        console.print(results_table)
+
+        # Summary
+        found_scans = [r for r in group_results if r['findings'] > 0]
+        if found_scans:
+            console.print(f"\n[bold green][+] Vulnerabilities found in {len(found_scans)}/{len(group_results)} scans![/bold green]")
+            for r in found_scans:
+                console.print(f"    [yellow][{r['scan_id']}] {r['scan_name']}[/yellow] → [bold red]{r['findings']} findings[/bold red]")
+        else:
+            console.print(f"\n[bold green][+] No vulnerabilities found in {ginfo['name']} group.[/bold green]")
+
+        # Save group results
+        self._save_group_results(group_id, ginfo, group_results, elapsed)
+
+    def _display_multi_group_results(self, all_results, elapsed, is_mega=False):
+        """Display combined results for multiple groups"""
+        total_scans = sum(len(results) for _, (_, results) in all_results.items())
+        total_completed = sum(1 for _, (_, results) in all_results.items() for r in results if r['status'] == 'completed')
+        total_errors = sum(1 for _, (_, results) in all_results.items() for r in results if r['status'] == 'error')
+        total_findings = sum(r['findings'] for _, (_, results) in all_results.items() for r in results)
+
+        title = "MEGA GROUP SCAN — ALL 51 GROUPS" if is_mega else "MULTI-GROUP SCAN — COMBINED RESULTS"
+
+        console.print(Panel(
+            f"[bold red]{title}[/bold red]\n\n"
+            f"[cyan]Target:[/cyan] {self.target}\n"
+            f"[cyan]Groups Scanned:[/cyan] {len(all_results)}\n"
+            f"[cyan]Total Scans:[/cyan] {total_scans}\n"
+            f"[green]Completed:[/green] {total_completed}\n"
+            f"[red]Errors:[/red] {total_errors}\n"
+            f"[bold yellow]Total Findings:[/bold yellow] {total_findings}\n"
+            f"[dim]Total Time: {elapsed:.1f}s[/dim]",
+            title="[bold white] COMBINED GROUP RESULTS [/bold white]",
+            border_style="bright_red",
+            box=box.HEAVY
+        ))
+
+        # Group-by-group summary table
+        summary_table = Table(
+            title="[bold yellow]Group Summary[/bold yellow]",
+            box=box.ROUNDED,
+            border_style="bright_magenta",
+            show_lines=True
+        )
+        summary_table.add_column("Group", style="bold cyan", width=8)
+        summary_table.add_column("Category", style="white", width=22)
+        summary_table.add_column("Scans", style="yellow", width=7, justify="center")
+        summary_table.add_column("Completed", style="green", width=10, justify="center")
+        summary_table.add_column("Errors", style="red", width=7, justify="center")
+        summary_table.add_column("Findings", style="bold yellow", width=10, justify="center")
+
+        for gid, (ginfo, results) in all_results.items():
+            comp = sum(1 for r in results if r['status'] == 'completed')
+            errs = sum(1 for r in results if r['status'] == 'error')
+            finds = sum(r['findings'] for r in results)
+            summary_table.add_row(
+                f"{ginfo['icon']} {gid}",
+                ginfo['name'],
+                str(len(results)),
+                str(comp),
+                str(errs),
+                str(finds) if finds > 0 else "-"
+            )
+
+        console.print(summary_table)
+
+        # Detailed findings
+        all_found = []
+        for gid, (ginfo, results) in all_results.items():
+            for r in results:
+                if r['findings'] > 0:
+                    all_found.append((gid, ginfo['name'], r))
+
+        if all_found:
+            console.print(f"\n[bold green][+] VULNERABILITIES FOUND in {len(all_found)} scans![/bold green]")
+            detail_table = Table(
+                title="[bold red]Detailed Findings[/bold red]",
+                box=box.ROUNDED,
+                border_style="bright_red"
+            )
+            detail_table.add_column("Group", style="cyan", width=8)
+            detail_table.add_column("Category", style="white", width=18)
+            detail_table.add_column("Scan ID", style="yellow", width=8)
+            detail_table.add_column("Scan Name", style="white", width=20)
+            detail_table.add_column("Findings", style="bold red", width=10, justify="center")
+
+            for gid, gname, r in all_found:
+                detail_table.add_row(gid, gname, f"[{r['scan_id']}]", r['scan_name'], str(r['findings']))
+
+            console.print(detail_table)
+        else:
+            console.print(f"\n[bold green][+] No vulnerabilities found across all groups![/bold green]")
+
+    def _save_group_results(self, group_id, ginfo, group_results, elapsed):
+        """Save group scan results to file"""
+        try:
+            reports_dir = os.path.join(get_home(), '.zylon', 'group_reports')
+            os.makedirs(reports_dir, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"group_{group_id}_{self.target.replace('.', '_')}_{timestamp}.json"
+            filepath = os.path.join(reports_dir, filename)
+
+            report = {
+                'group_id': group_id,
+                'group_name': ginfo['name'],
+                'target': self.target,
+                'timestamp': datetime.now().isoformat(),
+                'elapsed_seconds': round(elapsed, 2),
+                'total_scans': len(group_results),
+                'completed': sum(1 for r in group_results if r['status'] == 'completed'),
+                'errors': sum(1 for r in group_results if r['status'] == 'error'),
+                'total_findings': sum(r['findings'] for r in group_results),
+                'results': group_results
+            }
+
+            with open(filepath, 'w') as f:
+                json.dump(report, f, indent=2, default=str)
+
+            console.print(f"[dim][*] Group report saved: {filepath}[/dim]")
+        except Exception as e:
+            console.print(f"[dim][!] Could not save group report: {e}[/dim]")
+
     # ========================================================================
     # SCAN IMPLEMENTATIONS
     # ========================================================================
@@ -8187,7 +9155,10 @@ class ZylonFusion:
                 
                 elif user_input.lower() == 'ai':
                     self.run_ai_analysis()
-                
+
+                elif user_input.lower() == 'group':
+                    self.group_menu()
+
                 elif user_input.isdigit() and 0 <= int(user_input) <= 393:
                     if not self.target:
                         target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")

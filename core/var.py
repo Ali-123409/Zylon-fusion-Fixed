@@ -17,8 +17,8 @@ import platform
 # FRAMEWORK INFORMATION
 # ============================================================================
 
-ZYLON_VERSION = "6.0.0"
-ZYLON_CODENAME = "Nuclear Fusion v6.0 ULTIMATE - 89 Core Files + 394 Scan Types + 152+ Tools Fused + 30+ Engines"
+ZYLON_VERSION = "6.1.0"
+ZYLON_CODENAME = "Nuclear Fusion v6.1 ULTIMATE - 89 Core Files + 394 Scan Types + 51 Groups + Group-Based Scanning + 152+ Tools Fused"
 ZYLON_AUTHOR = "Zylon"
 ZYLON_DEBUG = False
 
