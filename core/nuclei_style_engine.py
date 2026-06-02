@@ -22,7 +22,6 @@ import os
 import re
 import sys
 import time
-import yaml
 import json
 import random
 import threading
@@ -31,6 +30,13 @@ import urllib3
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
+
+# Optional: yaml for template loading from files
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -1290,6 +1296,9 @@ class NucleiStyleEngine:
 
     def load_templates(self, template_dir):
         """Load YAML templates from a directory"""
+        if not YAML_AVAILABLE:
+            self._log("yaml module not installed - cannot load YAML templates. Install: pip install pyyaml", "warning")
+            return 0
         loaded = 0
         if not os.path.isdir(template_dir):
             self._log(f"Template directory not found: {template_dir}", "warning")

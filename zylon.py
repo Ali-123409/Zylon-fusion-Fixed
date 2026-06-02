@@ -56,6 +56,7 @@ def install_requirements():
     """Auto-install required packages with Termux awareness"""
     required = {
         'requests': 'requests',
+        'urllib3': 'urllib3',
         'rich': 'rich',
         'colorama': 'colorama',
         'beautifulsoup4': 'bs4',
@@ -64,6 +65,7 @@ def install_requirements():
         'lxml': 'lxml',
         'cryptography': 'cryptography',
         'aiohttp': 'aiohttp',
+        'pyyaml': 'yaml',
     }
     
     missing = []
@@ -133,90 +135,170 @@ console = Console()
 # ============================================================================
 
 from core.var import *
-from core.recon import ReconEngine
-from core.vuln import VulnEngine
-from core.network import NetworkEngine
-from core.web import WebEngine
-from core.reports import ReportEngine
-from core.ai_bridge import AIBridge
-from core.advanced_recon import AdvancedRecon
-from core.injections import InjectionArsenal
-from core.advanced_web import AdvancedWebAttacks
-from core.bounty_workflow import BugBountyWorkflow
-from core.v2_recon import V2ReconEngine
-from core.v2_vuln import V2VulnEngine
-from core.origin_ip import OriginIPEngine
-from core.hakuin_engine import HakuinEngine, BlindSQLiDetector
-from core.cmd_injection_engine import CommandInjectionEngine
-from core.ssrf_engine import SSRFEngine
-from core.race_engine import RaceEngine
-from core.graphql_engine import GraphQLEngine
-from core.ciphey_engine import CipheyEngine, run_ciphey_scan, run_hash_identifier
-from core.jwt_engine import JWTEngine, run_jwt_scan
-from core.ssti_engine import SSTIEngine, run_ssti_scan
-from core.nosql_engine import NoSQLEngine, run_nosql_scan
-from core.container_engine import ContainerEngine, run_container_scan
-from core.waf_evasion_engine import WAFFingerprinter, WAFBypassEngine, run_waf_scan
-from core.advanced_attacks_engine import WebSocketSecurityEngine, HTTPSmugglingEngine, CRLFEngine, OpenRedirectEngine, Bypass403Engine
-from core.advanced_attacks_engine import run_websocket_scan, run_smuggling_scan, run_crlf_scan, run_openredirect_scan, run_403bypass_scan
-from core.recon_engines import ParamSpiderEngine, LinkFinderEngine, ArjunEngine, GhauriEngine, CMSeeKEngine, SherlockEngine, TehqeeqEngine
-from core.recon_engines import run_paramspider, run_linkfinder, run_arjun, run_ghauri, run_cmseek, run_sherlock, run_tehqeeq
-from core.battle_engine import BattleEngine
-from core.ddos_engine import DDoSDefenseEngine
-from core.lfi_engine import LFIEngine, run_lfi_scan
-from core.xss_engine import XSSEngine, run_xss_scan
-from core.subdomain_engine import SubdomainEngine, run_subdomain_scan
-from core.crypto_engine import CryptoEngine, run_crypto_scan
-from core.shellgen_engine import ReverseShellEngine, run_shellgen_scan
-from core.cms_engine import CMSEngine, run_cms_scan
-from core.osint_engine import OSINTEngine, run_osint_scan
-from core.cloud_engine import CloudSecurityEngine, run_cloud_scan
-from core.cors_engine import CORSEngine, run_cors_scan
-from core.xxe_engine import XXEEngine, run_xxe_scan
-from core.advanced_web2_engine import AdvancedWebEngine, run_advanced_web_scan
-from core.git_exposure_engine import GitExposureEngine, run_git_scan
-from core.utility_engine import UtilityEngine, run_utility_scan
-from core.subdomain_advanced_engine import SubdomainAdvancedEngine, run as run_subdomain_advanced
-from core.osint_advanced_engine import OSINTAdvancedEngine, run as run_osint_advanced
-from core.sqlmap_engine import SQLMapEngine, run as run_sqlmap_scan
-from core.xssstrike_engine import XSStrikeEngine, run as run_xssstrike_scan
-from core.lfi_advanced_engine import LFIAdvancedEngine, run as run_lfi_advanced_scan
-from core.path_traversal_engine import PathTraversalEngine, run as run_path_traversal_scan
-from core.tplmap_engine import TPLmapEngine, run as run_tplmap_scan
-from core.nuclei_style_engine import NucleiStyleEngine, run as run_nuclei_scan
-from core.wapiti_engine import WapitiEngine, run as run_wapiti_scan
-from core.dirsearch_engine import DirsearchEngine, run as run_dirsearch_scan
-from core.session_security_engine import SessionSecurityEngine, run as run_session_security_scan
-from core.deserialization_engine import DeserializationEngine, run as run_deserialization_scan
-from core.cloud_advanced_engine import CloudAdvancedEngine, run as run_cloud_advanced
-from core.container_advanced_engine import ContainerAdvancedEngine, run as run_container_advanced
-from core.credential_engine import CredentialEngine, run as run_credential_scan
-from core.takeover_advanced_engine import TakeoverAdvancedEngine, run as run_takeover_advanced_scan
-from core.cors_advanced_engine import CORSAdvancedEngine, run as run_cors_advanced_scan
-from core.oast_engine import OASTEngine, run as run_oast_scan
-from core.redos_csp_engine import ReDoSCSPEngine, run as run_redos_csp_scan
-from core.git_advanced_engine import GitAdvancedEngine, run as run_git_advanced_scan
-from core.web_fuzzer_engine import WebFuzzerEngine, run as run_web_fuzzer
-from core.shellgen_advanced_engine import ShellGenAdvancedEngine, run as run_shellgen_advanced
-from core.hash_advanced_engine import HashAdvancedEngine, run as run_hash_advanced
-from core.ai_pentest_engine import AIPentestEngine, run as run_ai_pentest
-from core.stealth_engine import StealthEngine, run as run_stealth_scan
-from core.wordlist_engine import WordlistEngine, run as run_wordlist_gen
-from core.ddos_testing_engine import DDoSTestingEngine, run as run_ddos_testing
-from core.cms_advanced_engine import CMSAdvancedEngine, run as run_cms_advanced
-from core.crypto_advanced_engine import CryptoAdvancedEngine, run as run_crypto_advanced
-from core.dalfox_engine import DalfoxEngine, run as run_dalfox_scan
-from core.mass_vuln_engine import MassVulnEngine, run as run_mass_vuln_scan
-from core.bizlogic_engine import BizLogicEngine, run as run_bizlogic_scan
-from core.websocket_engine import WebSocketEngine, run as run_ws_scan
-from core.h2c_engine import H2CEngine, run as run_h2c_scan
-from core.prototype_engine import PrototypeEngine, run as run_pp_scan
-from core.payload_db_engine import PayloadDBEngine, run as run_payload_db
-from core.exploit_dev_engine import ExploitDevEngine, run as run_exploit_dev
-from core.metadata_engine import MetadataEngine, run as run_metadata
-from core.bounty_mgmt_engine import BountyMgmtEngine, run as run_bounty_mgmt
-from core.cache_poison_advanced_engine import CachePoisonAdvancedEngine, run as run_cache_poison_adv
-from core.mobile_security_engine import MobileSecurityEngine, run as run_mobile_security
+
+# ============================================================================
+# SAFE ENGINE IMPORTS - Graceful degradation if any engine has missing deps
+# ============================================================================
+
+_FAILED_IMPORTS = []
+
+def _safe_import(module_path, names, alias_map=None):
+    """Safely import names from a module. Returns dict of {local_name: object}."""
+    results = {}
+    alias_map = alias_map or {}
+    try:
+        mod = __import__(module_path, fromlist=names)
+        for name in names:
+            local_name = alias_map.get(name, name)
+            results[local_name] = getattr(mod, name)
+    except ImportError as e:
+        _FAILED_IMPORTS.append((module_path, str(e)))
+        for name in names:
+            local_name = alias_map.get(name, name)
+            results[local_name] = None
+    return results
+
+# Core engines
+_i = _safe_import('core.recon', ['ReconEngine']); ReconEngine = _i['ReconEngine']
+_i = _safe_import('core.vuln', ['VulnEngine']); VulnEngine = _i['VulnEngine']
+_i = _safe_import('core.network', ['NetworkEngine']); NetworkEngine = _i['NetworkEngine']
+_i = _safe_import('core.web', ['WebEngine']); WebEngine = _i['WebEngine']
+_i = _safe_import('core.reports', ['ReportEngine']); ReportEngine = _i['ReportEngine']
+_i = _safe_import('core.ai_bridge', ['AIBridge']); AIBridge = _i['AIBridge']
+_i = _safe_import('core.advanced_recon', ['AdvancedRecon']); AdvancedRecon = _i['AdvancedRecon']
+_i = _safe_import('core.injections', ['InjectionArsenal']); InjectionArsenal = _i['InjectionArsenal']
+_i = _safe_import('core.advanced_web', ['AdvancedWebAttacks']); AdvancedWebAttacks = _i['AdvancedWebAttacks']
+_i = _safe_import('core.bounty_workflow', ['BugBountyWorkflow']); BugBountyWorkflow = _i['BugBountyWorkflow']
+_i = _safe_import('core.v2_recon', ['V2ReconEngine']); V2ReconEngine = _i['V2ReconEngine']
+_i = _safe_import('core.v2_vuln', ['V2VulnEngine']); V2VulnEngine = _i['V2VulnEngine']
+_i = _safe_import('core.origin_ip', ['OriginIPEngine']); OriginIPEngine = _i['OriginIPEngine']
+_i = _safe_import('core.hakuin_engine', ['HakuinEngine', 'BlindSQLiDetector']); HakuinEngine = _i['HakuinEngine']; BlindSQLiDetector = _i['BlindSQLiDetector']
+_i = _safe_import('core.cmd_injection_engine', ['CommandInjectionEngine']); CommandInjectionEngine = _i['CommandInjectionEngine']
+_i = _safe_import('core.ssrf_engine', ['SSRFEngine']); SSRFEngine = _i['SSRFEngine']
+_i = _safe_import('core.race_engine', ['RaceEngine']); RaceEngine = _i['RaceEngine']
+_i = _safe_import('core.graphql_engine', ['GraphQLEngine']); GraphQLEngine = _i['GraphQLEngine']
+_i = _safe_import('core.ciphey_engine', ['CipheyEngine', 'run_ciphey_scan', 'run_hash_identifier']); CipheyEngine = _i['CipheyEngine']; run_ciphey_scan = _i['run_ciphey_scan']; run_hash_identifier = _i['run_hash_identifier']
+_i = _safe_import('core.jwt_engine', ['JWTEngine', 'run_jwt_scan']); JWTEngine = _i['JWTEngine']; run_jwt_scan = _i['run_jwt_scan']
+_i = _safe_import('core.ssti_engine', ['SSTIEngine', 'run_ssti_scan']); SSTIEngine = _i['SSTIEngine']; run_ssti_scan = _i['run_ssti_scan']
+_i = _safe_import('core.nosql_engine', ['NoSQLEngine', 'run_nosql_scan']); NoSQLEngine = _i['NoSQLEngine']; run_nosql_scan = _i['run_nosql_scan']
+_i = _safe_import('core.container_engine', ['ContainerEngine', 'run_container_scan']); ContainerEngine = _i['ContainerEngine']; run_container_scan = _i['run_container_scan']
+_i = _safe_import('core.waf_evasion_engine', ['WAFFingerprinter', 'WAFBypassEngine', 'run_waf_scan']); WAFFingerprinter = _i['WAFFingerprinter']; WAFBypassEngine = _i['WAFBypassEngine']; run_waf_scan = _i['run_waf_scan']
+_i = _safe_import('core.advanced_attacks_engine', ['WebSocketSecurityEngine', 'HTTPSmugglingEngine', 'CRLFEngine', 'OpenRedirectEngine', 'Bypass403Engine']); WebSocketSecurityEngine = _i['WebSocketSecurityEngine']; HTTPSmugglingEngine = _i['HTTPSmugglingEngine']; CRLFEngine = _i['CRLFEngine']; OpenRedirectEngine = _i['OpenRedirectEngine']; Bypass403Engine = _i['Bypass403Engine']
+_i = _safe_import('core.advanced_attacks_engine', ['run_websocket_scan', 'run_smuggling_scan', 'run_crlf_scan', 'run_openredirect_scan', 'run_403bypass_scan']); run_websocket_scan = _i['run_websocket_scan']; run_smuggling_scan = _i['run_smuggling_scan']; run_crlf_scan = _i['run_crlf_scan']; run_openredirect_scan = _i['run_openredirect_scan']; run_403bypass_scan = _i['run_403bypass_scan']
+_i = _safe_import('core.recon_engines', ['ParamSpiderEngine', 'LinkFinderEngine', 'ArjunEngine', 'GhauriEngine', 'CMSeeKEngine', 'SherlockEngine', 'TehqeeqEngine']); ParamSpiderEngine = _i['ParamSpiderEngine']; LinkFinderEngine = _i['LinkFinderEngine']; ArjunEngine = _i['ArjunEngine']; GhauriEngine = _i['GhauriEngine']; CMSeeKEngine = _i['CMSeeKEngine']; SherlockEngine = _i['SherlockEngine']; TehqeeqEngine = _i['TehqeeqEngine']
+_i = _safe_import('core.recon_engines', ['run_paramspider', 'run_linkfinder', 'run_arjun', 'run_ghauri', 'run_cmseek', 'run_sherlock', 'run_tehqeeq']); run_paramspider = _i['run_paramspider']; run_linkfinder = _i['run_linkfinder']; run_arjun = _i['run_arjun']; run_ghauri = _i['run_ghauri']; run_cmseek = _i['run_cmseek']; run_sherlock = _i['run_sherlock']; run_tehqeeq = _i['run_tehqeeq']
+_i = _safe_import('core.battle_engine', ['BattleEngine']); BattleEngine = _i['BattleEngine']
+_i = _safe_import('core.ddos_engine', ['DDoSDefenseEngine']); DDoSDefenseEngine = _i['DDoSDefenseEngine']
+_i = _safe_import('core.lfi_engine', ['LFIEngine', 'run_lfi_scan']); LFIEngine = _i['LFIEngine']; run_lfi_scan = _i['run_lfi_scan']
+_i = _safe_import('core.xss_engine', ['XSSEngine', 'run_xss_scan']); XSSEngine = _i['XSSEngine']; run_xss_scan = _i['run_xss_scan']
+_i = _safe_import('core.subdomain_engine', ['SubdomainEngine', 'run_subdomain_scan']); SubdomainEngine = _i['SubdomainEngine']; run_subdomain_scan = _i['run_subdomain_scan']
+_i = _safe_import('core.crypto_engine', ['CryptoEngine', 'run_crypto_scan']); CryptoEngine = _i['CryptoEngine']; run_crypto_scan = _i['run_crypto_scan']
+_i = _safe_import('core.shellgen_engine', ['ReverseShellEngine', 'run_shellgen_scan']); ReverseShellEngine = _i['ReverseShellEngine']; run_shellgen_scan = _i['run_shellgen_scan']
+_i = _safe_import('core.cms_engine', ['CMSEngine', 'run_cms_scan']); CMSEngine = _i['CMSEngine']; run_cms_scan = _i['run_cms_scan']
+_i = _safe_import('core.osint_engine', ['OSINTEngine', 'run_osint_scan']); OSINTEngine = _i['OSINTEngine']; run_osint_scan = _i['run_osint_scan']
+_i = _safe_import('core.cloud_engine', ['CloudSecurityEngine', 'run_cloud_scan']); CloudSecurityEngine = _i['CloudSecurityEngine']; run_cloud_scan = _i['run_cloud_scan']
+_i = _safe_import('core.cors_engine', ['CORSEngine', 'run_cors_scan']); CORSEngine = _i['CORSEngine']; run_cors_scan = _i['run_cors_scan']
+_i = _safe_import('core.xxe_engine', ['XXEEngine', 'run_xxe_scan']); XXEEngine = _i['XXEEngine']; run_xxe_scan = _i['run_xxe_scan']
+_i = _safe_import('core.advanced_web2_engine', ['AdvancedWebEngine', 'run_advanced_web_scan']); AdvancedWebEngine = _i['AdvancedWebEngine']; run_advanced_web_scan = _i['run_advanced_web_scan']
+_i = _safe_import('core.git_exposure_engine', ['GitExposureEngine', 'run_git_scan']); GitExposureEngine = _i['GitExposureEngine']; run_git_scan = _i['run_git_scan']
+_i = _safe_import('core.utility_engine', ['UtilityEngine', 'run_utility_scan']); UtilityEngine = _i['UtilityEngine']; run_utility_scan = _i['run_utility_scan']
+_i = _safe_import('core.subdomain_advanced_engine', ['run'], {'run': 'run_subdomain_advanced'}); run_subdomain_advanced = _i['run_subdomain_advanced']; SubdomainAdvancedEngine = None
+_i = _safe_import('core.osint_advanced_engine', ['run'], {'run': 'run_osint_advanced'}); run_osint_advanced = _i['run_osint_advanced']; OSINTAdvancedEngine = None
+_i = _safe_import('core.sqlmap_engine', ['run'], {'run': 'run_sqlmap_scan'}); run_sqlmap_scan = _i['run_sqlmap_scan']; SQLMapEngine = None
+_i = _safe_import('core.xssstrike_engine', ['run'], {'run': 'run_xssstrike_scan'}); run_xssstrike_scan = _i['run_xssstrike_scan']; XSStrikeEngine = None
+_i = _safe_import('core.lfi_advanced_engine', ['run'], {'run': 'run_lfi_advanced_scan'}); run_lfi_advanced_scan = _i['run_lfi_advanced_scan']; LFIAdvancedEngine = None
+_i = _safe_import('core.path_traversal_engine', ['run'], {'run': 'run_path_traversal_scan'}); run_path_traversal_scan = _i['run_path_traversal_scan']; PathTraversalEngine = None
+_i = _safe_import('core.tplmap_engine', ['run'], {'run': 'run_tplmap_scan'}); run_tplmap_scan = _i['run_tplmap_scan']; TPLmapEngine = None
+_i = _safe_import('core.nuclei_style_engine', ['run'], {'run': 'run_nuclei_scan'}); run_nuclei_scan = _i['run_nuclei_scan']; NucleiStyleEngine = None
+_i = _safe_import('core.wapiti_engine', ['run'], {'run': 'run_wapiti_scan'}); run_wapiti_scan = _i['run_wapiti_scan']; WapitiEngine = None
+_i = _safe_import('core.dirsearch_engine', ['run'], {'run': 'run_dirsearch_scan'}); run_dirsearch_scan = _i['run_dirsearch_scan']; DirsearchEngine = None
+_i = _safe_import('core.session_security_engine', ['run'], {'run': 'run_session_security_scan'}); run_session_security_scan = _i['run_session_security_scan']; SessionSecurityEngine = None
+_i = _safe_import('core.deserialization_engine', ['run'], {'run': 'run_deserialization_scan'}); run_deserialization_scan = _i['run_deserialization_scan']; DeserializationEngine = None
+_i = _safe_import('core.cloud_advanced_engine', ['run'], {'run': 'run_cloud_advanced'}); run_cloud_advanced = _i['run_cloud_advanced']; CloudAdvancedEngine = None
+_i = _safe_import('core.container_advanced_engine', ['run'], {'run': 'run_container_advanced'}); run_container_advanced = _i['run_container_advanced']; ContainerAdvancedEngine = None
+_i = _safe_import('core.credential_engine', ['run'], {'run': 'run_credential_scan'}); run_credential_scan = _i['run_credential_scan']; CredentialEngine = None
+_i = _safe_import('core.takeover_advanced_engine', ['run'], {'run': 'run_takeover_advanced_scan'}); run_takeover_advanced_scan = _i['run_takeover_advanced_scan']; TakeoverAdvancedEngine = None
+_i = _safe_import('core.cors_advanced_engine', ['run'], {'run': 'run_cors_advanced_scan'}); run_cors_advanced_scan = _i['run_cors_advanced_scan']; CORSAdvancedEngine = None
+_i = _safe_import('core.oast_engine', ['run'], {'run': 'run_oast_scan'}); run_oast_scan = _i['run_oast_scan']; OASTEngine = None
+_i = _safe_import('core.redos_csp_engine', ['run'], {'run': 'run_redos_csp_scan'}); run_redos_csp_scan = _i['run_redos_csp_scan']; ReDoSCSPEngine = None
+_i = _safe_import('core.git_advanced_engine', ['run'], {'run': 'run_git_advanced_scan'}); run_git_advanced_scan = _i['run_git_advanced_scan']; GitAdvancedEngine = None
+_i = _safe_import('core.web_fuzzer_engine', ['run'], {'run': 'run_web_fuzzer'}); run_web_fuzzer = _i['run_web_fuzzer']; WebFuzzerEngine = None
+_i = _safe_import('core.shellgen_advanced_engine', ['run'], {'run': 'run_shellgen_advanced'}); run_shellgen_advanced = _i['run_shellgen_advanced']; ShellGenAdvancedEngine = None
+_i = _safe_import('core.hash_advanced_engine', ['run'], {'run': 'run_hash_advanced'}); run_hash_advanced = _i['run_hash_advanced']; HashAdvancedEngine = None
+_i = _safe_import('core.ai_pentest_engine', ['run'], {'run': 'run_ai_pentest'}); run_ai_pentest = _i['run_ai_pentest']; AIPentestEngine = None
+_i = _safe_import('core.stealth_engine', ['run'], {'run': 'run_stealth_scan'}); run_stealth_scan = _i['run_stealth_scan']; StealthEngine = None
+_i = _safe_import('core.wordlist_engine', ['run'], {'run': 'run_wordlist_gen'}); run_wordlist_gen = _i['run_wordlist_gen']; WordlistEngine = None
+_i = _safe_import('core.ddos_testing_engine', ['run'], {'run': 'run_ddos_testing'}); run_ddos_testing = _i['run_ddos_testing']; DDoSTestingEngine = None
+_i = _safe_import('core.cms_advanced_engine', ['run'], {'run': 'run_cms_advanced'}); run_cms_advanced = _i['run_cms_advanced']; CMSAdvancedEngine = None
+_i = _safe_import('core.crypto_advanced_engine', ['run'], {'run': 'run_crypto_advanced'}); run_crypto_advanced = _i['run_crypto_advanced']; CryptoAdvancedEngine = None
+_i = _safe_import('core.dalfox_engine', ['run'], {'run': 'run_dalfox_scan'}); run_dalfox_scan = _i['run_dalfox_scan']; DalfoxEngine = None
+_i = _safe_import('core.mass_vuln_engine', ['run'], {'run': 'run_mass_vuln_scan'}); run_mass_vuln_scan = _i['run_mass_vuln_scan']; MassVulnEngine = None
+_i = _safe_import('core.bizlogic_engine', ['run'], {'run': 'run_bizlogic_scan'}); run_bizlogic_scan = _i['run_bizlogic_scan']; BizLogicEngine = None
+_i = _safe_import('core.websocket_engine', ['run'], {'run': 'run_ws_scan'}); run_ws_scan = _i['run_ws_scan']; WebSocketEngine = None
+_i = _safe_import('core.h2c_engine', ['run'], {'run': 'run_h2c_scan'}); run_h2c_scan = _i['run_h2c_scan']; H2CEngine = None
+_i = _safe_import('core.prototype_engine', ['run'], {'run': 'run_pp_scan'}); run_pp_scan = _i['run_pp_scan']; PrototypeEngine = None
+_i = _safe_import('core.payload_db_engine', ['run'], {'run': 'run_payload_db'}); run_payload_db = _i['run_payload_db']; PayloadDBEngine = None
+_i = _safe_import('core.exploit_dev_engine', ['run'], {'run': 'run_exploit_dev'}); run_exploit_dev = _i['run_exploit_dev']; ExploitDevEngine = None
+_i = _safe_import('core.metadata_engine', ['run'], {'run': 'run_metadata'}); run_metadata = _i['run_metadata']; MetadataEngine = None
+_i = _safe_import('core.bounty_mgmt_engine', ['run'], {'run': 'run_bounty_mgmt'}); run_bounty_mgmt = _i['run_bounty_mgmt']; BountyMgmtEngine = None
+_i = _safe_import('core.cache_poison_advanced_engine', ['run'], {'run': 'run_cache_poison_adv'}); run_cache_poison_adv = _i['run_cache_poison_adv']; CachePoisonAdvancedEngine = None
+_i = _safe_import('core.mobile_security_engine', ['run'], {'run': 'run_mobile_security'}); run_mobile_security = _i['run_mobile_security']; MobileSecurityEngine = None
+
+# Also get the class-based engines from modules that use 'run' function pattern
+_i = _safe_import('core.subdomain_advanced_engine', ['SubdomainAdvancedEngine']); SubdomainAdvancedEngine = _i.get('SubdomainAdvancedEngine', SubdomainAdvancedEngine)
+_i = _safe_import('core.osint_advanced_engine', ['OSINTAdvancedEngine']); OSINTAdvancedEngine = _i.get('OSINTAdvancedEngine', OSINTAdvancedEngine)
+_i = _safe_import('core.sqlmap_engine', ['SQLMapEngine']); SQLMapEngine = _i.get('SQLMapEngine', SQLMapEngine)
+_i = _safe_import('core.xssstrike_engine', ['XSStrikeEngine']); XSStrikeEngine = _i.get('XSStrikeEngine', XSStrikeEngine)
+_i = _safe_import('core.lfi_advanced_engine', ['LFIAdvancedEngine']); LFIAdvancedEngine = _i.get('LFIAdvancedEngine', LFIAdvancedEngine)
+_i = _safe_import('core.path_traversal_engine', ['PathTraversalEngine']); PathTraversalEngine = _i.get('PathTraversalEngine', PathTraversalEngine)
+_i = _safe_import('core.tplmap_engine', ['TPLmapEngine']); TPLmapEngine = _i.get('TPLmapEngine', TPLmapEngine)
+_i = _safe_import('core.nuclei_style_engine', ['NucleiStyleEngine']); NucleiStyleEngine = _i.get('NucleiStyleEngine', NucleiStyleEngine)
+_i = _safe_import('core.wapiti_engine', ['WapitiEngine']); WapitiEngine = _i.get('WapitiEngine', WapitiEngine)
+_i = _safe_import('core.dirsearch_engine', ['DirsearchEngine']); DirsearchEngine = _i.get('DirsearchEngine', DirsearchEngine)
+_i = _safe_import('core.session_security_engine', ['SessionSecurityEngine']); SessionSecurityEngine = _i.get('SessionSecurityEngine', SessionSecurityEngine)
+_i = _safe_import('core.deserialization_engine', ['DeserializationEngine']); DeserializationEngine = _i.get('DeserializationEngine', DeserializationEngine)
+_i = _safe_import('core.cloud_advanced_engine', ['CloudAdvancedEngine']); CloudAdvancedEngine = _i.get('CloudAdvancedEngine', CloudAdvancedEngine)
+_i = _safe_import('core.container_advanced_engine', ['ContainerAdvancedEngine']); ContainerAdvancedEngine = _i.get('ContainerAdvancedEngine', ContainerAdvancedEngine)
+_i = _safe_import('core.credential_engine', ['CredentialEngine']); CredentialEngine = _i.get('CredentialEngine', CredentialEngine)
+_i = _safe_import('core.takeover_advanced_engine', ['TakeoverAdvancedEngine']); TakeoverAdvancedEngine = _i.get('TakeoverAdvancedEngine', TakeoverAdvancedEngine)
+_i = _safe_import('core.cors_advanced_engine', ['CORSAdvancedEngine']); CORSAdvancedEngine = _i.get('CORSAdvancedEngine', CORSAdvancedEngine)
+_i = _safe_import('core.oast_engine', ['OASTEngine']); OASTEngine = _i.get('OASTEngine', OASTEngine)
+_i = _safe_import('core.redos_csp_engine', ['ReDoSCSPEngine']); ReDoSCSPEngine = _i.get('ReDoSCSPEngine', ReDoSCSPEngine)
+_i = _safe_import('core.git_advanced_engine', ['GitAdvancedEngine']); GitAdvancedEngine = _i.get('GitAdvancedEngine', GitAdvancedEngine)
+_i = _safe_import('core.web_fuzzer_engine', ['WebFuzzerEngine']); WebFuzzerEngine = _i.get('WebFuzzerEngine', WebFuzzerEngine)
+_i = _safe_import('core.shellgen_advanced_engine', ['ShellGenAdvancedEngine']); ShellGenAdvancedEngine = _i.get('ShellGenAdvancedEngine', ShellGenAdvancedEngine)
+_i = _safe_import('core.hash_advanced_engine', ['HashAdvancedEngine']); HashAdvancedEngine = _i.get('HashAdvancedEngine', HashAdvancedEngine)
+_i = _safe_import('core.ai_pentest_engine', ['AIPentestEngine']); AIPentestEngine = _i.get('AIPentestEngine', AIPentestEngine)
+_i = _safe_import('core.stealth_engine', ['StealthEngine']); StealthEngine = _i.get('StealthEngine', StealthEngine)
+_i = _safe_import('core.wordlist_engine', ['WordlistEngine']); WordlistEngine = _i.get('WordlistEngine', WordlistEngine)
+_i = _safe_import('core.ddos_testing_engine', ['DDoSTestingEngine']); DDoSTestingEngine = _i.get('DDoSTestingEngine', DDoSTestingEngine)
+_i = _safe_import('core.cms_advanced_engine', ['CMSAdvancedEngine']); CMSAdvancedEngine = _i.get('CMSAdvancedEngine', CMSAdvancedEngine)
+_i = _safe_import('core.crypto_advanced_engine', ['CryptoAdvancedEngine']); CryptoAdvancedEngine = _i.get('CryptoAdvancedEngine', CryptoAdvancedEngine)
+_i = _safe_import('core.dalfox_engine', ['DalfoxEngine']); DalfoxEngine = _i.get('DalfoxEngine', DalfoxEngine)
+_i = _safe_import('core.mass_vuln_engine', ['MassVulnEngine']); MassVulnEngine = _i.get('MassVulnEngine', MassVulnEngine)
+_i = _safe_import('core.bizlogic_engine', ['BizLogicEngine']); BizLogicEngine = _i.get('BizLogicEngine', BizLogicEngine)
+_i = _safe_import('core.websocket_engine', ['WebSocketEngine']); WebSocketEngine = _i.get('WebSocketEngine', WebSocketEngine)
+_i = _safe_import('core.h2c_engine', ['H2CEngine']); H2CEngine = _i.get('H2CEngine', H2CEngine)
+_i = _safe_import('core.prototype_engine', ['PrototypeEngine']); PrototypeEngine = _i.get('PrototypeEngine', PrototypeEngine)
+_i = _safe_import('core.payload_db_engine', ['PayloadDBEngine']); PayloadDBEngine = _i.get('PayloadDBEngine', PayloadDBEngine)
+_i = _safe_import('core.exploit_dev_engine', ['ExploitDevEngine']); ExploitDevEngine = _i.get('ExploitDevEngine', ExploitDevEngine)
+_i = _safe_import('core.metadata_engine', ['MetadataEngine']); MetadataEngine = _i.get('MetadataEngine', MetadataEngine)
+_i = _safe_import('core.bounty_mgmt_engine', ['BountyMgmtEngine']); BountyMgmtEngine = _i.get('BountyMgmtEngine', BountyMgmtEngine)
+_i = _safe_import('core.cache_poison_advanced_engine', ['CachePoisonAdvancedEngine']); CachePoisonAdvancedEngine = _i.get('CachePoisonAdvancedEngine', CachePoisonAdvancedEngine)
+_i = _safe_import('core.mobile_security_engine', ['MobileSecurityEngine']); MobileSecurityEngine = _i.get('MobileSecurityEngine', MobileSecurityEngine)
+
+# Show warnings for failed imports (after Console is available)
+def _show_import_warnings():
+    """Show warnings for any engines that failed to import"""
+    if _FAILED_IMPORTS:
+        try:
+            console = Console()
+            console.print(f"\n[bold yellow][!] {len(_FAILED_IMPORTS)} module(s) failed to import:[/bold yellow]")
+            for mod_path, err in _FAILED_IMPORTS:
+                console.print(f"  [dim]- {mod_path}: {err}[/dim]")
+            console.print("[bold cyan][*] Run 'fix' command to install missing dependencies[/bold cyan]\n")
+        except Exception:
+            print(f"[!] {len(_FAILED_IMPORTS)} module(s) failed to import. Run 'fix' command.")
 
 # ============================================================================
 # SIGNAL HANDLER
