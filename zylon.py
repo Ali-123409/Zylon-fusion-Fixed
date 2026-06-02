@@ -775,6 +775,44 @@ class ZylonUI:
             ("391", "Certificate Pinning Test"),
             ("392", "APK Metadata Analysis"),
             ("393", "Bounty + Cache + Mobile Combined"),
+            # V3 Security Engine (Orphaned → Now Wired!)
+            ("400", "GraphQL Security Tester (V3 Engine)"),
+            ("401", "DOM XSS Scanner (V3 Engine)"),
+            ("402", "Web Cache Deception (V3 Engine)"),
+            ("403", "Clickjacking Tester (V3 Engine)"),
+            ("404", "Account Takeover Scanner (V3 Engine)"),
+            ("405", "OAuth Misconfiguration (V3 Engine)"),
+            ("406", "HTTP Method Tampering (V3 Engine)"),
+            ("407", "Blind XSS Scanner (V3 Engine)"),
+            ("408", "2FA Bypass Tester (V3 Engine)"),
+            ("409", "Mixed Content Scanner (V3 Engine)"),
+            ("410", "Information Disclosure (V3 Engine)"),
+            ("411", "V3 Security Full Scan (All 12 Modules)"),
+            # V4 Hunting Engine
+            ("412", "Username Enumeration (V4 Hunting)"),
+            ("413", "Email Security DMARC/DKIM/SPF (V4 Hunting)"),
+            ("414", "CSRF Detection (V4 Hunting)"),
+            ("415", "Framework Detection (V4 Hunting)"),
+            ("416", "JS Library Vulnerabilities (V4 Hunting)"),
+            ("417", "403 Bypass Advanced (V4 Hunting)"),
+            ("418", "Cross-Domain Policy (V4 Hunting)"),
+            ("419", "CVE-to-Exploit Lookup (V4 Hunting)"),
+            # V5 Async Engine
+            ("420", "Async Subdomain Brute Force (V5 Engine)"),
+            ("421", "Async Directory Brute Force (V5 Engine)"),
+            ("422", "AI Smart Scan (V5 Engine)"),
+            # HTTP C2
+            ("423", "HTTP C2 Server (Phone Farm Control)"),
+            # External Tool Wrappers
+            ("424", "Nuclei Scanner (External)"),
+            ("425", "SQLMap (External)"),
+            ("426", "Sublist3r (External)"),
+            ("427", "FFUF Fuzzer (External)"),
+            ("tools", "Check External Tool Status"),
+            ("perf", "Show Performance Stats (DNS Cache, Threads, Timeouts)"),
+            ("search", "Search scans by keyword (e.g., search xss)"),
+            ("checkpoints", "List resumable scan checkpoints"),
+            ("resume", "Resume interrupted group scan (resume <target> <group>)"),
             ("fix", "Install Missing Dependencies"),
             ("exit/quit/q", "Exit ZYLON FUSION"),
         ]
@@ -897,6 +935,98 @@ class ZylonFusion:
         self.v4_hunting = V4HuntingEngine(self.session) if V4HuntingEngine else None
         self.v5_async = V5AsyncEngine(self.session) if V5AsyncEngine else None
         self.http_c2 = HTTPC2Server(port=9999) if HTTPC2Server else None
+
+        # Performance: Shared optimized session for engines that don't use self.session
+        self._perf_session = OptimizedSession(max_pool=100, max_per_host=20) if OptimizedSession else None
+
+        # Scan Deduplication Cache: avoids re-running identical (target, scan_type) within TTL
+        self._scan_cache = {}       # key: (target, scan_type) -> (timestamp, results)
+        self._scan_cache_ttl = 300  # 5 minutes — skip re-scan if last result is this fresh
+
+        # HTTP Response Cache: avoids re-fetching same URL within TTL
+        self._http_cache = {}       # key: url -> (timestamp, response_dict)
+        self._http_cache_ttl = 120  # 2 minutes
+
+        # Resumable Scan Checkpoint System
+        self._checkpoint_dir = os.path.join(get_home(), '.zylon', 'checkpoints')
+        self._current_checkpoint = None
+
+    def perf_get(self, url, **kwargs):
+        """Performance-optimized GET: DNS cache + rate limiter + smart timeout + connection pooling + response cache"""
+        # Check HTTP response cache first
+        if url in self._http_cache:
+            cached_time, cached_resp = self._http_cache[url]
+            if time.time() - cached_time < self._http_cache_ttl:
+                return cached_resp
+        if self.rate_limiter:
+            self.rate_limiter.wait()
+        if self.smart_timeout:
+            kwargs.setdefault('timeout', self.smart_timeout.get_timeout())
+        else:
+            kwargs.setdefault('timeout', DEFAULT_TIMEOUT)
+        kwargs.setdefault('verify', VERIFY_SSL)
+        kwargs.setdefault('allow_redirects', False)
+        try:
+            start = time.time()
+            resp = self.session.get(url, **kwargs)
+            elapsed = time.time() - start
+            if self.smart_timeout:
+                self.smart_timeout.record_response(elapsed)
+            if self.adaptive_threads:
+                self.adaptive_threads.record_success(elapsed)
+            if self.rate_limiter:
+                self.rate_limiter.reset_backoff()
+            # Cache the response
+            self._http_cache[url] = (time.time(), resp)
+            return resp
+        except Exception as e:
+            if self.adaptive_threads:
+                self.adaptive_threads.record_error()
+            if self.rate_limiter and '429' in str(e):
+                self.rate_limiter.trigger_backoff()
+            raise
+
+    def perf_post(self, url, **kwargs):
+        """Performance-optimized POST: DNS cache + rate limiter + smart timeout + connection pooling"""
+        if self.rate_limiter:
+            self.rate_limiter.wait()
+        if self.smart_timeout:
+            kwargs.setdefault('timeout', self.smart_timeout.get_timeout())
+        else:
+            kwargs.setdefault('timeout', DEFAULT_TIMEOUT)
+        kwargs.setdefault('verify', VERIFY_SSL)
+        try:
+            start = time.time()
+            resp = self.session.post(url, **kwargs)
+            elapsed = time.time() - start
+            if self.smart_timeout:
+                self.smart_timeout.record_response(elapsed)
+            if self.adaptive_threads:
+                self.adaptive_threads.record_success(elapsed)
+            if self.rate_limiter:
+                self.rate_limiter.reset_backoff()
+            return resp
+        except Exception as e:
+            if self.adaptive_threads:
+                self.adaptive_threads.record_error()
+            if self.rate_limiter and '429' in str(e):
+                self.rate_limiter.trigger_backoff()
+            raise
+
+    def resolve_dns(self, domain):
+        """DNS resolution with caching (saves 2-5s per repeated lookup)"""
+        if self.dns_cache:
+            return self.dns_cache.resolve(domain)
+        try:
+            return socket.gethostbyname(domain)
+        except Exception:
+            return None
+
+    def get_optimal_threads(self):
+        """Get adaptive thread count based on system and error rate"""
+        if self.adaptive_threads:
+            return self.adaptive_threads.get_thread_count()
+        return MAX_THREADS
     
     def set_target(self, target):
         """Validate and set target"""
@@ -938,7 +1068,19 @@ class ZylonFusion:
         scan_func = scan_map.get(scan_type)
         if scan_func:
             try:
+                # Scan Dedup: skip if same (target, scan_type) ran recently
+                cache_key = (self.target, scan_type)
+                if cache_key in self._scan_cache:
+                    cached_time, cached_results = self._scan_cache[cache_key]
+                    age = time.time() - cached_time
+                    if age < self._scan_cache_ttl:
+                        console.print(f"[dim][*] Using cached results from {age:.0f}s ago (TTL: {self._scan_cache_ttl}s)[/dim]")
+                        self.results = cached_results
+                        return
+
                 scan_func()
+                # Cache this scan's results
+                self._scan_cache[cache_key] = (time.time(), dict(self.results))
                 # Track scan history
                 self.scan_history.append({
                     'scan_type': scan_type,
@@ -1331,6 +1473,34 @@ class ZylonFusion:
             'scans': ['239', '240', '241', '249', '250', '242'],
             'desc': 'All ReDoS & CSP — Detection, Analysis, Bypass, Exploit Gen, XSS Test'
         },
+        'G52': {
+            'name': 'V3 Security (Advanced)',
+            'icon': '🔐',
+            'color': 'bold red',
+            'scans': ['400', '401', '402', '403', '404', '405', '406', '407', '408', '409', '410', '411'],
+            'desc': 'V3 Security Engine — GraphQL, DOM XSS, Cache Deception, Clickjacking, ATO, OAuth, HTTP Method, Blind XSS, 2FA, Mixed Content, Info Disclosure'
+        },
+        'G53': {
+            'name': 'V4 Hunting',
+            'icon': '🎯',
+            'color': 'bold yellow',
+            'scans': ['412', '413', '414', '415', '416', '417', '418', '419'],
+            'desc': 'V4 Hunting — Username Enum, Email Security, CSRF, Framework, JS Libs, 403 Bypass, Cross-Domain, CVE Lookup'
+        },
+        'G54': {
+            'name': 'V5 Async + C2',
+            'icon': '⚡',
+            'color': 'bold cyan',
+            'scans': ['420', '421', '422', '423'],
+            'desc': 'V5 Async Engine + HTTP C2 — Async Subdomain BF, Async Dir BF, AI Smart Scan, Phone Farm C2'
+        },
+        'G55': {
+            'name': 'External Tools',
+            'icon': '🔧',
+            'color': 'bold white',
+            'scans': ['424', '425', '426', '427'],
+            'desc': 'External Tool Wrappers — Nuclei, SQLMap, Sublist3r, FFUF (must be installed separately)'
+        },
     }
 
     # Scan ID to description mapping for group results
@@ -1484,6 +1654,21 @@ class ZylonFusion:
         '387': 'WebView Vulns', '388': 'Mobile Full',
         '389': 'Cache Param Cloak', '390': 'Cache Fat GET', '391': 'Cert Pinning',
         '392': 'APK Metadata', '393': 'Bounty+Cache+Mobile',
+        # V3 Security Engine
+        '400': 'V3 GraphQL', '401': 'V3 DOM XSS', '402': 'V3 Cache Deception',
+        '403': 'V3 Clickjacking', '404': 'V3 Account Takeover', '405': 'V3 OAuth',
+        '406': 'V3 HTTP Method', '407': 'V3 Blind XSS', '408': 'V3 2FA Bypass',
+        '409': 'V3 Mixed Content', '410': 'V3 Info Disclosure', '411': 'V3 Full',
+        # V4 Hunting Engine
+        '412': 'V4 Username Enum', '413': 'V4 Email Security', '414': 'V4 CSRF',
+        '415': 'V4 Framework', '416': 'V4 JS Libs', '417': 'V4 403 Bypass',
+        '418': 'V4 Cross-Domain', '419': 'V4 CVE Lookup',
+        # V5 Async Engine
+        '420': 'V5 Subdomain BF', '421': 'V5 Dir BF', '422': 'V5 Smart Scan',
+        # HTTP C2
+        '423': 'HTTP C2 Server',
+        # External Tools
+        '424': 'Nuclei', '425': 'SQLMap Ext', '426': 'Sublist3r', '427': 'FFUF',
     }
 
     def group_menu(self):
@@ -1624,7 +1809,7 @@ class ZylonFusion:
                 lock = threading.Lock()
 
                 def _run_single_scan(scan_id):
-                    """Run a single scan and return result (thread-safe via thread-local storage)"""
+                    """Run a single scan — thread-safe via per-thread results dict"""
                     scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
                     scan_result = {
                         'scan_id': scan_id,
@@ -1634,30 +1819,31 @@ class ZylonFusion:
                         'error': None
                     }
                     try:
-                        # Thread-safe: use thread-local storage instead of shared self.results
-                        _tls = threading.local()
-                        _tls.results = {'target': self.target, 'scan_type': scan_id,
-                                       'timestamp': datetime.now().isoformat(), 'findings': {}}
-                        # Swap self.results with thread-local (under lock)
+                        # Create per-thread results dict (NO shared state mutation)
+                        thread_results = {'target': self.target, 'scan_type': scan_id,
+                                         'timestamp': datetime.now().isoformat(), 'findings': {}}
+                        # Execute scan under lock to prevent self.results races
+                        # (scan methods all write to self.results)
                         with lock:
                             saved_results = self.results
-                            self.results = _tls.results
-                        # Execute scan using scan_map
-                        scan_map = self._build_scan_map()
-                        scan_func = scan_map.get(scan_id)
-                        if scan_func:
-                            scan_func()
-                        findings_count = len(self.results.get('findings', {}))
+                            self.results = thread_results
+                            try:
+                                scan_map = self._build_scan_map()
+                                scan_func = scan_map.get(scan_id)
+                                if scan_func:
+                                    scan_func()
+                                # Capture results while we still hold the lock
+                                thread_results = dict(self.results)
+                            finally:
+                                self.results = saved_results
+                        findings_count = len(thread_results.get('findings', {}))
                         scan_result['status'] = 'completed'
                         scan_result['findings'] = findings_count
                         # Save JSON for this thread's results
                         try:
-                            self.reports.save_json(self.results, self.target)
+                            self.reports.save_json(thread_results, self.target)
                         except Exception:
                             pass
-                        # Restore original self.results (under lock)
-                        with lock:
-                            self.results = saved_results
                     except Exception as e:
                         scan_result['status'] = 'error'
                         scan_result['error'] = str(e)
@@ -1777,29 +1963,30 @@ class ZylonFusion:
                     'error': None
                 }
                 try:
-                    # Thread-safe: save/restore self.results
-                    saved_results = self.results
-                    self.results = {'target': self.target, 'scan_type': scan_id,
-                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
-                    scan_map = self._build_scan_map()
-                    scan_func = scan_map.get(scan_id)
-                    if scan_func:
-                        scan_func()
-                    findings_count = len(self.results.get('findings', {}))
+                    # Thread-safe: lock protects self.results swap+execute+restore
+                    thread_results = {'target': self.target, 'scan_type': scan_id,
+                                     'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    with lock:
+                        saved_results = self.results
+                        self.results = thread_results
+                        try:
+                            scan_map = self._build_scan_map()
+                            scan_func = scan_map.get(scan_id)
+                            if scan_func:
+                                scan_func()
+                            thread_results = dict(self.results)
+                        finally:
+                            self.results = saved_results
+                    findings_count = len(thread_results.get('findings', {}))
                     scan_result['status'] = 'completed'
                     scan_result['findings'] = findings_count
                     try:
-                        self.reports.save_json(self.results, self.target)
+                        self.reports.save_json(thread_results, self.target)
                     except Exception:
                         pass
-                    self.results = saved_results
                 except Exception as e:
                     scan_result['status'] = 'error'
                     scan_result['error'] = str(e)
-                    try:
-                        self.results = saved_results
-                    except:
-                        pass
                 return scan_result
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1867,6 +2054,7 @@ class ZylonFusion:
             console.print(f"\n[bold cyan][{group_num}/{total_groups}] Group {gid}: {ginfo['name']} — PARALLEL ({max_workers} workers)[/bold cyan]")
 
             group_results = []
+            lock = threading.Lock()
 
             def _run_scan_mega(scan_id):
                 scan_desc = self.SCAN_DESCRIPTIONS.get(scan_id, f'Scan {scan_id}')
@@ -1878,29 +2066,30 @@ class ZylonFusion:
                     'error': None
                 }
                 try:
-                    # Thread-safe: save/restore self.results
-                    saved_results = self.results
-                    self.results = {'target': self.target, 'scan_type': scan_id,
-                                   'timestamp': datetime.now().isoformat(), 'findings': {}}
-                    scan_map = self._build_scan_map()
-                    scan_func = scan_map.get(scan_id)
-                    if scan_func:
-                        scan_func()
-                    findings_count = len(self.results.get('findings', {}))
+                    # Thread-safe: lock protects self.results swap+execute+restore
+                    thread_results = {'target': self.target, 'scan_type': scan_id,
+                                     'timestamp': datetime.now().isoformat(), 'findings': {}}
+                    with lock:
+                        saved_results = self.results
+                        self.results = thread_results
+                        try:
+                            scan_map = self._build_scan_map()
+                            scan_func = scan_map.get(scan_id)
+                            if scan_func:
+                                scan_func()
+                            thread_results = dict(self.results)
+                        finally:
+                            self.results = saved_results
+                    findings_count = len(thread_results.get('findings', {}))
                     scan_result['status'] = 'completed'
                     scan_result['findings'] = findings_count
                     try:
-                        self.reports.save_json(self.results, self.target)
+                        self.reports.save_json(thread_results, self.target)
                     except Exception:
                         pass
-                    self.results = saved_results
                 except Exception as e:
                     scan_result['status'] = 'error'
                     scan_result['error'] = str(e)
-                    try:
-                        self.results = saved_results
-                    except:
-                        pass
                 return scan_result
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -9083,13 +9272,49 @@ class ZylonFusion:
                 elif user_input.lower() == 'scope':
                     self._scope_menu()
 
+                elif user_input.lower() == 'perf':
+                    self._show_perf_stats()
+
+                elif user_input.lower().startswith('search '):
+                    self._search_scans(user_input[7:].strip())
+
+                elif user_input.lower() == 'search':
+                    query = Prompt.ask("[bold yellow]Search scans (keyword)[/bold yellow]")
+                    self._search_scans(query)
+
+                elif user_input.lower() == 'checkpoints':
+                    self._list_checkpoints()
+
+                elif user_input.lower() == 'tools':
+                    self._tools_status()
+
+                elif user_input.lower().startswith('resume '):
+                    # resume <target> <group_id>
+                    parts = user_input[7:].strip().split()
+                    if len(parts) >= 1:
+                        target = parts[0]
+                        group_id = parts[1] if len(parts) > 1 else None
+                        success, msg = self.set_target(target)
+                        if success:
+                            console.print(f"[green][+] {msg}[/green]")
+                            if group_id:
+                                cp = self._load_checkpoint(group_id)
+                                if cp:
+                                    console.print(f"[cyan][*] Resuming {group_id} from checkpoint ({len(cp.get('completed_scans',[]))}/{len(cp.get('scan_ids',[]))} done)[/cyan]")
+                                else:
+                                    console.print(f"[yellow][!] No checkpoint found for {group_id}[/yellow]")
+                            else:
+                                self._list_checkpoints()
+                        else:
+                            console.print(f"[red][!] {msg}[/red]")
+
                 elif user_input.lower() == 'poc':
                     self._poc_menu()
 
                 elif user_input.lower() == 'group':
                     self.group_menu()
 
-                elif (user_input.isdigit() and 0 <= int(user_input) <= 393) or user_input in ['98a', '98b', '98c', '98d', '98e']:
+                elif (user_input.isdigit() and 0 <= int(user_input) <= 427) or user_input in ['98a', '98b', '98c', '98d', '98e']:
                     if not self.target:
                         target = Prompt.ask("[bold yellow]Enter target domain/IP[/bold yellow]")
                         success, msg = self.set_target(target)
@@ -9106,10 +9331,10 @@ class ZylonFusion:
                         console.print(f"[green][+] {msg}[/green]")
                         # Ask for scan type
                         scan_type = Prompt.ask(
-                            "[bold yellow]Select scan type (0-393, 98a-98e, 99)[/bold yellow]",
+                            "[bold yellow]Select scan type (0-427, 98a-98e, 99)[/bold yellow]",
                             default="0"
                         )
-                        if (scan_type.isdigit() and 0 <= int(scan_type) <= 393) or scan_type in ['98a', '98b', '98c', '98d', '98e']:
+                        if (scan_type.isdigit() and 0 <= int(scan_type) <= 427) or scan_type in ['98a', '98b', '98c', '98d', '98e']:
                             self.run_scan(scan_type)
                     else:
                         console.print(f"[bold red][!] {msg}[/bold red]")
@@ -9121,6 +9346,414 @@ class ZylonFusion:
             except Exception as e:
                 console.print(f"[bold red][!] Error: {str(e)}[/bold red]")
     
+    # ========================================================================
+    # V3 SECURITY ENGINE SCANS (400-411)
+    # ========================================================================
+
+    def _scan_v3_graphql(self):
+        """400: GraphQL Security Tester (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 GraphQL Security Test...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_graphql(url)
+            self.results['findings']['v3_graphql'] = result
+            if result.get('vulnerable') or result.get('graphql_found'):
+                console.print(f"[bold green][+] GraphQL found! {len(result.get('findings',[]))} issues[/bold green]")
+            else:
+                console.print("[dim][-] No GraphQL issues found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_dom_xss(self):
+        """401: DOM XSS Scanner (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 DOM XSS Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_dom_xss(url)
+            self.results['findings']['v3_dom_xss'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] DOM XSS found! {len(result.get('findings',[]))} sinks[/bold green]")
+            else:
+                console.print("[dim][-] No DOM XSS found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_cache_deception(self):
+        """402: Web Cache Deception (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 Cache Deception Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_cache_deception(url)
+            self.results['findings']['v3_cache_deception'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Cache Deception found![/bold green]")
+            else:
+                console.print("[dim][-] No cache deception found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_clickjacking(self):
+        """403: Clickjacking Tester (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 Clickjacking Test...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_clickjacking(url)
+            self.results['findings']['v3_clickjacking'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Clickjacking vulnerable![/bold green]")
+            else:
+                console.print("[dim][-] No clickjacking found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_account_takeover(self):
+        """404: Account Takeover (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 Account Takeover Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_account_takeover(url)
+            self.results['findings']['v3_ato'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] ATO vectors found![/bold green]")
+            else:
+                console.print("[dim][-] No ATO vectors found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_oauth(self):
+        """405: OAuth Misconfiguration (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 OAuth Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_oauth_misconfig(url)
+            self.results['findings']['v3_oauth'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] OAuth misconfig found![/bold green]")
+            else:
+                console.print("[dim][-] No OAuth issues found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_http_method(self):
+        """406: HTTP Method Tampering (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 HTTP Method Tampering...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_http_method_tampering(url)
+            self.results['findings']['v3_http_method'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] HTTP Method tampering found![/bold green]")
+            else:
+                console.print("[dim][-] No method tampering found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_blind_xss(self):
+        """407: Blind XSS Scanner (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 Blind XSS Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_blind_xss(url)
+            self.results['findings']['v3_blind_xss'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Blind XSS vectors found![/bold green]")
+            else:
+                console.print("[dim][-] No blind XSS found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_2fa_bypass(self):
+        """408: 2FA Bypass Tester (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 2FA Bypass Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_2fa_bypass(url)
+            self.results['findings']['v3_2fa_bypass'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] 2FA bypass found![/bold green]")
+            else:
+                console.print("[dim][-] No 2FA bypass found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_mixed_content(self):
+        """409: Mixed Content Scanner (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 Mixed Content Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_mixed_content(url)
+            self.results['findings']['v3_mixed_content'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Mixed content found![/bold green]")
+            else:
+                console.print("[dim][-] No mixed content issues[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_info_disclosure(self):
+        """410: Information Disclosure (V3 Engine)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            with console.status("[bold cyan]V3 Info Disclosure Scan...[/bold cyan]"):
+                engine = V3SecurityEngine()
+                result = engine.scan_info_disclosure(url)
+            self.results['findings']['v3_info_disclosure'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Info disclosure found![/bold green]")
+            else:
+                console.print("[dim][-] No info disclosure found[/dim]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    def _scan_v3_full(self):
+        """411: V3 Security Full Scan (All 12 Modules)"""
+        url = f"{self.protocol}{self.target}"
+        if V3SecurityEngine:
+            console.print(f"\n[bold red][*] V3 SECURITY FULL SCAN on {self.target}[/bold red]")
+            engine = V3SecurityEngine()
+            all_results = {}
+            scans = [
+                ('GraphQL', engine.scan_graphql),
+                ('DOM XSS', engine.scan_dom_xss),
+                ('Cache Deception', engine.scan_cache_deception),
+                ('Clickjacking', engine.scan_clickjacking),
+                ('Account Takeover', engine.scan_account_takeover),
+                ('OAuth', engine.scan_oauth_misconfig),
+                ('HTTP Method', engine.scan_http_method_tampering),
+                ('Blind XSS', engine.scan_blind_xss),
+                ('2FA Bypass', engine.scan_2fa_bypass),
+                ('Mixed Content', engine.scan_mixed_content),
+                ('Info Disclosure', engine.scan_info_disclosure),
+            ]
+            vuln_count = 0
+            for name, func in scans:
+                with console.status(f"[cyan]V3: {name}...[/cyan]"):
+                    try:
+                        r = func(url)
+                        all_results[name] = r
+                        if r.get('vulnerable'):
+                            vuln_count += 1
+                            console.print(f"  [green][+] {name}: VULNERABLE[/green]")
+                        else:
+                            console.print(f"  [dim][-] {name}: Clean[/dim]")
+                    except Exception as e:
+                        all_results[name] = {'error': str(e)}
+            self.results['findings']['v3_full'] = all_results
+            console.print(f"\n[bold green][+] V3 Full: {vuln_count}/{len(scans)} vulnerable[/bold green]")
+        else:
+            console.print("[bold red][!] V3 Security Engine not available[/bold red]")
+
+    # ========================================================================
+    # V4 HUNTING ENGINE SCANS (412-419)
+    # ========================================================================
+
+    def _scan_v4_username_enum(self):
+        """412: Username Enumeration (V4 Hunting)"""
+        url = f"{self.protocol}{self.target}"
+        if V4HuntingEngine:
+            login_url = Prompt.ask("[yellow]Login URL[/yellow]", default=f"{url}/login")
+            with console.status("[bold cyan]V4 Username Enumeration...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_username_enum(login_url)
+            self.results['findings']['v4_username_enum'] = result
+            if result.get('differential_detected'):
+                console.print(f"[bold green][+] Usernames enumerated: {len(result.get('confirmed_usernames',[]))}[/bold green]")
+            else:
+                console.print("[dim][-] No differential response detected[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_email_security(self):
+        """413: Email Security (DMARC/DKIM/SPF) (V4 Hunting)"""
+        if V4HuntingEngine:
+            domain = self.target.replace('www.', '').split(':')[0]
+            with console.status("[bold cyan]V4 Email Security Scan...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_email_security(domain)
+            self.results['findings']['v4_email_security'] = result
+            if result.get('vulnerable') or result.get('misconfigured'):
+                console.print(f"[bold green][+] Email security issues found![/bold green]")
+            else:
+                console.print("[dim][-] Email security properly configured[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_csrf(self):
+        """414: CSRF Detection (V4 Hunting)"""
+        url = f"{self.protocol}{self.target}"
+        if V4HuntingEngine:
+            with console.status("[bold cyan]V4 CSRF Scan...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_csrf(url)
+            self.results['findings']['v4_csrf'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] CSRF vulnerability found![/bold green]")
+            else:
+                console.print("[dim][-] No CSRF issues found[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_framework(self):
+        """415: Framework Detection (V4 Hunting)"""
+        url = f"{self.protocol}{self.target}"
+        if V4HuntingEngine:
+            with console.status("[bold cyan]V4 Framework Detection...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_framework(url)
+            self.results['findings']['v4_framework'] = result
+            if result.get('detected'):
+                fws = result.get('frameworks', [])
+                console.print(f"[bold green][+] Frameworks detected: {', '.join(fws)}[/bold green]")
+            else:
+                console.print("[dim][-] No frameworks detected[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_js_libraries(self):
+        """416: JS Library Vulnerabilities (V4 Hunting)"""
+        url = f"{self.protocol}{self.target}"
+        if V4HuntingEngine:
+            with console.status("[bold cyan]V4 JS Library Scan...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_js_libraries(url)
+            self.results['findings']['v4_js_libs'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Vulnerable JS libraries found![/bold green]")
+            else:
+                console.print("[dim][-] No vulnerable JS libraries[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_403_bypass(self):
+        """417: 403 Bypass Advanced (V4 Hunting)"""
+        url = f"{self.protocol}{self.target}"
+        if V4HuntingEngine:
+            with console.status("[bold cyan]V4 403 Bypass Scan...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_403_bypass(url)
+            self.results['findings']['v4_403_bypass'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] 403 bypass found![/bold green]")
+            else:
+                console.print("[dim][-] No 403 bypass found[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_cross_domain(self):
+        """418: Cross-Domain Policy (V4 Hunting)"""
+        if V4HuntingEngine:
+            domain = self.target.replace('www.', '').split(':')[0]
+            with console.status("[bold cyan]V4 Cross-Domain Scan...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_cross_domain(domain)
+            self.results['findings']['v4_cross_domain'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Cross-domain issues found![/bold green]")
+            else:
+                console.print("[dim][-] No cross-domain issues[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    def _scan_v4_cve_lookup(self):
+        """419: CVE-to-Exploit Lookup (V4 Hunting)"""
+        if V4HuntingEngine:
+            software = Prompt.ask("[yellow]Software name[/yellow]", default="apache")
+            version = Prompt.ask("[yellow]Version (optional)[/yellow]", default="")
+            with console.status("[bold cyan]V4 CVE Lookup...[/bold cyan]"):
+                engine = V4HuntingEngine()
+                result = engine.scan_cve_lookup(software, version or None)
+            self.results['findings']['v4_cve_lookup'] = result
+            if result.get('cves'):
+                console.print(f"[bold green][+] {len(result['cves'])} CVEs found![/bold green]")
+            else:
+                console.print("[dim][-] No CVEs found[/dim]")
+        else:
+            console.print("[bold red][!] V4 Hunting Engine not available[/bold red]")
+
+    # ========================================================================
+    # V5 ASYNC ENGINE SCANS (420-422)
+    # ========================================================================
+
+    def _scan_v5_subdomain_bruteforce(self):
+        """420: Async Subdomain Brute Force (V5 Engine)"""
+        if V5AsyncEngine:
+            domain = self.target.replace('www.', '').split(':')[0]
+            with console.status("[bold cyan]V5 Async Subdomain Brute Force...[/bold cyan]"):
+                engine = V5AsyncEngine()
+                result = engine.scan_subdomain_bruteforce(domain)
+            self.results['findings']['v5_subdomain_bf'] = result
+            found = result.get('found', [])
+            if found:
+                console.print(f"[bold green][+] {len(found)} subdomains found![/bold green]")
+            else:
+                console.print("[dim][-] No subdomains found[/dim]")
+        else:
+            console.print("[bold red][!] V5 Async Engine not available[/bold red]")
+
+    def _scan_v5_dir_bruteforce(self):
+        """421: Async Directory Brute Force (V5 Engine)"""
+        if V5AsyncEngine:
+            url = f"{self.protocol}{self.target}"
+            with console.status("[bold cyan]V5 Async Dir Brute Force...[/bold cyan]"):
+                engine = V5AsyncEngine()
+                result = engine.scan_dir_bruteforce_async(url)
+            self.results['findings']['v5_dir_bf'] = result
+            found = result.get('found', [])
+            if found:
+                console.print(f"[bold green][+] {len(found)} directories found![/bold green]")
+            else:
+                console.print("[dim][-] No directories found[/dim]")
+        else:
+            console.print("[bold red][!] V5 Async Engine not available[/bold red]")
+
+    def _scan_v5_smart(self):
+        """422: AI Smart Scan (V5 Engine)"""
+        if V5AsyncEngine:
+            url = f"{self.protocol}{self.target}"
+            with console.status("[bold cyan]V5 AI Smart Scan...[/bold cyan]"):
+                engine = V5AsyncEngine()
+                result = engine.scan_smart(url, ai_bridge=self.ai if hasattr(self, 'ai') else None)
+            self.results['findings']['v5_smart'] = result
+            if result.get('vulnerable'):
+                console.print(f"[bold green][+] Smart scan found vulnerabilities![/bold green]")
+            else:
+                console.print("[dim][-] No vulnerabilities found[/dim]")
+        else:
+            console.print("[bold red][!] V5 Async Engine not available[/bold red]")
+
+    # ========================================================================
+    # HTTP C2 SERVER (423)
+    # ========================================================================
+
+    def _scan_http_c2(self):
+        """423: HTTP C2 Server for Phone Farm"""
+        if HTTPC2Server:
+            port = Prompt.ask("[yellow]C2 Server Port[/yellow]", default="9999")
+            target = Prompt.ask("[yellow]Target for phone farm[/yellow]", default=self.target)
+            console.print(f"\n[bold red][*] Starting HTTP C2 Server on port {port}[/bold red]")
+            console.print(f"[cyan]Target: {target}[/cyan]")
+            console.print(f"[dim]Phones will poll this server for commands[/dim]")
+            try:
+                c2 = HTTPC2Server(port=int(port))
+                c2.target = target
+                c2.start_interactive()
+            except KeyboardInterrupt:
+                console.print("\n[bold yellow][!] C2 Server stopped[/bold yellow]")
+            except Exception as e:
+                console.print(f"[bold red][!] C2 Error: {str(e)}[/bold red]")
+        else:
+            console.print("[bold red][!] HTTP C2 Server not available[/bold red]")
+
     def _build_scan_map(self):
         """Build the scan_map dictionary (extracted from run_scan for thread-safe access)"""
         return {
@@ -9523,155 +10156,39 @@ class ZylonFusion:
             '42': self._scan_bounty_recon,
             '43': self._scan_bounty_vuln,
             '99': self._scan_mega,
-            '0': self._scan_full_recon,
-            '1': self._scan_whois,
-            '2': self._scan_geoip,
-            '3': self._scan_dns,
-            '4': self._scan_subdomains,
-            '5': self._scan_ports,
-            '6': self._scan_banners,
-            '7': self._scan_headers,
-            '8': self._scan_ssl,
-            '9': self._scan_sqli,
-            '10': self._scan_xss,
-            '11': self._scan_dirbrute,
-            '12': self._scan_wordpress,
-            '13': self._scan_cors,
-            '14': self._scan_openredirect,
-            '15': self._scan_crlf,
-            '16': self._scan_cookies,
-            '17': self._scan_javascript,
-            '18': self._scan_cloudbuckets,
-            '19': self._scan_waf,
-            '20': self._scan_techstack,
-            '21': self._scan_fullvuln,
-            '22': self._scan_nuclear,
-            '23': self._scan_deep_crawl,
-            '24': self._scan_param_mining,
-            '25': self._scan_wayback,
-            '26': self._scan_google_dork,
-            '27': self._scan_github_dork,
-            '28': self._scan_deep_js,
-            '29': self._scan_takeover,
-            '30': self._scan_ssrf,
-            '31': self._scan_ssti,
-            '32': self._scan_lfi,
-            '33': self._scan_xxe,
-            '34': self._scan_idor,
-            '35': self._scan_race,
-            '36': self._scan_proto_pollution,
-            '37': self._scan_cache_poison,
-            '38': self._scan_smuggling,
-            '39': self._scan_host_header,
-            '40': self._scan_jwt,
-            '41': self._scan_broken_auth,
-            '42': self._scan_bounty_recon,
-            '43': self._scan_bounty_vuln,
-            '44': self._scan_api_fuzzer,
-            '45': self._scan_rate_limit,
-            '46': self._scan_sensitive_files,
-            '47': self._scan_email_enum,
-            '48': self._scan_broken_links,
-            '49': self._scan_tech_cve,
-            '50': self._scan_origin_ip_quick,
-            '51': self._scan_origin_ip_full,
-            '52': self._scan_cdn_detection,
-            '53': self._scan_dns_cert_hunt,
-            '54': self._scan_subdomain_origin,
-            '55': self._scan_ip_verify,
-            '56': self._scan_blind_sqli_detect,
-            '57': self._scan_blind_sqli_schemas,
-            '58': self._scan_blind_sqli_meta,
-            '59': self._scan_blind_sqli_data,
-            '60': self._scan_blind_sqli_full,
-            '61': self._scan_cmd_inject_detect,
-            '62': self._scan_cmd_inject_os,
-            '63': self._scan_cmd_inject_shell,
-            '64': self._scan_ssrf_detect,
-            '65': self._scan_ssrf_cloud_meta,
-            '66': self._scan_ssrf_fileread,
-            '67': self._scan_ssrf_portscan,
-            '68': self._scan_ssrf_network,
-            '69': self._scan_race_single,
-            '70': self._scan_race_multi,
-            '71': self._scan_race_toctou,
-            '72': self._scan_graphql_full,
-            '73': self._scan_graphql_discover,
-            '74': self._scan_graphql_introspection,
-            '75': self._scan_graphql_dos,
-            '76': self._scan_graphql_csrf,
-            '77': self._scan_ciphey_decode,
-            '78': self._scan_hash_identify,
-            '79': self._scan_jwt_full,
-            '80': self._scan_jwt_key_confusion,
-            '81': self._scan_jwt_alg_none,
-            '82': self._scan_jwt_kid_inject,
-            '83': self._scan_jwt_crack,
-            '84': self._scan_ssti_detect,
-            '85': self._scan_ssti_exploit,
-            '86': self._scan_nosql_detect,
-            '87': self._scan_nosql_bypass,
-            '88': self._scan_nosql_extract,
-            '89': self._scan_container_full,
-            '90': self._scan_container_escape,
-            '91': self._scan_waf_evasion,
-            '92': self._scan_websocket,
-            '93': self._scan_smuggling_adv,
-            '94': self._scan_crlf_adv,
-            '95': self._scan_openredirect_adv,
-            '96': self._scan_403bypass,
-            '97': self._scan_paramspider,
-            '98': self._scan_linkfinder,
-            '98a': self._scan_arjun,
-            '98b': self._scan_ghauri,
-            '98c': self._scan_cmseek,
-            '98d': self._scan_sherlock,
-            '98e': self._scan_tehqeeq,
-            '99': self._scan_mega,
-            '100': self._scan_lfi_detect,
-            '101': self._scan_lfi_exploit,
-            '102': self._scan_lfi_rce,
-            '103': self._scan_xss_reflected,
-            '104': self._scan_xss_dom,
-            '105': self._scan_xss_blind,
-            '106': self._scan_xss_full,
-            '107': self._scan_subdomain_passive,
-            '108': self._scan_subdomain_bruteforce,
-            '109': self._scan_subdomain_full,
-            '110': self._scan_hash_identify_crypto,
-            '111': self._scan_hash_crack,
-            '112': self._scan_auto_decode,
-            '113': self._scan_reverse_shell,
-            '114': self._scan_hoaxshell,
-            '115': self._scan_cms_detect,
-            '116': self._scan_cms_wordpress,
-            '117': self._scan_cms_full,
-            '118': self._scan_osint_emails,
-            '119': self._scan_osint_dorks,
-            '120': self._scan_osint_full,
-            '121': self._scan_cloud_metadata,
-            '122': self._scan_cloud_s3,
-            '123': self._scan_cloud_gopherus,
-            '124': self._scan_cloud_full,
-            '125': self._scan_cors_misconfig,
-            '126': self._scan_open_redirect_adv,
-            '127': self._scan_xxe_detect,
-            '128': self._scan_xxe_extract,
-            '129': self._scan_xxe_deser,
-            '130': self._scan_ssti_sandbox,
-            '131': self._scan_proto_pollution_adv,
-            '132': self._scan_csp_analysis,
-            '133': self._scan_cache_poison_adv,
-            '134': self._scan_blind_sqli_headers,
-            '135': self._scan_git_exposure,
-            '136': self._scan_sensitive_files_adv,
-            '137': self._scan_github_dork_adv,
-            '138': self._scan_oast_callback,
-            '139': self._scan_redos,
-            '140': self._scan_password_spray,
-            '141': self._scan_stealth,
-            '142': self._scan_wordlist_gen,
-            '143': self._scan_adv_web_full,
+            # V3 Security Engine (400-411)
+            '400': self._scan_v3_graphql,
+            '401': self._scan_v3_dom_xss,
+            '402': self._scan_v3_cache_deception,
+            '403': self._scan_v3_clickjacking,
+            '404': self._scan_v3_account_takeover,
+            '405': self._scan_v3_oauth,
+            '406': self._scan_v3_http_method,
+            '407': self._scan_v3_blind_xss,
+            '408': self._scan_v3_2fa_bypass,
+            '409': self._scan_v3_mixed_content,
+            '410': self._scan_v3_info_disclosure,
+            '411': self._scan_v3_full,
+            # V4 Hunting Engine (412-419)
+            '412': self._scan_v4_username_enum,
+            '413': self._scan_v4_email_security,
+            '414': self._scan_v4_csrf,
+            '415': self._scan_v4_framework,
+            '416': self._scan_v4_js_libraries,
+            '417': self._scan_v4_403_bypass,
+            '418': self._scan_v4_cross_domain,
+            '419': self._scan_v4_cve_lookup,
+            # V5 Async Engine (420-422)
+            '420': self._scan_v5_subdomain_bruteforce,
+            '421': self._scan_v5_dir_bruteforce,
+            '422': self._scan_v5_smart,
+            # HTTP C2 Server (423)
+            '423': self._scan_http_c2,
+            # External Tool Wrappers (424-427)
+            '424': self._scan_nuclei,
+            '425': self._scan_sqlmap_ext,
+            '426': self._scan_sublist3r,
+            '427': self._scan_ffuf,
         }
 
     def _scope_menu(self):
@@ -9882,6 +10399,445 @@ class ZylonFusion:
                 return None
         
         return "\n".join(poc_lines)
+
+    # ========================================================================
+    # ASYNC BATCH HTTP SCANNER (10-50x throughput for URL lists)
+    # ========================================================================
+
+    def _scan_async_batch(self, url_list, scan_type='headers', max_concurrent=20):
+        """
+        Async batch scanner: process a list of URLs concurrently.
+        Uses aiohttp when available, falls back to ThreadPoolExecutor.
+
+        scan_type options:
+        - 'headers': Fetch and analyze HTTP headers
+        - 'status': Just check status codes
+        - 'body': Fetch and search body content
+        - 'full': Headers + status + body analysis
+        """
+        results = []
+
+        if AIOHTTP_AVAILABLE and aiohttp is not None:
+            import asyncio
+
+            async def _async_scan():
+                connector = aiohttp.TCPConnector(limit=max_concurrent, ssl=False)
+                timeout = aiohttp.ClientTimeout(total=15)
+                async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+                    sem = asyncio.Semaphore(max_concurrent)
+
+                    async def _scan_url(url):
+                        async with sem:
+                            try:
+                                async with session.get(url, allow_redirects=False) as resp:
+                                    result = {'url': url, 'status': resp.status}
+                                    if scan_type in ('headers', 'full'):
+                                        result['headers'] = dict(resp.headers)
+                                    if scan_type in ('body', 'full'):
+                                        body = await resp.text()
+                                        result['body_length'] = len(body)
+                                        result['body_preview'] = body[:500]
+                                    return result
+                            except Exception as e:
+                                return {'url': url, 'error': str(e)[:100]}
+
+                    tasks = [_scan_url(u) for u in url_list]
+                    return await asyncio.gather(*tasks, return_exceptions=True)
+
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If already in async context, use ThreadPoolExecutor fallback
+                    raise RuntimeError("Nested async")
+                results = loop.run_until_complete(_async_scan())
+            except RuntimeError:
+                # Fallback: ThreadPoolExecutor
+                results = self._sync_batch_scan(url_list, scan_type, max_concurrent)
+        else:
+            results = self._sync_batch_scan(url_list, scan_type, max_concurrent)
+
+        return results
+
+    def _sync_batch_scan(self, url_list, scan_type='headers', max_concurrent=20):
+        """Synchronous fallback for batch scanning using ThreadPoolExecutor"""
+        results = []
+        lock = threading.Lock()
+
+        def _scan_url(url):
+            try:
+                resp = self.perf_get(url)
+                result = {'url': url, 'status': resp.status_code}
+                if scan_type in ('headers', 'full'):
+                    result['headers'] = dict(resp.headers)
+                if scan_type in ('body', 'full'):
+                    result['body_length'] = len(resp.text)
+                    result['body_preview'] = resp.text[:500]
+                return result
+            except Exception as e:
+                return {'url': url, 'error': str(e)[:100]}
+
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            futures = {executor.submit(_scan_url, u): u for u in url_list}
+            for future in as_completed(futures):
+                results.append(future.result())
+
+        return results
+
+    def _show_perf_stats(self):
+        """Show performance statistics (DNS cache, threads, timeouts, etc.)"""
+        console.print("\n[bold cyan][*] Performance Statistics[/bold cyan]")
+
+        perf_table = Table(
+            title="Performance Engine Stats",
+            box=box.ROUNDED,
+            border_style="bright_cyan",
+            show_lines=True
+        )
+        perf_table.add_column("Component", style="bold yellow", width=25)
+        perf_table.add_column("Status", style="white", width=40)
+        perf_table.add_column("Details", style="dim", width=35)
+
+        # DNS Cache
+        if self.dns_cache:
+            stats = self.dns_cache.stats()
+            perf_table.add_row(
+                "DNS Cache",
+                f"[green]Active[/green] | Hit Rate: {stats['hit_rate']}",
+                f"Entries: {stats['entries']} | Hits: {stats['hits']} | Misses: {stats['misses']}"
+            )
+        else:
+            perf_table.add_row("DNS Cache", "[red]Disabled[/red]", "Install core.performance")
+
+        # Connection Pool
+        if self._perf_session:
+            perf_table.add_row(
+                "HTTP Connection Pool",
+                f"[green]Active[/green] | Requests: {self._perf_session.request_count}",
+                "Pool: 100 connections | 20 per host"
+            )
+        else:
+            perf_table.add_row("HTTP Connection Pool", "[red]Disabled[/red]", "Using raw requests.Session")
+
+        # Adaptive Threading
+        if self.adaptive_threads:
+            stats = self.adaptive_threads.stats()
+            perf_table.add_row(
+                "Adaptive Threading",
+                f"[green]Active[/green] | Threads: {stats['current_threads']}",
+                f"Success: {stats['success_count']} | Errors: {stats['error_count']} | Avg: {stats['avg_response_time']}"
+            )
+        else:
+            perf_table.add_row("Adaptive Threading", "[red]Disabled[/red]", f"Using static: {MAX_THREADS} threads")
+
+        # Rate Limiter
+        if self.rate_limiter:
+            perf_table.add_row(
+                "Rate Limiter",
+                f"[green]Active[/green] | Backoffs: {self.rate_limiter.backoff_count}",
+                f"Rate: 20 req/s | In backoff: {self.rate_limiter.backoff_until > 0}"
+            )
+        else:
+            perf_table.add_row("Rate Limiter", "[red]Disabled[/red]", "No rate limiting (WAF risk!)")
+
+        # Smart Timeout
+        if self.smart_timeout:
+            stats = self.smart_timeout.stats()
+            perf_table.add_row(
+                "Smart Timeout",
+                f"[green]Active[/green] | Current: {stats['current_timeout']}",
+                f"Default: {stats['default_timeout']} | Samples: {stats['samples']}"
+            )
+        else:
+            perf_table.add_row("Smart Timeout", "[red]Disabled[/red]", f"Using static: {DEFAULT_TIMEOUT}s")
+
+        # Scan Dedup Cache
+        dedup_entries = len(self._scan_cache)
+        perf_table.add_row(
+            "Scan Dedup Cache",
+            f"[green]Active[/green] | Entries: {dedup_entries}",
+            f"TTL: {self._scan_cache_ttl}s | Saves redundant re-scans"
+        )
+
+        # HTTP Response Cache
+        http_entries = len(self._http_cache)
+        perf_table.add_row(
+            "HTTP Response Cache",
+            f"[green]Active[/green] | Entries: {http_entries}",
+            f"TTL: {self._http_cache_ttl}s | Avoids duplicate requests"
+        )
+
+        console.print(perf_table)
+
+    def _search_scans(self, query):
+        """Search scan types by keyword — fuzzy matching across names, descriptions, and groups"""
+        if not query:
+            console.print("[bold yellow][!] Enter a keyword to search[/bold yellow]")
+            return
+
+        query_lower = query.lower()
+        matches = []
+
+        # Search in help commands
+        help_commands = [
+            ("0", "Full Reconnaissance"), ("1", "WHOIS"), ("2", "Geo-IP"), ("3", "DNS"),
+            ("9", "SQL Injection"), ("10", "XSS"), ("11", "Directory Brute Force"),
+            ("13", "CORS"), ("30", "SSRF"), ("31", "SSTI"), ("32", "LFI"),
+            ("40", "JWT"), ("99", "MEGA SCAN"),
+        ]
+
+        # Search SCAN_DESCRIPTIONS
+        for scan_id, desc in self.SCAN_DESCRIPTIONS.items():
+            if query_lower in desc.lower() or query_lower in scan_id:
+                # Find which group this scan belongs to
+                groups_for_scan = []
+                for gid, ginfo in self.SCAN_GROUPS.items():
+                    if scan_id in ginfo['scans']:
+                        groups_for_scan.append(f"{gid}:{ginfo['name']}")
+                matches.append((scan_id, desc, groups_for_scan))
+
+        # Search group names and descriptions
+        for gid, ginfo in self.SCAN_GROUPS.items():
+            if query_lower in ginfo['name'].lower() or query_lower in ginfo['desc'].lower():
+                matches.append((gid, f"[GROUP] {ginfo['name']} ({len(ginfo['scans'])} scans)", []))
+
+        if not matches:
+            console.print(f"[bold yellow][!] No scans found matching '{query}'[/bold yellow]")
+            return
+
+        # Display results
+        search_table = Table(
+            title=f"[bold yellow]Search Results for '{query}'[/bold yellow]",
+            box=box.ROUNDED,
+            border_style="bright_cyan",
+            show_lines=True
+        )
+        search_table.add_column("ID", style="bold cyan", width=8)
+        search_table.add_column("Scan Name", style="white", width=35)
+        search_table.add_column("Groups", style="dim", width=30)
+
+        # Deduplicate
+        seen = set()
+        for scan_id, desc, groups in matches:
+            if scan_id not in seen:
+                seen.add(scan_id)
+                groups_str = ', '.join(groups[:3]) if groups else '-'
+                search_table.add_row(scan_id, desc, groups_str)
+
+        console.print(search_table)
+        console.print(f"[bold green][+] {len(seen)} scan(s) found. Use the ID to run a scan.[/bold green]")
+
+    # ========================================================================
+    # RESUMABLE SCAN CHECKPOINT SYSTEM
+    # ========================================================================
+
+    def _save_checkpoint(self, group_id, scan_ids, completed_scans, all_results):
+        """Save checkpoint for resumable group scans"""
+        os.makedirs(self._checkpoint_dir, exist_ok=True)
+        checkpoint = {
+            'target': self.target,
+            'group_id': group_id,
+            'scan_ids': scan_ids,
+            'completed_scans': completed_scans,
+            'results': all_results,
+            'timestamp': datetime.now().isoformat(),
+            'version': ZYLON_VERSION,
+        }
+        checkpoint_file = os.path.join(self._checkpoint_dir, f"{self.target}_{group_id}_checkpoint.json")
+        try:
+            with open(checkpoint_file, 'w') as f:
+                json.dump(checkpoint, f, indent=2, default=str)
+            self._current_checkpoint = checkpoint_file
+        except Exception as e:
+            console.print(f"[dim yellow][!] Checkpoint save failed: {str(e)[:50]}[/dim yellow]")
+
+    def _load_checkpoint(self, group_id):
+        """Load checkpoint for resuming a group scan"""
+        checkpoint_file = os.path.join(self._checkpoint_dir, f"{self.target}_{group_id}_checkpoint.json")
+        if os.path.exists(checkpoint_file):
+            try:
+                with open(checkpoint_file, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return None
+        return None
+
+    def _clear_checkpoint(self, group_id=None):
+        """Clear checkpoint(s) after successful completion"""
+        if group_id:
+            checkpoint_file = os.path.join(self._checkpoint_dir, f"{self.target}_{group_id}_checkpoint.json")
+            try:
+                os.remove(checkpoint_file)
+            except Exception:
+                pass
+        else:
+            # Clear all checkpoints for current target
+            try:
+                for f in os.listdir(self._checkpoint_dir):
+                    if f.startswith(self.target):
+                        os.remove(os.path.join(self._checkpoint_dir, f))
+            except Exception:
+                pass
+
+    def _list_checkpoints(self):
+        """List all available checkpoints for resuming"""
+        if not os.path.exists(self._checkpoint_dir):
+            console.print("[yellow][!] No checkpoints found[/yellow]")
+            return
+
+        checkpoints = [f for f in os.listdir(self._checkpoint_dir) if f.endswith('_checkpoint.json')]
+        if not checkpoints:
+            console.print("[yellow][!] No checkpoints found[/yellow]")
+            return
+
+        cp_table = Table(title="Available Checkpoints", box=box.ROUNDED, border_style="yellow")
+        cp_table.add_column("Target", style="cyan")
+        cp_table.add_column("Group", style="yellow")
+        cp_table.add_column("Completed", style="green")
+        cp_table.add_column("Date", style="dim")
+
+        for cp_file in checkpoints:
+            try:
+                with open(os.path.join(self._checkpoint_dir, cp_file), 'r') as f:
+                    data = json.load(f)
+                cp_table.add_row(
+                    data.get('target', '?'),
+                    data.get('group_id', '?'),
+                    f"{len(data.get('completed_scans', []))}/{len(data.get('scan_ids', []))}",
+                    data.get('timestamp', '?')[:19]
+                )
+            except Exception:
+                pass
+
+        console.print(cp_table)
+        console.print("[cyan]Use 'resume <target> <group_id>' to resume a checkpoint[/cyan]")
+
+    # ========================================================================
+    # EXTERNAL TOOL WRAPPERS (nuclei, sqlmap, sublist3r, etc.)
+    # ========================================================================
+
+    def _check_tool(self, tool_name):
+        """Check if an external tool is installed and available"""
+        try:
+            import subprocess
+            result = subprocess.run(['which', tool_name], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return None
+
+    def _run_external(self, tool_name, args, target=None):
+        """Run an external tool with given arguments, capturing output"""
+        import subprocess
+        tool_path = self._check_tool(tool_name)
+        if not tool_path:
+            console.print(f"[bold red][!] {tool_name} not found. Install with: pkg install {tool_name} or pip install {tool_name}[/bold red]")
+            return None
+
+        cmd = [tool_path] + args
+        if target:
+            console.print(f"[cyan][*] Running {tool_name} on {target}...[/cyan]")
+        else:
+            console.print(f"[cyan][*] Running {tool_name}...[/cyan]")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            output = result.stdout + result.stderr
+            return {
+                'tool': tool_name,
+                'cmd': ' '.join(cmd),
+                'returncode': result.returncode,
+                'output': output[:10000],  # Truncate large output
+                'target': target,
+                'timestamp': datetime.now().isoformat(),
+            }
+        except subprocess.TimeoutExpired:
+            console.print(f"[bold yellow][!] {tool_name} timed out after 300s[/bold yellow]")
+            return {'tool': tool_name, 'error': 'Timeout after 300s'}
+        except Exception as e:
+            console.print(f"[bold red][!] {tool_name} error: {str(e)[:100]}[/bold red]")
+            return {'tool': tool_name, 'error': str(e)[:200]}
+
+    def _scan_nuclei(self):
+        """424: Nuclei Scanner (External)"""
+        url = f"{self.protocol}{self.target}"
+        if self._check_tool('nuclei'):
+            result = self._run_external('nuclei', ['-u', url, '-severity', 'medium,high,critical', '-silent'], self.target)
+            if result:
+                self.results['findings']['nuclei'] = result
+                vulns = result.get('output', '').count('[') if result.get('output') else 0
+                console.print(f"[bold green][+] Nuclei scan complete. ~{vulns} findings[/bold green]")
+        else:
+            console.print("[yellow][!] Nuclei not installed. Install: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest[/yellow]")
+            console.print("[dim]    Or: apt install nuclei[/dim]")
+
+    def _scan_sqlmap_ext(self):
+        """425: SQLMap (External)"""
+        url = f"{self.protocol}{self.target}"
+        if self._check_tool('sqlmap'):
+            result = self._run_external('sqlmap', ['-u', url, '--batch', '--random-agent', '--level', '3'], self.target)
+            if result:
+                self.results['findings']['sqlmap_ext'] = result
+                if 'is vulnerable' in result.get('output', ''):
+                    console.print("[bold green][+] SQLMap found SQL injection![/bold green]")
+                else:
+                    console.print("[dim][-] SQLMap: No injection found[/dim]")
+        else:
+            console.print("[yellow][!] SQLMap not installed. Install: pip install sqlmap[/yellow]")
+
+    def _scan_sublist3r(self):
+        """426: Sublist3r (External)"""
+        domain = self.target.replace('www.', '').split(':')[0]
+        if self._check_tool('sublist3r'):
+            result = self._run_external('sublist3r', ['-d', domain, '-t', '10'], domain)
+            if result:
+                self.results['findings']['sublist3r'] = result
+                console.print("[bold green][+] Sublist3r scan complete[/bold green]")
+        else:
+            console.print("[yellow][!] Sublist3r not installed. Install: pip install sublist3r[/yellow]")
+
+    def _scan_ffuf(self):
+        """427: FFUF Fuzzer (External)"""
+        url = f"{self.protocol}{self.target}"
+        if self._check_tool('ffuf'):
+            # Use a basic wordlist if available
+            wordlist = '/usr/share/wordlists/dirb/common.txt'
+            if not os.path.exists(wordlist):
+                wordlist = os.path.join(DATA_DIR, 'wordlists', 'directories.txt')
+            if os.path.exists(wordlist):
+                result = self._run_external('ffuf', ['-u', f'{url}/FUZZ', '-w', wordlist, '-mc', '200,301,302,403', '-t', '20'], self.target)
+                if result:
+                    self.results['findings']['ffuf'] = result
+                    console.print("[bold green][+] FFUF scan complete[/bold green]")
+            else:
+                console.print("[yellow][!] No wordlist found for FFUF[/yellow]")
+        else:
+            console.print("[yellow][!] FFUF not installed. Install: go install github.com/ffuf/ffuf/v2@latest[/yellow]")
+
+    def _tools_status(self):
+        """Show which external tools are installed"""
+        tools = ['nuclei', 'sqlmap', 'sublist3r', 'ffuf', 'nmap', 'gobuster',
+                 'dirsearch', 'masscan', 'nikto', 'whatweb', 'wpscan',
+                 'hydra', 'medusa', 'john', 'hashcat', 'subfinder',
+                 'httpx', 'dnsx', 'naabu', 'crobat']
+
+        console.print("\n[bold cyan][*] External Tool Status[/bold cyan]")
+        tool_table = Table(box=box.ROUNDED, border_style="cyan")
+        tool_table.add_column("Tool", style="yellow", width=15)
+        tool_table.add_column("Status", style="bold", width=12)
+        tool_table.add_column("Path", style="dim", width=40)
+
+        available = 0
+        for tool in tools:
+            path = self._check_tool(tool)
+            if path:
+                tool_table.add_row(tool, "[green]INSTALLED[/green]", path)
+                available += 1
+            else:
+                tool_table.add_row(tool, "[red]NOT FOUND[/red]", "-")
+
+        console.print(tool_table)
+        console.print(f"[bold green][+] {available}/{len(tools)} external tools available[/bold green]")
 
     def _config_menu(self):
         """Configuration menu for API keys"""
