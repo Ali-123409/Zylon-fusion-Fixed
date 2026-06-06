@@ -403,15 +403,15 @@ def run_waf_scan(console=None):
     
     if choice in ('1', '4'):
         sqli_payload = Prompt.ask("[cyan]SQLi payload[/cyan]", default="' OR 1=1--")
-        sqli_bypasses = WAFBypassEngine.generate_sqli_bypasses(sqli_payload)
+        sqli_bypasses = WAFEvasionEngine.generate_sqli_bypasses(sqli_payload)
         all_bypasses.extend([('SQLi', b) for b in sqli_bypasses])
     
     if choice in ('2', '4'):
-        xss_bypasses = WAFBypassEngine.generate_xss_bypasses()
+        xss_bypasses = WAFEvasionEngine.generate_xss_bypasses()
         all_bypasses.extend([('XSS', b) for b in xss_bypasses])
     
     if choice in ('3', '4'):
-        path_bypasses = WAFBypassEngine.generate_path_bypasses()
+        path_bypasses = WAFEvasionEngine.generate_path_bypasses()
         all_bypasses.extend([('Path', b) for b in path_bypasses])
     
     # Display bypasses
@@ -428,7 +428,7 @@ def run_waf_scan(console=None):
         successful = []
         
         for attack_type, bypass in all_bypasses:
-            result = WAFBypassEngine.test_bypass(url.strip(), bypass, original_response=test_resp)
+            result = WAFEvasionEngine.test_bypass(url.strip(), bypass, original_response=test_resp)
             if result['bypassed']:
                 successful.append((attack_type, bypass, result))
         
