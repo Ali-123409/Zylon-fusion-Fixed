@@ -1199,10 +1199,85 @@ class ModernFrameworkDiscovery:
 class PayloadInjector:
     """Modern payload injection into multiple contexts.
 
-    Every method is a @staticmethod that returns a dict describing the
-    injection context (url, method, headers, data/json/files) ready to be
-    passed directly to ``requests.Request`` or ``ThreadSafeSession.request()``.
+    Can be used in two ways:
+      1. **Statically** — call static methods like ``PayloadInjector.inject_get()``
+         which return dicts describing the injection context.
+      2. **As an instance** — construct with a session, then call ``.inject()``
+         which both builds the injection AND sends the request, returning the
+         ``requests.Response`` object.
     """
+
+    def __init__(self, session: Optional[Any] = None):
+        """Initialize with an optional HTTP session for ``.inject()`` usage.
+
+        Args:
+            session: A ThreadSafeSession, requests.Session, or any object
+                     with a ``.request()`` method.  Falls back to
+                     ``shared_session`` if None.
+        """
+        self.session = session or shared_session
+
+    def inject(
+        self,
+        url: str,
+        param: str,
+        payload: str,
+        context: str = "all",
+        **kwargs: Any,
+    ) -> Optional[requests.Response]:
+        """Build an injection and send it, returning the response.
+
+        Args:
+            url: Target URL.
+            param: Parameter name to inject into.
+            payload: Payload value.
+            context: Injection context — ``'get'``, ``'post'``,
+                     ``'json'``, ``'header'``, or ``'all'`` (tries GET
+                     first, then POST, then JSON, then header).
+            **kwargs: Extra keyword args forwarded to ``session.request()``.
+
+        Returns:
+            The first successful ``requests.Response``, or ``None`` on error.
+        """
+        context_map: Dict[str, Callable[..., Dict[str, Any]]] = {
+            "get": PayloadInjector.inject_get,
+            "post": PayloadInjector.inject_post_form,
+            "json": PayloadInjector.inject_json,
+            "header": lambda u, p, v: PayloadInjector.inject_header(u, "User-Agent", v),
+        }
+
+        if context == "all":
+            # Try each context in order; return first that doesn't error
+            for ctx_name in ("get", "post", "json", "header"):
+                try:
+                    builder = context_map[ctx_name]
+                    injection = builder(url, param, payload)
+                    resp = self._send_injection(injection, **kwargs)
+                    if resp is not None:
+                        return resp
+                except Exception:
+                    continue
+            return None
+
+        builder = context_map.get(context, PayloadInjector.inject_get)
+        injection = builder(url, param, payload)
+        return self._send_injection(injection, **kwargs)
+
+    def _send_injection(
+        self, injection: Dict[str, Any], **kwargs: Any
+    ) -> Optional[requests.Response]:
+        """Dispatch a prepared injection dict through the session."""
+        url = injection.pop("url")
+        method = injection.pop("method", "GET")
+        # Merge any extra kwargs from the injection dict
+        merged = {**injection, **kwargs}
+        merged.setdefault("verify", VERIFY_SSL)
+        merged.setdefault("timeout", DEFAULT_TIMEOUT)
+        merged.setdefault("allow_redirects", True)
+        try:
+            return self.session.request(method, url, **merged)
+        except requests.exceptions.RequestException:
+            return None
 
     @staticmethod
     def inject_get(url: str, param: str, payload: str) -> Dict[str, Any]:
