@@ -28,6 +28,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse
 
+from core.shared_infra import shared_session, regex_cache, framework_discovery, oob_provider
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -309,10 +311,10 @@ TECH_FINGERPRINT_SIGS = {
     },
 }
 
-# Email extraction patterns
-EMAIL_PATTERN = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-IP_PATTERN = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
-URL_PATTERN = re.compile(r'https?://[a-zA-Z0-9._/-]+')
+# Email / IP / URL patterns are now handled via regex_cache shorthand names:
+#   'email'  → [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
+#   'ipv4'   → \b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b
+#   'url'    → https?://[^\s<>"']+
 
 
 class OSINTAdvancedEngine:
@@ -327,17 +329,7 @@ class OSINTAdvancedEngine:
         self.timeout = timeout
         self.proxy = proxy
         self.output_dir = output_dir or os.path.join(os.path.expanduser("~"), ".zylon", "results")
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': random.choice([
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            ])
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.emails = set()
         self.hosts = set()
         self.ips = set()
@@ -391,7 +383,7 @@ class OSINTAdvancedEngine:
                 url = f"https://www.google.com/search?q=%22@{self.domain}%22+intext:%22@{self.domain}%22&num=100"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.add(e.lower())
@@ -405,7 +397,7 @@ class OSINTAdvancedEngine:
                 url = f"https://www.bing.com/search?q=%22@{self.domain}%22&count=50"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.add(e.lower())
@@ -419,7 +411,7 @@ class OSINTAdvancedEngine:
                 url = f"https://www.baidu.com/s?wd=%22@{self.domain}%22"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.add(e.lower())
@@ -436,7 +428,7 @@ class OSINTAdvancedEngine:
                     data = resp.json()
                     for entry in data:
                         name = entry.get('name_value', '')
-                        emails_found = EMAIL_PATTERN.findall(name)
+                        emails_found = regex_cache.findall('email', name)
                         for e in emails_found:
                             if self.domain in e:
                                 found.add(e.lower())
@@ -450,7 +442,7 @@ class OSINTAdvancedEngine:
                 url = f"https://api.hackertarget.com/emailsearch/?q={self.domain}"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp and resp.status_code == 200:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.add(e.lower())
@@ -468,7 +460,7 @@ class OSINTAdvancedEngine:
                 url2 = f"https://hunter.io/search/{self.domain}"
                 resp2 = self.session.get(url2, timeout=self.timeout)
                 if resp2:
-                    emails = EMAIL_PATTERN.findall(resp2.text)
+                    emails = regex_cache.findall('email', resp2.text)
                     for e in emails:
                         if self.domain in e:
                             found.add(e.lower())
@@ -486,7 +478,7 @@ class OSINTAdvancedEngine:
                     data = resp.json()
                     for item in data.get("items", []):
                         text = item.get("name", "") + " " + item.get("path", "")
-                        emails = EMAIL_PATTERN.findall(text)
+                        emails = regex_cache.findall('email', text)
                         for e in emails:
                             if self.domain in e:
                                 found.add(e.lower())
@@ -589,7 +581,7 @@ class OSINTAdvancedEngine:
                                 p = p.strip()
                                 if self.domain in p:
                                     found_hosts.add(p)
-                                elif IP_PATTERN.match(p):
+                                elif regex_cache.match('ipv4', p):
                                     found_ips.add(p)
             except Exception:
                 pass
@@ -647,7 +639,7 @@ class OSINTAdvancedEngine:
                     search_url = f"https://www.google.com/search?q={quote(dork)}&num=10"
                     resp = self.session.get(search_url, timeout=self.timeout)
                     if resp and resp.status_code == 200:
-                        url_matches = re.findall(r'href="/url\?q=(https?://[^&"]+)', resp.text)
+                        url_matches = regex_cache.findall(r'href="/url\?q=(https?://[^&"]+)', resp.text)
                         if url_matches:
                             # Filter to domain-relevant results
                             relevant = [u for u in url_matches if self.domain in u]
@@ -672,7 +664,7 @@ class OSINTAdvancedEngine:
                     bing_url = f"https://www.bing.com/search?q={quote(dork)}&count=10"
                     resp = self.session.get(bing_url, timeout=self.timeout)
                     if resp and resp.status_code == 200:
-                        url_matches = re.findall(r'href="(https?://[^"]*)"', resp.text)
+                        url_matches = regex_cache.findall(r'href="(https?://[^"]*)"', resp.text)
                         relevant = [u for u in url_matches if self.domain in u and 'bing.com' not in u and 'microsoft.com' not in u]
                         if relevant:
                             # Deduplicate against existing findings
@@ -724,7 +716,7 @@ class OSINTAdvancedEngine:
                 url = f"https://api.hackertarget.com/emailsearch/?q={self.domain}"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp and resp.status_code == 200:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.append({"email": e.lower(), "source": "hackertarget"})
@@ -824,7 +816,7 @@ class OSINTAdvancedEngine:
                             results["mail_servers"].append(value)
                         if 'TXT' in key.upper():
                             results["txt_records"].append(value)
-                        if IP_PATTERN.match(value):
+                        if regex_cache.findall('ipv4', value):
                             self.ips.add(value)
         except Exception:
             pass
@@ -851,7 +843,7 @@ class OSINTAdvancedEngine:
                         if record_type == 'TXT':
                             if val not in results["txt_records"]:
                                 results["txt_records"].append(val)
-                        if record_type in ('A', 'AAAA') and IP_PATTERN.match(val):
+                        if record_type in ('A', 'AAAA') and regex_cache.findall('ipv4', val):
                             self.ips.add(val)
                 except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, Exception):
                     pass
@@ -1076,6 +1068,22 @@ class OSINTAdvancedEngine:
                 results["technologies"].append(tech_info)
                 self.tech_findings.append(tech_info)
                 self._log(f"  [TECH] {tech}: {', '.join(tech_info['indicators'][:3])}", G)
+
+        # Modern framework discovery for SPA endpoints
+        try:
+            fw_results = framework_discovery.discover(target_url)
+            for technique, endpoints in fw_results.items():
+                for ep in endpoints:
+                    results["technologies"].append({
+                        "name": f"SPA ({technique})",
+                        "indicators": [f"endpoint: {ep}"],
+                    })
+                    self.tech_findings.append({
+                        "name": f"SPA ({technique})",
+                        "indicators": [f"endpoint: {ep}"],
+                    })
+        except Exception:
+            pass
 
         results["total_techs"] = len(results["technologies"])
         self._log(f"Tech fingerprint complete: {results['total_techs']} technologies detected", G)

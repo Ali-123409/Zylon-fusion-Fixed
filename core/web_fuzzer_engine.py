@@ -37,6 +37,8 @@ from core.var import (
     COMMON_DIRS, API_ENDPOINTS
 )
 
+from core.shared_infra import shared_session, regex_cache
+
 # ============================================================================
 # ANSI COLORS
 # ============================================================================
@@ -204,7 +206,7 @@ class WebFuzzerEngine:
 
     def __init__(self, session=None, threads=MAX_THREADS, delay=REQUEST_DELAY,
                  timeout=DEFAULT_TIMEOUT, rate_limit=None):
-        self.session = session or requests.Session()
+        self.session = session or shared_session
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
         self.session.verify = False
         self.threads = threads
@@ -264,11 +266,11 @@ class WebFuzzerEngine:
                 return False
 
         if 'regex_filter' in filters:
-            if re.search(filters['regex_filter'], resp.text):
+            if regex_cache.search(filters['regex_filter'], resp.text):
                 return False
 
         if 'regex_match' in filters:
-            if not re.search(filters['regex_match'], resp.text):
+            if not regex_cache.search(filters['regex_match'], resp.text):
                 return False
 
         return True
@@ -296,7 +298,7 @@ class WebFuzzerEngine:
 
     def _extract_title(self, html):
         """Extract page title from HTML"""
-        match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        match = regex_cache.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
         return match.group(1).strip() if match else ''
 
     # ========================================================================
@@ -647,13 +649,22 @@ class WebFuzzerEngine:
                            "/private", "/secret", "/test", "/tmp", "/upload",
                            "/users", "/v1", "/v2", "/dashboard", "/manage"]
 
+            # Catch-all detection: track response signatures
+            response_signatures = []  # list of (status_code, content_length)
+            catch_all_detected = False
+
             for path in quick_paths:
                 if self._stop_event.is_set():
                     break
                 full_path = base_url.rstrip('/') + path
-                if full_path in scanned_paths:
+                normalized = full_path.lower().rstrip('/')
+                if normalized in scanned_paths:
                     continue
-                scanned_paths.add(full_path)
+                scanned_paths.add(normalized)
+
+                # Safety limit: stop if too many findings
+                if len(all_findings) >= 500:
+                    return
 
                 resp = self._request(full_path)
                 if resp and resp.status_code in [200, 301, 302, 403]:
@@ -666,9 +677,24 @@ class WebFuzzerEngine:
                         'title': self._extract_title(resp.text),
                     }
                     all_findings.append(finding)
+                    response_signatures.append((resp.status_code, len(resp.text)))
 
-                    # Recurse into directories with 200/301/302
-                    if resp.status_code in [200, 301, 302] and current_depth > 1:
+                    # Catch-all detection: if last 5+ responses have same
+                    # status and similar size, likely a catch-all route
+                    if len(response_signatures) >= 5:
+                        recent = response_signatures[-5:]
+                        statuses = [s[0] for s in recent]
+                        sizes = [s[1] for s in recent]
+                        if len(set(statuses)) == 1:
+                            avg_size = sum(sizes) / len(sizes)
+                            if avg_size > 0 and all(abs(s - avg_size) < avg_size * 0.1 for s in sizes):
+                                catch_all_detected = True
+
+                    # Only recurse if NOT a catch-all
+                    if (not catch_all_detected and
+                            resp.status_code in [200, 301, 302] and
+                            current_depth > 1 and
+                            len(all_findings) < 500):
                         discovered_dirs.add(full_path)
                         _recurse(full_path, current_depth - 1)
 

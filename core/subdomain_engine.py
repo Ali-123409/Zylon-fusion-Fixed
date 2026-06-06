@@ -25,6 +25,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # SUBDOMAIN SOURCES (from Sublist3r + SubHunterX)
 # ============================================================================
@@ -110,13 +112,7 @@ class SubdomainEngine:
         self.proxy = proxy
         self.brute_force = brute_force
         self.takeover_check = takeover_check
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.found_subdomains = set()
         self.live_subdomains = []
         self.takeover_vulnerable = []
@@ -188,7 +184,7 @@ class SubdomainEngine:
                 data = resp.text
                 # Extract subdomains using multiple methods
                 subdomain_pattern = rf'([a-zA-Z0-9._-]+\.{re.escape(self.domain)})'
-                matches = re.findall(subdomain_pattern, data)
+                matches = regex_cache.findall(subdomain_pattern, data)
 
                 # Also try JSON parsing
                 try:
@@ -200,12 +196,12 @@ class SubdomainEngine:
                                     if key in item:
                                         val = item[key]
                                         if isinstance(val, str):
-                                            matches.extend(re.findall(subdomain_pattern, val))
+                                            matches.extend(regex_cache.findall(subdomain_pattern, val))
                                         elif isinstance(val, list):
                                             for v in val:
-                                                matches.extend(re.findall(subdomain_pattern, str(v)))
+                                                matches.extend(regex_cache.findall(subdomain_pattern, str(v)))
                             elif isinstance(item, str):
-                                matches.extend(re.findall(subdomain_pattern, item))
+                                matches.extend(regex_cache.findall(subdomain_pattern, item))
                 except (ValueError, TypeError):
                     pass
 

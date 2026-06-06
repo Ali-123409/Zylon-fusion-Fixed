@@ -17,13 +17,14 @@ Termux Compatible | No Root Required | Python 3.13+
 """
 
 import requests
-import re
 import socket
 import time
 import json
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse
+
+from core.shared_infra import shared_session, regex_cache, framework_discovery, oob_provider
 
 # ============================================================================
 # GOOGLE DORK DATABASE (from DorkScanner + DorksEye)
@@ -77,11 +78,9 @@ DORK_CATEGORIES = {
     ],
 }
 
-# Email extraction pattern
-EMAIL_PATTERN = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-
-# IP pattern
-IP_PATTERN = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
+# Email and IP patterns are now handled via regex_cache shorthand names:
+#   'email'  → [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
+#   'ipv4'   → \b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b
 
 
 class OSINTEngine:
@@ -91,13 +90,7 @@ class OSINTEngine:
         self.domain = domain
         self.threads = threads
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.emails = set()
         self.hosts = set()
         self.ips = set()
@@ -121,7 +114,7 @@ class OSINTEngine:
                 url = f"https://www.google.com/search?q=%22@{self.domain}%22+intext:%22@{self.domain}%22&num=100"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.append(e)
@@ -135,7 +128,7 @@ class OSINTEngine:
                 url = f"https://www.bing.com/search?q=%22@{self.domain}%22&count=50"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     for e in emails:
                         if self.domain in e:
                             found.append(e)
@@ -152,7 +145,7 @@ class OSINTEngine:
                     data = resp.json()
                     for entry in data:
                         name = entry.get('name_value', '')
-                        emails_found = EMAIL_PATTERN.findall(name)
+                        emails_found = regex_cache.findall('email', name)
                         found.extend(emails_found)
             except Exception:
                 pass
@@ -164,7 +157,7 @@ class OSINTEngine:
                 url = f"https://api.hackertarget.com/emailsearch/?q={self.domain}"
                 resp = self.session.get(url, timeout=self.timeout)
                 if resp and resp.status_code == 200:
-                    emails = EMAIL_PATTERN.findall(resp.text)
+                    emails = regex_cache.findall('email', resp.text)
                     found.extend(emails)
             except Exception:
                 pass
@@ -206,7 +199,7 @@ class OSINTEngine:
                     resp = self.session.get(search_url, timeout=self.timeout)
                     if resp and resp.status_code == 200:
                         # Extract result URLs
-                        url_pattern = re.findall(r'href="/url\?q=(https?://[^&"]+)', resp.text)
+                        url_pattern = regex_cache.findall(r'href="/url\?q=(https?://[^&"]+)', resp.text)
                         if url_pattern:
                             results["findings"].append({
                                 "category": category,
@@ -335,6 +328,19 @@ class OSINTEngine:
                         if sig.lower() in text.lower() or sig in headers.get('Set-Cookie', ''):
                             results["technologies"].append(tech)
                             break
+        except Exception:
+            pass
+
+        # Modern framework discovery for SPA endpoints
+        try:
+            fw_results = framework_discovery.discover(target_url)
+            for technique, endpoints in fw_results.items():
+                for ep in endpoints:
+                    results["technologies"].append({
+                        "name": f"SPA ({technique})",
+                        "indicators": [f"endpoint: {ep}"],
+                    })
+            results["total_techs"] = len(results["technologies"])
         except Exception:
             pass
 

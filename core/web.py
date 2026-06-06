@@ -12,9 +12,9 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, SECURITY_HEADERS,
-    COMMON_DIRS, SENSITIVE_JS_PATTERNS, MAX_THREADS
+    COMMON_DIRS, DEFAULT_TIMEOUT, MAX_THREADS, SECURITY_HEADERS, SENSITIVE_JS_PATTERNS, USER_AGENTS, VERIFY_SSL
 )
+from core.shared_infra import shared_session, regex_cache
 import random
 
 
@@ -22,13 +22,14 @@ class WebEngine:
     """Advanced Web Security Scanning Engine"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        pass
 
     def _rotate_ua(self):
         """Rotate user agent"""
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        # User-Agent rotation handled by shared_session
+        pass
 
     # ========================================================================
     # SECURITY HEADERS ANALYSIS (from wizard + enhanced with omino's approach)
@@ -241,7 +242,7 @@ class WebEngine:
         for secret_type, patterns in SENSITIVE_JS_PATTERNS.items():
             for pattern in patterns:
                 try:
-                    matches = re.findall(pattern, content, re.IGNORECASE)
+                    matches = regex_cache.findall(pattern, content, re.IGNORECASE)
                     for match in matches[:5]:  # Limit per type
                         # Don't add duplicates
                         value = str(match)[:80]

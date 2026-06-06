@@ -24,6 +24,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # GIT EXPOSURE PATHS (from DVCS-Ripper)
 # ============================================================================
@@ -98,13 +100,7 @@ class GitExposureEngine:
         self.threads = threads
         self.timeout = timeout
         self.github_token = github_token
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
 
     def _get(self, path):
         """Make GET request"""
@@ -275,7 +271,7 @@ class GitExposureEngine:
             return results
 
         # Extract branch reference
-        ref_match = re.search(r'ref:\s*(\S+)', resp.text)
+            ref_match = regex_cache.search(r'ref:\s*(\S+)', resp.text)
         if not ref_match:
             return results
 

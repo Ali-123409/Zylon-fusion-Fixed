@@ -13,8 +13,12 @@ Termux Compatible | Python 3.13 | No Root Required
 """
 
 import json
+import random
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse, quote
+
+from core.var import USER_AGENTS
+from core.shared_infra import shared_session, PayloadInjector
 
 try:
     import requests
@@ -122,39 +126,116 @@ class GraphQLSecurityTester:
         self.timeout = timeout
         self.results: List[Dict] = []
         self.headers = {
-            "User-Agent": "ZYLON-FUSION/3.0 GraphQL-Scanner",
+            'User-Agent': random.choice(USER_AGENTS),
             "Content-Type": "application/json",
         }
 
     def _graph_query(self, query: str, operation: str = "query",
-                     batch: bool = False) -> Optional[Dict]:
+                     batch: bool = False,
+                     content_type: str = "application/json") -> Optional[Dict]:
         """Send a GraphQL query to the endpoint.
+        
+        Supports three content types:
+          - application/json (default, most GraphQL endpoints)
+          - application/graphql (query as raw body)
+          - GET with query parameter (for CSRF testing)
+        
+        Also uses PayloadInjector for header injection tests.
         
         Args:
             query: GraphQL query string
             operation: Operation type (query/mutation)
             batch: If True, send 10 identical queries as a batch array
+            content_type: One of 'application/json', 'application/graphql', or 'GET'
         """
         payload = {operation: query, "operationName": "zylon"}
 
         try:
-            if batch:
-                # Array-based batching (10 queries)
-                batch_payload = [payload] * 10
-                resp = self.session.post(
-                    self.url, json=batch_payload,
-                    headers=self.headers, timeout=self.timeout,
+            if content_type == "GET":
+                # GET with query parameter
+                resp = self.session.get(
+                    self.url,
+                    params={"query": query, "operationName": "zylon"},
+                    headers={'User-Agent': random.choice(USER_AGENTS)},
+                    timeout=self.timeout,
                     verify=False, allow_redirects=True,
                 )
+                return resp.json()
+            elif content_type == "application/graphql":
+                # POST with raw GraphQL body
+                graphql_headers = dict(self.headers)
+                graphql_headers['Content-Type'] = 'application/graphql'
+                graphql_headers['User-Agent'] = random.choice(USER_AGENTS)
+                resp = self.session.post(
+                    self.url, data=query,
+                    headers=graphql_headers, timeout=self.timeout,
+                    verify=False, allow_redirects=True,
+                )
+                return resp.json()
             else:
-                resp = self.session.post(
-                    self.url, json=payload,
-                    headers=self.headers, timeout=self.timeout,
-                    verify=False, allow_redirects=True,
-                )
-            return resp.json()
+                # POST with application/json (default)
+                if batch:
+                    batch_payload = [payload] * 10
+                    json_headers = dict(self.headers)
+                    json_headers['User-Agent'] = random.choice(USER_AGENTS)
+                    resp = self.session.post(
+                        self.url, json=batch_payload,
+                        headers=json_headers, timeout=self.timeout,
+                        verify=False, allow_redirects=True,
+                    )
+                else:
+                    json_headers = dict(self.headers)
+                    json_headers['User-Agent'] = random.choice(USER_AGENTS)
+                    resp = self.session.post(
+                        self.url, json=payload,
+                        headers=json_headers, timeout=self.timeout,
+                        verify=False, allow_redirects=True,
+                    )
+                return resp.json()
         except Exception:
             return None
+
+    def _graph_query_all_types(self, query: str, operation: str = "query",
+                               batch: bool = False) -> Optional[Dict]:
+        """Send a GraphQL query using all three content types.
+        
+        Tries application/json first, then application/graphql, then GET.
+        Returns the first non-None response, or None if all fail.
+        Also tests header injection via PayloadInjector.
+        """
+        result = None
+        for ct in ["application/json", "application/graphql", "GET"]:
+            resp = self._graph_query(query, operation, batch, content_type=ct)
+            if resp is not None:
+                result = resp
+                break
+
+        # Test header injection via PayloadInjector
+        try:
+            header_injections = [
+                PayloadInjector.inject_header(self.url, "User-Agent", query),
+                PayloadInjector.inject_header(self.url, "X-Forwarded-For", query),
+            ]
+            header_payload = {operation: query, "operationName": "zylon"}
+            for inj in header_injections:
+                try:
+                    inj_headers = inj.get('headers', {})
+                    inj_headers['Content-Type'] = 'application/json'
+                    inj_headers['User-Agent'] = random.choice(USER_AGENTS)
+                    self.session.request(
+                        method=inj.get('method', 'GET'),
+                        url=inj.get('url', self.url),
+                        json=header_payload,
+                        headers=inj_headers,
+                        timeout=self.timeout,
+                        verify=False, allow_redirects=True,
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        return result
 
     def _http_request(self, method: str = "GET", params: Dict = None,
                       data: Dict = None, extra_headers: Dict = None) -> Optional[requests.Response]:
@@ -770,7 +851,7 @@ class GraphQLEngine:
             print(msg)
 
     def _create_session(self, proxy: str = None) -> requests.Session:
-        session = requests.Session()
+        session = shared_session
         session.verify = False
         if proxy:
             session.proxies = {"http": proxy, "https": proxy}
@@ -861,7 +942,7 @@ class GraphQLEngine:
 
         session = self._create_session(proxy)
         headers = {
-            "User-Agent": "ZYLON-FUSION/3.0",
+            'User-Agent': random.choice(USER_AGENTS),
             "Content-Type": "application/json",
         }
 

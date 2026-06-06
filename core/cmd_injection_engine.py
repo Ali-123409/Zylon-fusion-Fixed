@@ -35,10 +35,16 @@ import time
 import random
 import string
 import base64
+from typing import TYPE_CHECKING
 
-import requests
+if TYPE_CHECKING:
+    import requests
+
+import requests  # needed for type annotations at runtime
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+from core.shared_infra import shared_session, PayloadInjector, regex_cache
 
 from rich.console import Console
 from rich.table import Table
@@ -419,14 +425,14 @@ class CommandInjectionEngine:
     # Classic detection marker length
     MARKER_LENGTH = 8
 
-    def __init__(self, session: requests.Session):
+    def __init__(self, session=None):
         """Initialize the Command Injection Engine.
 
         Params:
-            session (requests.Session): ZYLON's HTTP session with configured
-                headers, cookies, and SSL verification settings.
+            session: ZYLON's HTTP session with configured headers, cookies,
+                and SSL verification settings. Defaults to shared_session.
         """
-        self.session = session
+        self.session = session or shared_session
         self.tamper = TamperEngine()
         self._baseline_time = None
         self._detected_os = None
@@ -658,13 +664,14 @@ class CommandInjectionEngine:
     def _send_injection(self, url: str, param: str, payload: str,
                          method: str = "GET", data: dict = None,
                          headers: dict = None,
-                         injection_point: str = "param") -> requests.Response:
+                         injection_point: str = "param") -> object:
         """Send an injection payload to the target.
 
         Supports multiple injection points:
           - param: Inject into a GET/POST parameter
           - header: Inject into an HTTP header
           - cookie: Inject into a cookie value
+          - json_body: Inject into a JSON request body
 
         Params:
             url (str): Target URL
@@ -673,14 +680,21 @@ class CommandInjectionEngine:
             method (str): HTTP method ('GET' or 'POST')
             data (dict): POST data dictionary
             headers (dict): Custom headers dictionary
-            injection_point (str): 'param', 'header', or 'cookie'
+            injection_point (str): 'param', 'header', 'cookie', or 'json_body'
 
         Returns:
             requests.Response or None: HTTP response
         """
         try:
-            if injection_point == "header":
-                req_headers = dict(headers or self.session.headers)
+            if injection_point == "json_body":
+                json_data = {param: payload}
+                json_headers = {**(headers or {}), 'Content-Type': 'application/json'}
+                resp = self.session.post(
+                    url, json=json_data, headers=json_headers,
+                    verify=False, timeout=15, allow_redirects=False
+                )
+            elif injection_point == "header":
+                req_headers = dict(headers or {})
                 req_headers[param] = payload
                 if method.upper() == "POST":
                     resp = self.session.post(
@@ -721,7 +735,7 @@ class CommandInjectionEngine:
                         verify=False, timeout=15, allow_redirects=False
                     )
             return resp
-        except requests.exceptions.RequestException:
+        except Exception:
             return None
 
     def _measure_baseline(self, url: str, param: str,
@@ -792,13 +806,13 @@ class CommandInjectionEngine:
         # Try to extract content between double markers (Commix pattern)
         # Pattern: MARKERMARKER(.*?)MARKERMARKER
         double_pattern = re.escape(marker + marker) + r"(.*?)" + re.escape(marker + marker)
-        match = re.search(double_pattern, text, re.DOTALL)
+        match = regex_cache.search(double_pattern, text, re.DOTALL)
         if match:
             return match.group(1).strip()
 
         # Try single marker pattern: MARKER(.*?)MARKER
         single_pattern = re.escape(marker) + r"(.*?)" + re.escape(marker)
-        match = re.search(single_pattern, text, re.DOTALL)
+        match = regex_cache.search(single_pattern, text, re.DOTALL)
         if match:
             return match.group(1).strip()
 
@@ -907,7 +921,7 @@ class CommandInjectionEngine:
                         "data": data,
                     })
         else:
-            # Default: test common header injection points
+            # Default: test common header injection points and JSON body
             for header_name in HEADER_INJECTION_POINTS[:3]:  # User-Agent, Referer, Cookie
                 params_to_test.append({
                     "param": header_name,
@@ -915,6 +929,15 @@ class CommandInjectionEngine:
                     "method": method,
                     "data": data,
                 })
+            # Also test JSON body injection context
+            if data:
+                for p in data:
+                    params_to_test.append({
+                        "param": p,
+                        "injection_point": "json_body",
+                        "method": "POST",
+                        "data": data,
+                    })
 
         if not params_to_test:
             console.print("[yellow][!] No parameters found to test[/yellow]")

@@ -39,6 +39,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
+from core.shared_infra import shared_session
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -398,14 +399,9 @@ class DeserializationEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else
-                'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        # Use the shared thread-safe session instead of creating our own
+        # (shared_session already configures verify, headers, connection pooling)
+        self.session = shared_session
         self.lock = threading.Lock()
 
     def _print(self, msg, color=CYAN):

@@ -22,6 +22,8 @@ import json
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from core.shared_infra import shared_session, regex_cache, oob_provider
+
 # ============================================================================
 # CLOUD METADATA ENDPOINTS (from CloudSSRFer + SSRFmap)
 # ============================================================================
@@ -112,11 +114,8 @@ class CloudSecurityEngine:
         self.target = target
         self.threads = threads
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
+        self.session = shared_session
+        # User-Agent rotation and SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
 

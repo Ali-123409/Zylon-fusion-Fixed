@@ -23,6 +23,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, framework_discovery
+
 # ============================================================================
 # CMS DETECTION SIGNATURES (180+ CMS)
 # ============================================================================
@@ -231,13 +233,7 @@ class CMSEngine:
         self.target_url = target_url.rstrip('/') if target_url else None
         self.threads = threads
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.detected_cms = None
         self.version = None
 
@@ -287,7 +283,7 @@ class CMSEngine:
                 if "header" in indicator:
                     header_name = indicator["header"]
                     if header_name in homepage_headers:
-                        if re.match(indicator["pattern"], homepage_headers[header_name]):
+                        if regex_cache.match(indicator["pattern"], homepage_headers[header_name]):
                             detected = True
                             detection_method = f"header:{header_name}"
                             break
@@ -321,7 +317,7 @@ class CMSEngine:
                 if "version_path" in sigs:
                     vresp = self._get(sigs["version_path"])
                     if vresp:
-                        vmatch = re.search(sigs.get("version_regex", r'([\d.]+)'), vresp.text)
+                        vmatch = regex_cache.search(sigs.get("version_regex", r'([\d.]+)'), vresp.text)
                         if vmatch:
                             version = vmatch.group(1)
 
@@ -338,6 +334,15 @@ class CMSEngine:
         for h in tech_headers:
             if h in homepage_headers:
                 results["technologies"].append(f"{h}: {homepage_headers[h]}")
+
+        # Modern framework discovery for SPA endpoints
+        try:
+            fw_results = framework_discovery.discover(self.target_url)
+            for technique, endpoints in fw_results.items():
+                for ep in endpoints:
+                    results["technologies"].append(f"SPA Endpoint: {ep}")
+        except Exception:
+            pass
 
         if results["detected_cms"]:
             self.detected_cms = results["detected_cms"][0]["name"]
@@ -391,7 +396,7 @@ class CMSEngine:
                 resp = self._get(f"/?author={author_id}")
                 if resp and resp.status_code == 200:
                     # Extract username from response or redirect
-                    match = re.search(r'/author/([^/]+)/', resp.text)
+                    match = regex_cache.search(r'/author/([^/]+)/', resp.text)
                     if match:
                         results["users"].append({
                             "id": author_id,

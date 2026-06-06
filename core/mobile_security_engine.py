@@ -38,9 +38,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS,
-    API_ENDPOINTS
+    API_ENDPOINTS, DEFAULT_TIMEOUT, MAX_THREADS, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache, oob_provider
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -292,11 +292,8 @@ class MobileSecurityEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
-        })
+        self.session = shared_session
+        # SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
         self.lock = threading.Lock()
@@ -547,20 +544,20 @@ class MobileSecurityEngine:
                 try:
                     content = zf.read(f).decode('utf-8', errors='ignore')
                     # Extract package names
-                    packages = re.findall(r'(com\.[a-zA-Z0-9_.]+)', content)
+                    packages = regex_cache.findall(r'(com\.[a-zA-Z0-9_.]+)', content)
                     for pkg in packages:
                         if not result["details"]["package_name"]:
                             result["details"]["package_name"] = pkg
                             break
 
                     # Extract permissions
-                    perms = re.findall(r'(android\.permission\.\w+)', content)
+                    perms = regex_cache.findall(r'(android\.permission\.\w+)', content)
                     for perm in perms:
                         if perm not in result["details"]["permissions"]:
                             result["details"]["permissions"].append(perm)
 
                     # Extract deep links
-                    links = re.findall(r'(?:scheme|host|pathPrefix)\s*=\s*["\']([^"\']+)["\']', content)
+                    links = regex_cache.findall(r'(?:scheme|host|pathPrefix)\s*=\s*["\']([^"\']+)["\']', content)
                     for link in links:
                         if link not in result["details"]["deep_links"]:
                             result["details"]["deep_links"].append(link)
@@ -581,9 +578,9 @@ class MobileSecurityEngine:
                 try:
                     content = zf.read(f).decode('utf-8', errors='ignore')
                     # Look for scheme declarations
-                    schemes = re.findall(r'scheme\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
-                    hosts = re.findall(r'host\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
-                    paths = re.findall(r'pathPrefix\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
+                    schemes = regex_cache.findall(r'scheme\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
+                    hosts = regex_cache.findall(r'host\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
+                    paths = regex_cache.findall(r'pathPrefix\s*=\s*["\']([^"\']+)["\']', content, re.IGNORECASE)
 
                     for scheme in schemes:
                         for host in hosts:
@@ -605,7 +602,7 @@ class MobileSecurityEngine:
                 try:
                     content = zf.read(f).decode('utf-8', errors='ignore')
                     for pattern_info in WEBVIEW_VULN_PATTERNS:
-                        if re.search(pattern_info["pattern"], content):
+                        if regex_cache.search(pattern_info["pattern"], content):
                             result["vulnerable"] = True
                             result["findings"].append({
                                 "type": "webview_vuln",
@@ -1143,7 +1140,7 @@ class MobileSecurityEngine:
 
         # Phase 1: Check for mobile-specific meta tags
         self._print(f"  [*] Phase 1: Mobile meta tags...", CYAN)
-        mobile_meta = re.findall(
+        mobile_meta = regex_cache.findall(
             r'<meta[^>]+(apple-mobile-web-app|mobile-web-app-capable|viewport|format-detection)[^>]*>',
             html, re.IGNORECASE
         )
@@ -1165,7 +1162,7 @@ class MobileSecurityEngine:
         ]
 
         for pattern, desc in js_bridge_patterns:
-            matches = re.findall(pattern, html, re.IGNORECASE)
+            matches = regex_cache.findall(pattern, html, re.IGNORECASE)
             if matches:
                 self._print(f"  [!] {desc}: {matches[:3]}", YELLOW)
                 result["details"]["js_interfaces"].append({
@@ -1176,7 +1173,7 @@ class MobileSecurityEngine:
 
         # Phase 3: Check for custom URL schemes
         self._print(f"  [*] Phase 3: Custom URL scheme detection...", CYAN)
-        custom_schemes = re.findall(r'(?:href|src|action)\s*=\s*["\']([a-z][a-z0-9+.-]*):', html, re.IGNORECASE)
+        custom_schemes = regex_cache.findall(r'(?:href|src|action)\s*=\s*["\']([a-z][a-z0-9+.-]*):', html, re.IGNORECASE)
         known_schemes = {'http', 'https', 'mailto', 'tel', 'javascript', 'data', 'ftp', 'file'}
         for scheme in set(custom_schemes):
             if scheme.lower() not in known_schemes:
@@ -1200,7 +1197,7 @@ class MobileSecurityEngine:
                     }
 
                     # Check if it's in a script context
-                    script_contexts = re.findall(
+                    script_contexts = regex_cache.findall(
                         rf'<script[^>]*>[^<]*{re.escape(value)}[^<]*</script>',
                         html, re.IGNORECASE | re.DOTALL
                     )
@@ -1216,7 +1213,7 @@ class MobileSecurityEngine:
                         self._print(f"  [!!!] Script injection: {param_name}", RED)
 
                     # Check if in href/src context
-                    attr_contexts = re.findall(
+                    attr_contexts = regex_cache.findall(
                         rf'(?:href|src|action)\s*=\s*["\'][^"\']*{re.escape(value)}[^"\']*["\']',
                         html, re.IGNORECASE
                     )
@@ -1228,7 +1225,7 @@ class MobileSecurityEngine:
 
         # Phase 5: Check for postMessage handlers (iframe communication)
         self._print(f"  [*] Phase 5: postMessage handler detection...", CYAN)
-        postmsg_handlers = re.findall(
+        postmsg_handlers = regex_cache.findall(
             r'addEventListener\s*\(\s*["\']message["\']\s*,\s*(\w+)',
             html, re.IGNORECASE
         )
@@ -1244,7 +1241,7 @@ class MobileSecurityEngine:
 
         # Phase 6: Check for deep link handling in JavaScript
         self._print(f"  [*] Phase 6: Deep link JS handlers...", CYAN)
-        deeplink_patterns = re.findall(
+        deeplink_patterns = regex_cache.findall(
             r'(?:window\.location|location\.href|navigate|openUrl|deepLink)\s*[=(]\s*["\']([^"\']+)["\']',
             html, re.IGNORECASE
         )
@@ -1310,7 +1307,7 @@ class MobileSecurityEngine:
                 hsts = resp.headers.get('Strict-Transport-Security', '')
                 if hsts:
                     result["details"]["hsts_enabled"] = True
-                    max_age_match = re.search(r'max-age=(\d+)', hsts)
+                    max_age_match = regex_cache.search(r'max-age=(\d+)', hsts)
                     if max_age_match:
                         result["details"]["hsts_max_age"] = int(max_age_match.group(1))
                     result["details"]["hsts_includes_subdomains"] = 'includesubdomains' in hsts.lower()

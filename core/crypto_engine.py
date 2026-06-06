@@ -24,6 +24,8 @@ import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from core.shared_infra import shared_session, regex_cache
+
 # ============================================================================
 # HASH TYPE DATABASE (300+ from Name-That-Hash)
 # ============================================================================
@@ -124,7 +126,7 @@ class CryptoEngine:
         hash_lower = hash_string.strip().lower()
 
         for pattern, types in HASH_TYPES.items():
-            if re.match(pattern, hash_lower):
+            if regex_cache.match(pattern, hash_lower):
                 results["possible_types"].extend(types)
 
         # Additional format analysis

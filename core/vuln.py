@@ -13,9 +13,9 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, SQLI_PAYLOADS,
-    SQLI_ERRORS, XSS_PAYLOADS, CORS_TEST_ORIGINS
+    CORS_TEST_ORIGINS, DEFAULT_TIMEOUT, SQLI_ERRORS, SQLI_PAYLOADS, USER_AGENTS, VERIFY_SSL, XSS_PAYLOADS
 )
+from core.shared_infra import shared_session, regex_cache
 import random
 
 
@@ -23,13 +23,14 @@ class VulnEngine:
     """Advanced Vulnerability Scanner Engine"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        pass
 
     def _rotate_ua(self):
         """Rotate user agent"""
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        # User-Agent rotation handled by shared_session
+        pass
 
     # ========================================================================
     # SQL INJECTION SCANNER (from wizard + enhanced)
@@ -503,21 +504,21 @@ class VulnEngine:
         try:
             # Method 1: Meta generator
             resp = self.session.get(url, timeout=5, verify=VERIFY_SSL)
-            match = re.search(r'content="WordPress (\d+\.\d+\.?\d*)"', resp.text)
+            match = regex_cache.search(r'content="WordPress (\d+\.\d+\.?\d*)"', resp.text)
             if match:
                 return match.group(1)
 
             # Method 2: Readme
             readme_resp = self.session.get(urljoin(url, '/readme.html'), timeout=5, verify=VERIFY_SSL)
             if readme_resp.status_code == 200:
-                match = re.search(r'Version (\d+\.\d+\.?\d*)', readme_resp.text)
+                match = regex_cache.search(r'Version (\d+\.\d+\.?\d*)', readme_resp.text)
                 if match:
                     return match.group(1)
 
             # Method 3: RSS feed
             feed_resp = self.session.get(urljoin(url, '/feed/'), timeout=5, verify=VERIFY_SSL)
             if feed_resp.status_code == 200:
-                match = re.search(r'wordpress.org/\?v=(\d+\.\d+\.?\d*)', feed_resp.text)
+                match = regex_cache.search(r'wordpress.org/\?v=(\d+\.\d+\.?\d*)', feed_resp.text)
                 if match:
                     return match.group(1)
 

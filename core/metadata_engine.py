@@ -41,6 +41,8 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
 
+from core.shared_infra import shared_session
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -238,7 +240,7 @@ class MetadataEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
+        self.session = shared_session
         self.session.verify = False
         self.session.headers.update({
             'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
@@ -580,12 +582,23 @@ class MetadataEngine:
                 lon_str = exif_data['GPSLongitude']
 
                 # Parse rational format "d/m, d/m, d/m"
+                def _safe_rational(val_str):
+                    """Safely parse rational number like '37/1' or '0.123' without eval()"""
+                    val_str = val_str.strip()
+                    try:
+                        if '/' in val_str:
+                            num, den = val_str.split('/', 1)
+                            return float(num.strip()) / float(den.strip())
+                        return float(val_str)
+                    except (ValueError, ZeroDivisionError):
+                        return 0.0
+
                 def parse_rational_coords(coord_str):
                     parts = coord_str.split(',')
                     if len(parts) == 3:
-                        degrees = eval(parts[0].strip())
-                        minutes = eval(parts[1].strip())
-                        seconds = eval(parts[2].strip())
+                        degrees = _safe_rational(parts[0])
+                        minutes = _safe_rational(parts[1])
+                        seconds = _safe_rational(parts[2])
                         return degrees + minutes / 60.0 + seconds / 3600.0
                     return None
 

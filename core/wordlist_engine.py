@@ -33,9 +33,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS, REQUEST_DELAY,
-    COMMON_DIRS, WORDLISTS_DIR, DATA_DIR
+    COMMON_DIRS, DATA_DIR, DEFAULT_TIMEOUT, MAX_THREADS, REQUEST_DELAY, USER_AGENTS, WORDLISTS_DIR
 )
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLORS
@@ -257,9 +257,9 @@ class WordlistEngine:
     """
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = False
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        # SSL verification handled by shared_session
         self.lock = threading.Lock()
         self._stop_event = threading.Event()
         self.crawled_words = set()
@@ -384,21 +384,21 @@ class WordlistEngine:
             clean_text = re.sub(r'<style[^>]*>.*?</style>', '', clean_text, flags=re.DOTALL | re.IGNORECASE)
 
             # Extract meaningful words (alphanumeric, 3+ chars)
-            page_words = re.findall(r'[a-zA-Z][a-zA-Z0-9_-]{2,}', clean_text)
+            page_words = regex_cache.findall(r'[a-zA-Z][a-zA-Z0-9_-]{2,}', clean_text)
             for word in page_words:
                 if len(word) >= 3 and len(word) <= 30:
                     words.add(word.lower())
 
             # Extract words from HTML attributes
-            attrs = re.findall(r'(?:class|id|name|data-\w+)="([^"]+)"', text)
+            attrs = regex_cache.findall(r'(?:class|id|name|data-\w+)="([^"]+)"', text)
             for attr in attrs:
-                attr_words = re.findall(r'[a-zA-Z][a-zA-Z0-9_-]{2,}', attr)
+                attr_words = regex_cache.findall(r'[a-zA-Z][a-zA-Z0-9_-]{2,}', attr)
                 for w in attr_words:
                     if len(w) >= 3 and len(w) <= 30:
                         words.add(w.lower())
 
             # Extract paths from href/src
-            links = re.findall(r'(?:href|src|action)="([^"]+)"', text)
+            links = regex_cache.findall(r'(?:href|src|action)="([^"]+)"', text)
             for link in links:
                 if link.startswith('http'):
                     urls.add(link)
@@ -415,29 +415,29 @@ class WordlistEngine:
                         words.add(seg_name.lower())
 
             # Extract from comments
-            comments = re.findall(r'<!--(.*?)-->', text, re.DOTALL)
+            comments = regex_cache.findall(r'<!--(.*?)-->', text, re.DOTALL)
             for comment in comments:
-                comment_words = re.findall(r'[a-zA-Z][a-zA-Z0-9_-]{2,}', comment)
+                comment_words = regex_cache.findall(r'[a-zA-Z][a-zA-Z0-9_-]{2,}', comment)
                 for w in comment_words:
                     if len(w) >= 3:
                         words.add(w.lower())
 
             # Extract from inline scripts
-            scripts = re.findall(r'<script[^>]*>(.*?)</script>', text, re.DOTALL | re.IGNORECASE)
+            scripts = regex_cache.findall(r'<script[^>]*>(.*?)</script>', text, re.DOTALL | re.IGNORECASE)
             for script in scripts[:5]:
                 # Variable names and string literals
-                js_vars = re.findall(r'(?:var|let|const)\s+(\w+)', script)
+                js_vars = regex_cache.findall(r'(?:var|let|const)\s+(\w+)', script)
                 for v in js_vars:
                     if len(v) >= 3:
                         words.add(v.lower())
 
-                js_strings = re.findall(r'["\']([a-zA-Z0-9_-]{3,})["\']', script)
+                js_strings = regex_cache.findall(r'["\']([a-zA-Z0-9_-]{3,})["\']', script)
                 for s in js_strings:
                     if len(s) >= 3 and not s.startswith('http') and not s.startswith('//'):
                         words.add(s.lower())
 
                 # API endpoints in JS
-                api_paths = re.findall(r'["\'](/[a-zA-Z0-9_/-]+)', script)
+                api_paths = regex_cache.findall(r'["\'](/[a-zA-Z0-9_/-]+)', script)
                 for p in api_paths:
                     for seg in p.split('/'):
                         if len(seg) >= 3:
@@ -458,7 +458,7 @@ class WordlistEngine:
             resp = self.session.get(robots_url, timeout=5, verify=False)
             if resp.status_code == 200:
                 # Extract paths from Disallow/Allow
-                paths = re.findall(r'(?:Disallow|Allow|Sitemap):\s*(\S+)', resp.text)
+                paths = regex_cache.findall(r'(?:Disallow|Allow|Sitemap):\s*(\S+)', resp.text)
                 for path in paths:
                     if path.startswith('http'):
                         continue
@@ -480,7 +480,7 @@ class WordlistEngine:
             resp = self.session.get(sitemap_url, timeout=5, verify=False)
             if resp.status_code == 200:
                 # Extract URLs from sitemap
-                locs = re.findall(r'<loc>(.*?)</loc>', resp.text)
+                locs = regex_cache.findall(r'<loc>(.*?)</loc>', resp.text)
                 for loc in locs:
                     path = urlparse(loc).path
                     segments = [s for s in path.split('/') if s]

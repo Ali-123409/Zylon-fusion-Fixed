@@ -21,6 +21,8 @@ import time
 from datetime import datetime
 from urllib.parse import urlparse, quote
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # CORS ORIGIN PAYLOADS (from CorsOne + CORScanner + Corser)
 # ============================================================================
@@ -74,13 +76,7 @@ class CORSEngine:
     def __init__(self, target_url=None, timeout=10, proxy=None):
         self.target_url = target_url
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
 
     # ========================================================================
     # SCAN 1: CORS Misconfiguration Detection

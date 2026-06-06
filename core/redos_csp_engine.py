@@ -37,6 +37,8 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -140,13 +142,7 @@ class ReDoSCSPEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.lock = threading.Lock()
 
     def _print(self, msg, color=CYAN):
@@ -196,7 +192,7 @@ class ReDoSCSPEngine:
 
         for pattern, description in nested_quantifier_patterns:
             try:
-                if re.search(pattern, regex_pattern):
+                if regex_cache.search(pattern, regex_pattern):
                     issues.append({
                         "type": "nested_quantifier",
                         "severity": "High",
@@ -210,7 +206,7 @@ class ReDoSCSPEngine:
         # e.g., (a|a)+ or (a|ab)+
         alternation_pattern = r'\(([^)]*\|[^)]*)\)[+*{]'
         try:
-            alt_matches = re.findall(alternation_pattern, regex_pattern)
+            alt_matches = regex_cache.findall(alternation_pattern, regex_pattern)
             for alt_match in alt_matches:
                 alternatives = alt_match.split('|')
                 # Check for overlapping prefixes
@@ -241,7 +237,7 @@ class ReDoSCSPEngine:
         # e.g., ([a-z]+\d+)+ or (\w+\s+)+
         char_class_pattern = r'\(([^)]*\\[swWdD][^)]*)\)[+*]'
         try:
-            cc_matches = re.findall(char_class_pattern, regex_pattern)
+            cc_matches = regex_cache.findall(char_class_pattern, regex_pattern)
             for cc_match in cc_matches:
                 if '\\w' in cc_match or '[a-zA-Z0-9]' in cc_match:
                     issues.append({
@@ -265,7 +261,7 @@ class ReDoSCSPEngine:
 
         # Check 5: Try to compile and measure compilation
         try:
-            compiled = re.compile(regex_pattern)
+            compiled = regex_cache.compile(regex_pattern)
             result["details"]["compiles"] = True
         except re.error as e:
             issues.append({
@@ -328,7 +324,7 @@ class ReDoSCSPEngine:
         for test_input in test_inputs:
             try:
                 start = time.time()
-                match = re.search(pattern, test_input)
+                match = regex_cache.search(pattern, test_input)
                 elapsed = time.time() - start
                 result["time_ms"] = int(elapsed * 1000)
 
@@ -378,17 +374,17 @@ class ReDoSCSPEngine:
             # that match partially but fail at the end
 
             # Extract quantified groups
-            quantified_groups = re.findall(r'\(([^)]+)\)([+*]{1,2}|\{[^}]+\})?', pattern)
+            quantified_groups = regex_cache.findall(r'\(([^)]+)\)([+*]{1,2}|\{[^}]+\})?', pattern)
 
             # Generate exploit strings based on common ReDoS patterns
             # Type 1: Nested (a+)+ - feed many 'a's then a non-matching char
-            if re.search(r'\([^)]+\+\)\+', pattern):
+            if regex_cache.search(r'\([^)]+\+\)\+', pattern):
                 # Find the base character
-                inner_match = re.search(r'\(([^)]+)\)\+', pattern)
+                inner_match = regex_cache.search(r'\(([^)]+)\)\+', pattern)
                 if inner_match:
                     inner = inner_match.group(1)
                     # Extract the primary char from the inner group
-                    char_match = re.search(r'([a-zA-Z0-9])', inner)
+                    char_match = regex_cache.search(r'([a-zA-Z0-9])', inner)
                     if char_match:
                         char = char_match.group(1)
                         exploit_strings.append({
@@ -398,7 +394,7 @@ class ReDoSCSPEngine:
                         })
 
             # Type 2: Alternation overlap (a|ab)+ - feed 'a's then 'b'
-            if re.search(r'\([^)]*\|[^)]*\)\+', pattern):
+            if regex_cache.search(r'\([^)]*\|[^)]*\)\+', pattern):
                 exploit_strings.append({
                     "string": "a" * 25 + "b",
                     "description": "Repeated 'a' followed by 'b' - triggers alternation backtracking",
@@ -1016,6 +1012,30 @@ class ReDoSCSPEngine:
                         break
                 except Exception:
                     continue
+
+        # Test 4b: JSON body injection for API endpoints
+        if "'self'" in script_src:
+            result["details"]["tests_run"].append("json_body_injection")
+            try:
+                injection = PayloadInjector.inject_json(url, "callback", "alert(document.domain)")
+                resp = self.session.request(
+                    method=injection['method'], url=injection['url'],
+                    json=injection['json'],
+                    headers={**injection.get('headers', {}), 'Content-Type': 'application/json'},
+                    timeout=self.timeout, verify=False,
+                )
+                if resp.status_code == 200 and 'alert' in resp.text:
+                    result["vulnerable"] = True
+                    result["details"]["successful_bypasses"].append("json_body_injection")
+                    result["findings"].append({
+                        "type": "csp_bypass_json_body",
+                        "severity": "High",
+                        "description": "CSP bypass via JSON body injection - callback reflected in JSON response",
+                        "payload": '{"callback": "alert(document.domain)"}',
+                    })
+                    self._print(f"  [!!!] JSON body injection bypass found", RED)
+            except Exception:
+                pass
 
         # Test 5: Angular expression bypass
         cdn_hosts = [v for v in script_src if any(cdn in v for cdn in

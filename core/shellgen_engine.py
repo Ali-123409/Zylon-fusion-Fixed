@@ -25,6 +25,8 @@ import random
 import string
 from datetime import datetime
 
+from core.shared_infra import regex_cache, shared_session, oob_provider
+
 # ============================================================================
 # REVERSE SHELL TEMPLATES (15+ languages)
 # ============================================================================

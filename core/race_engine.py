@@ -26,6 +26,8 @@ try:
 except ImportError:
     requests = None
 
+from core.shared_infra import shared_session
+
 try:
     from rich.console import Console
     from rich.table import Table
@@ -113,9 +115,11 @@ class BarrierFire:
 
         try:
             req_headers = dict(request.headers)
+            # Merge cookies into headers instead of session cookie jar (thread-safe)
             if request.cookies:
-                for name, value in request.cookies.items():
-                    session.cookies.set(name, value)
+                cookie_header = '; '.join(f'{name}={value}' for name, value in request.cookies.items())
+                if cookie_header:
+                    req_headers['Cookie'] = cookie_header
 
             resp = session.request(
                 method=request.method,
@@ -252,13 +256,13 @@ class RaceConditionDetector:
         self.proxy = proxy
         self.max_workers = max_workers
 
-    def _create_session(self) -> requests.Session:
-        """Create a requests session with common settings."""
-        session = requests.Session()
-        session.verify = False
-        if self.proxy:
-            session.proxies = {"http": self.proxy, "https": self.proxy}
-        return session
+    def _create_session(self):
+        """Return the shared thread-safe session.
+
+        Uses shared_session from core.shared_infra which provides
+        thread-safe connection pooling, rate limiting, and WAF evasion.
+        """
+        return shared_session
 
     def detect_race_condition(self, request: RaceRequest,
                               count: int = 100,

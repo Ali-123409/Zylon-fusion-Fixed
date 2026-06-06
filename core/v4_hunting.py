@@ -25,12 +25,14 @@ except ImportError:
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL
 
+from core.shared_infra import shared_session, regex_cache
+
 
 class V4HuntingEngine:
     """V4.0 Hunting Engine: 8 Advanced Bug Bounty Modules from Real-World Hunting"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
+        self.session = session or shared_session
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
         self.session.verify = VERIFY_SSL
 
@@ -217,7 +219,7 @@ class V4HuntingEngine:
             if resp.status_code == 200 and 'error' not in resp.text.lower():
                 text = resp.text
                 # Extract registrant name
-                name_match = re.search(
+                name_match = regex_cache.search(
                     r'Registrant\s*Name:\s*(.+)', text, re.IGNORECASE
                 )
                 if name_match:
@@ -236,7 +238,7 @@ class V4HuntingEngine:
                         usernames.append(parts[0])
 
                 # Extract registrant email
-                email_match = re.search(
+                email_match = regex_cache.search(
                     r'Registrant\s*Email:\s*([^\s@]+)@([^\s]+)', text, re.IGNORECASE
                 )
                 if email_match:
@@ -284,7 +286,7 @@ class V4HuntingEngine:
                 'record': record_text
             }
             # Parse DMARC policy
-            policy_match = re.search(r'p\s*=\s*(none|quarantine|reject)',
+            policy_match = regex_cache.search(r'p\s*=\s*(none|quarantine|reject)',
                                      record_text, re.IGNORECASE)
             if policy_match:
                 policy = policy_match.group(1).lower()
@@ -324,7 +326,7 @@ class V4HuntingEngine:
                 result['risk_score'] += 35
 
             # Check subdomain policy
-            sp_match = re.search(r'sp\s*=\s*(none|quarantine|reject)',
+            sp_match = regex_cache.search(r'sp\s*=\s*(none|quarantine|reject)',
                                  record_text, re.IGNORECASE)
             if not sp_match:
                 result['findings'].append({
@@ -335,8 +337,8 @@ class V4HuntingEngine:
                 result['risk_score'] += 5
 
             # Check reporting
-            rua_match = re.search(r'rua\s*=', record_text)
-            ruf_match = re.search(r'ruf\s*=', record_text)
+            rua_match = regex_cache.search(r'rua\s*=', record_text)
+            ruf_match = regex_cache.search(r'ruf\s*=', record_text)
             if not rua_match and not ruf_match:
                 result['findings'].append({
                     'type': 'DMARC No Reporting',
@@ -372,7 +374,7 @@ class V4HuntingEngine:
                     'record': record_text
                 })
                 # Parse DKIM key type and length
-                key_match = re.search(r'p=([A-Za-z0-9+/=]+)', record_text)
+                key_match = regex_cache.search(r'p=([A-Za-z0-9+/=]+)', record_text)
                 if key_match:
                     key_data = key_match.group(1)
                     # Estimate key size from base64 length
@@ -423,7 +425,7 @@ class V4HuntingEngine:
             result['spf']['redirects'] = redirects
 
             # Check the all mechanism
-            all_match = re.search(r'(\+all|\~all|\-all|\?all)', spf_record)
+            all_match = regex_cache.search(r'(\+all|\~all|\-all|\?all)', spf_record)
             if all_match:
                 all_val = all_match.group(1)
                 result['spf']['all_mechanism'] = all_val
@@ -940,7 +942,7 @@ class V4HuntingEngine:
                         detected = True
                         detection_methods.append(f'JS file: {js_file}')
                         # Try version extraction from JS filename
-                        ver_match = re.search(r'[\-_]?(\d+\.\d+[\.\d]*)', js_file)
+                        ver_match = regex_cache.search(r'[\-_]?(\d+\.\d+[\.\d]*)', js_file)
                         if ver_match:
                             version = ver_match.group(1)
 
@@ -966,7 +968,7 @@ class V4HuntingEngine:
                     if meta_pattern.lower() in mg.lower():
                         detected = True
                         detection_methods.append(f'Meta generator: {mg}')
-                        ver_match = re.search(r'(\d+\.\d+[\.\d]*)', mg)
+                        ver_match = regex_cache.search(r'(\d+\.\d+[\.\d]*)', mg)
                         if ver_match:
                             version = ver_match.group(1)
 
@@ -1049,7 +1051,7 @@ class V4HuntingEngine:
                 if js_resp.status_code == 200:
                     js_text = js_resp.text[:5000]
                     # Check for version strings
-                    ver_match = re.search(
+                    ver_match = regex_cache.search(
                         r'(?:version|v)["\s:=]+["\']?(\d+\.\d+[\.\d\-]*)', js_text, re.I
                     )
                     if ver_match:
@@ -1231,7 +1233,7 @@ class V4HuntingEngine:
 
         # Check inline scripts for Angular
         for script_text in inline_scripts:
-            ang_match = re.search(r'angular\.version\.full\s*=\s*["\']([\d.]+)["\']',
+            ang_match = regex_cache.search(r'angular\.version\.full\s*=\s*["\']([\d.]+)["\']',
                                   script_text)
             if ang_match:
                 found_libs.append({'name': 'Angular', 'version': ang_match.group(1),
@@ -1239,7 +1241,7 @@ class V4HuntingEngine:
 
         # --- React Detection ---
         for script_text in inline_scripts:
-            react_match = re.search(
+            react_match = regex_cache.search(
                 r'React\.version\s*[=:]\s*["\']([\d.]+)["\']', script_text
             )
             if react_match:
@@ -1247,14 +1249,14 @@ class V4HuntingEngine:
                                    'source': 'inline script'})
             # Check for __NEXT_DATA__ (Next.js uses React)
             if '__NEXT_DATA__' in script_text:
-                next_match = re.search(r'"buildId"\s*:\s*"[^"]*?"', script_text)
+                next_match = regex_cache.search(r'"buildId"\s*:\s*"[^"]*?"', script_text)
                 if next_match:
                     found_libs.append({'name': 'React', 'version': 'unknown (Next.js)',
                                        'source': '__NEXT_DATA__'})
 
         # --- Vue.js Detection ---
         for script_text in inline_scripts:
-            vue_match = re.search(r'Vue\.version\s*[=:]\s*["\']([\d.]+)["\']',
+            vue_match = regex_cache.search(r'Vue\.version\s*[=:]\s*["\']([\d.]+)["\']',
                                   script_text)
             if vue_match:
                 found_libs.append({'name': 'Vue', 'version': vue_match.group(1),
@@ -1262,7 +1264,7 @@ class V4HuntingEngine:
 
         # --- GSAP Detection ---
         for script_text in inline_scripts:
-            gsap_match = re.search(r'gsap\.version\s*[=:]\s*["\']([\d.]+)["\']',
+            gsap_match = regex_cache.search(r'gsap\.version\s*[=:]\s*["\']([\d.]+)["\']',
                                    script_text)
             if gsap_match:
                 found_libs.append({'name': 'GSAP', 'version': gsap_match.group(1),
@@ -1342,9 +1344,9 @@ class V4HuntingEngine:
     def _extract_version_from_filename(self, filename, lib_name):
         """Extract version number from a JS/CSS filename."""
         patterns = [
-            re.compile(re.escape(lib_name) + r'[\-_]?(\d+\.\d+[\.\d]*)', re.I),
-            re.compile(re.escape(lib_name) + r'\.min\.(\d+\.\d+[\.\d]*)', re.I),
-            re.compile(re.escape(lib_name) + r'[\-](\d+\.\d+[\.\d]*)', re.I),
+            regex_cache.compile(re.escape(lib_name) + r'[\-_]?(\d+\.\d+[\.\d]*)', re.I),
+            regex_cache.compile(re.escape(lib_name) + r'\.min\.(\d+\.\d+[\.\d]*)', re.I),
+            regex_cache.compile(re.escape(lib_name) + r'[\-](\d+\.\d+[\.\d]*)', re.I),
         ]
         for pattern in patterns:
             match = pattern.search(filename)
@@ -1361,7 +1363,7 @@ class V4HuntingEngine:
             r'jquery[.\-]([\d]+\.[\d]+[\d.]*)\.(?:min\.)?js',
         ]
         for pattern in patterns:
-            match = re.search(pattern, content, re.I)
+            match = regex_cache.search(pattern, content, re.I)
             if match:
                 return match.group(1)
         return None
@@ -1369,9 +1371,9 @@ class V4HuntingEngine:
     def _extract_version_from_content(self, content, lib_name):
         """Extract library version from JS content."""
         patterns = [
-            re.compile(re.escape(lib_name) + r'\.version\s*=\s*["\']([\d.]+)["\']', re.I),
-            re.compile(re.escape(lib_name) + r'\s+version\s*:\s*["\']([\d.]+)["\']', re.I),
-            re.compile(r'VERSION\s*=\s*["\']([\d.]+)["\']', re.I),
+            regex_cache.compile(re.escape(lib_name) + r'\.version\s*=\s*["\']([\d.]+)["\']', re.I),
+            regex_cache.compile(re.escape(lib_name) + r'\s+version\s*:\s*["\']([\d.]+)["\']', re.I),
+            regex_cache.compile(r'VERSION\s*=\s*["\']([\d.]+)["\']', re.I),
         ]
         for pattern in patterns:
             match = pattern.search(content)
@@ -1898,7 +1900,7 @@ class V4HuntingEngine:
                                         verify=VERIFY_SSL)
                 if resp.status_code == 200 and 'error' not in resp.text.lower():
                     text = resp.text
-                    org_match = re.search(
+                    org_match = regex_cache.search(
                         r'Registrant\s*Organization:\s*(.+)', text, re.I
                     )
                     if org_match:

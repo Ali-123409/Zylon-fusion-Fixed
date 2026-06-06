@@ -21,12 +21,14 @@ except ImportError:
 
 from core.var import *
 
+from core.shared_infra import shared_session, regex_cache, framework_discovery
+
 
 class V2ReconEngine:
     """V2.0 Reconnaissance: Email Enum, Broken Links, Tech+CVE"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
+        self.session = session or shared_session
         self.session.headers.update({'User-Agent': USER_AGENTS[0]})
         self.session.verify = VERIFY_SSL
 
@@ -55,8 +57,7 @@ class V2ReconEngine:
             ddg_url = f"https://html.duckduckgo.com/html/?q=%22%40{domain}%22+email"
             resp = self.session.get(ddg_url, timeout=DEFAULT_TIMEOUT)
             if resp.status_code == 200:
-                email_re = re.compile(r'[a-zA-Z0-9._%+-]+@' + re.escape(domain))
-                emails = email_re.findall(resp.text)
+                emails = regex_cache.findall(r'[a-zA-Z0-9._%+-]+@' + re.escape(domain), resp.text)
                 for email in emails:
                     found_emails.add(email.lower().strip())
                     results['sources'].setdefault('duckduckgo', []).append(email.lower().strip())
@@ -69,10 +70,9 @@ class V2ReconEngine:
             resp = self.session.get(crt_url, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
-                email_re = re.compile(r'[a-zA-Z0-9._%+-]+@' + re.escape(domain))
                 for entry in data:
                     name = entry.get('name_value', '')
-                    emails = email_re.findall(name)
+                    emails = regex_cache.findall(r'[a-zA-Z0-9._%+-]+@' + re.escape(domain), name)
                     for email in emails:
                         found_emails.add(email.lower().strip())
                         results['sources'].setdefault('crt.sh', []).append(email.lower().strip())
@@ -255,7 +255,7 @@ class V2ReconEngine:
             if 'header' in sig and sig.get('header'):
                 header_val = headers.get(sig['header'], '')
                 if header_val and 'regex' in sig:
-                    match = re.search(sig['regex'], header_val)
+                    match = regex_cache.search(sig['regex'], header_val)
                     if match:
                         version = match.group(1)
                         source = f"Header: {sig['header']}"
@@ -266,14 +266,14 @@ class V2ReconEngine:
                 if meta_tag:
                     content = meta_tag.get('content', '')
                     if 'regex' in sig:
-                        match = re.search(sig['regex'], content)
+                        match = regex_cache.search(sig['regex'], content)
                         if match:
                             version = match.group(1)
                             source = f"Meta: {sig['meta']}"
 
             # Check JS patterns
             if not version and 'js_pattern' in sig:
-                match = re.search(sig['js_pattern'], page_text, re.IGNORECASE)
+                match = regex_cache.search(sig['js_pattern'], page_text, re.IGNORECASE)
                 if match:
                     version = match.group(1)
                     source = "JavaScript"
@@ -330,6 +330,15 @@ class V2ReconEngine:
 
         results['total_techs'] = len(results['technologies'])
         results['total_cves'] = len(results['cves'])
+
+        # Modern SPA Framework Discovery
+        try:
+            spa_results = framework_discovery.discover(url)
+            for category, endpoints in spa_results.items():
+                if endpoints:
+                    results[f'spa_{category}'] = endpoints
+        except Exception:
+            pass
 
         return results
 

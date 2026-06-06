@@ -17,18 +17,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
 
 
 class AdvancedWebAttacks:
     """Advanced Web Attack Testing for Bug Bounty"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
-
-    def _rotate_ua(self):
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        self.session = session or shared_session
 
     # ========================================================================
     # WEB CACHE POISONING
@@ -64,7 +60,7 @@ class AdvancedWebAttacks:
             'X-Forwarded-Scheme': ['http', 'nosuch'],
             'X-Original-URL': ['/admin', '/internal'],
             'X-Rewrite-URL': ['/admin', '/dashboard'],
-            'X-Forwarded-For': ['127.0.0.1', '0.0.0.0'],
+            'X-Forwarded-For': ['127.0.0.1', '0.0.0.0'],  # intentional spoofing payload, not callback
             'X-Host': ['zylon-cache-test.com', 'evil.com'],
         }
 
@@ -72,8 +68,6 @@ class AdvancedWebAttacks:
             for payload in payloads:
                 result['tested'] += 1
                 try:
-                    self._rotate_ua()
-
                     # First request with poisoned header
                     headers = {header: payload}
                     resp1 = self.session.get(url, headers=headers, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
@@ -160,7 +154,7 @@ class AdvancedWebAttacks:
         for headers, description in test_headers:
             result['tested'] += 1
             try:
-                self._rotate_ua()
+                # UA rotation handled by shared_session
                 resp = self.session.post(url, headers=headers, data='0\r\n\r\n', timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
 
                 # Check for smuggling indicators
@@ -215,8 +209,8 @@ class AdvancedWebAttacks:
         host_payloads = [
             'evil.com',
             'zylon-host-test.com',
-            'localhost',
-            '127.0.0.1',
+            'localhost',  # intentional host header payload, not callback
+            '127.0.0.1',  # intentional host header payload, not callback
             'evil.com%00.target.com',
             'target.com.evil.com',
             'evil.com\r\nX-Injected: true',
@@ -229,7 +223,6 @@ class AdvancedWebAttacks:
         for payload in host_payloads:
             result['tested'] += 1
             try:
-                self._rotate_ua()
                 headers = {'Host': payload}
                 resp = self.session.get(url, headers=headers, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL, allow_redirects=False)
 
@@ -409,14 +402,14 @@ class AdvancedWebAttacks:
 
             # From response body
             jwt_pattern = r'eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+'
-            matches = re.findall(jwt_pattern, resp.text)
+            matches = regex_cache.findall('jwt', resp.text)
             jwts.extend(matches)
 
             # From Authorization header in localStorage/sessionStorage (from JS)
             soup = BeautifulSoup(resp.text, 'html.parser')
             for script in soup.find_all('script'):
                 if script.string:
-                    matches = re.findall(jwt_pattern, script.string)
+                    matches = regex_cache.findall('jwt', script.string)
                     jwts.extend(matches)
 
         except Exception:

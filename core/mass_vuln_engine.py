@@ -29,6 +29,9 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
+from core.shared_infra import shared_session, PayloadInjector, regex_cache
+from core.var import DEFAULT_TIMEOUT
+
 # ============================================================================
 # ANSI COLORS (Termux compatible)
 # ============================================================================
@@ -192,13 +195,7 @@ class MassVulnEngine:
         self.proxy = proxy
         self.timeout = timeout
         self.threads = threads
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self._lock = Lock()
         self._seen_hashes = set()
 
@@ -261,7 +258,7 @@ class MassVulnEngine:
                 if not resp:
                     continue
                 # Extract URLs from search results
-                url_pattern = re.findall(r'uddg=([^&"]+)', resp.text)
+                url_pattern = regex_cache.findall(r'uddg=([^&"]+)', resp.text)
                 for encoded_url in url_pattern:
                     try:
                         decoded = urllib.parse.unquote(encoded_url)
@@ -547,6 +544,11 @@ class MassVulnEngine:
             for param in test_params[:5]:
                 for payload in SQLI_PAYLOADS[:8]:
                     test_url = f"{base_url}?{param}={urllib.parse.quote(payload)}"
+                    # Also test as JSON body
+                    try:
+                        self.session.post(base_url, json={param: payload}, timeout=DEFAULT_TIMEOUT, verify=False)
+                    except Exception:
+                        pass
                     futures.append(executor.submit(self._check_sqli, test_url, param, payload))
 
             for future in as_completed(futures):
@@ -591,6 +593,11 @@ class MassVulnEngine:
                 if resp and marker in resp.text:
                     for payload in MASS_XSS_PAYLOADS[:6]:
                         xss_url = f"{base_url}?{param}={urllib.parse.quote(payload, safe='')}"
+                        # Also test as JSON body
+                        try:
+                            self.session.post(base_url, json={param: payload}, timeout=DEFAULT_TIMEOUT, verify=False)
+                        except Exception:
+                            pass
                         futures.append(executor.submit(self._check_xss, xss_url, param, payload))
 
             for future in as_completed(futures):
@@ -628,6 +635,11 @@ class MassVulnEngine:
             for param in test_params[:5]:
                 for payload in MASS_LFI_PAYLOADS[:5]:
                     test_url = f"{base_url}?{param}={urllib.parse.quote(payload)}"
+                    # Also test as JSON body
+                    try:
+                        self.session.post(base_url, json={param: payload}, timeout=DEFAULT_TIMEOUT, verify=False)
+                    except Exception:
+                        pass
                     futures.append(executor.submit(self._check_lfi, test_url, param, payload))
 
             for future in as_completed(futures):
@@ -646,7 +658,7 @@ class MassVulnEngine:
         if not resp:
             return None
         for pattern in LFI_SIGNATURES:
-            if re.search(pattern, resp.text):
+            if regex_cache.search(pattern, resp.text):
                 return {
                     'type': 'lfi',
                     'url': url,

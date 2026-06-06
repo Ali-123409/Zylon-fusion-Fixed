@@ -15,6 +15,8 @@ import subprocess
 import platform
 from pathlib import Path
 
+from core.shared_infra import shared_session, regex_cache, oob_provider
+
 # ============================================================================
 # CONTAINER DETECTION
 # ============================================================================

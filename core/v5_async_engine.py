@@ -37,20 +37,21 @@ except ImportError:
     DNS_AVAILABLE = False
 
 from bs4 import BeautifulSoup
+from core.shared_infra import shared_session, regex_cache
 
 
 class V5AsyncEngine:
     """V5.0 Async Engine: High-performance scanning with built-in wordlists"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
         self.wordlists = {}
         self._load_wordlists()
 
     def _rotate_ua(self):
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        # User-Agent rotation handled by shared_session
+        pass
 
     # ========================================================================
     # WORDLIST LOADER - Load from data/wordlists/ files

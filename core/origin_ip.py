@@ -62,6 +62,8 @@ except AttributeError:
 # Use CDN_IP_RANGES, PUBLIC_DNS_RESOLVERS, and ERROR_TRIGGER_PATHS from var.py for consistency
 from core.var import CDN_IP_RANGES, PUBLIC_DNS_RESOLVERS, ERROR_TRIGGER_PATHS
 
+from core.shared_infra import shared_session, regex_cache
+
 # Additional CDN/Cloud ranges not in var.py (IPv4 only - no IPv6 to avoid type comparison crashes)
 _CDN_EXTRA_RANGES = {
     'StackPath': [
@@ -177,6 +179,7 @@ class OriginIPEngine:
     Termux Non-Root Compatible"""
 
     def __init__(self, session=None):
+        # TODO: migrate to shared_session from core.shared_infra for thread safety
         self.session = session or requests.Session()
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
         self.session.verify = VERIFY_SSL
@@ -517,7 +520,7 @@ class OriginIPEngine:
                         if len(cols) >= 2:
                             ip_text = cols[0].get_text(strip=True)
                             # Extract IPs from the cell
-                            ips = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', ip_text)
+                            ips = regex_cache.findall('ipv4', ip_text)
                             for ip in ips:
                                 if self._is_valid_public_ip(ip):
                                     historical_ips.append({
@@ -694,7 +697,7 @@ class OriginIPEngine:
             url = f"https://rapiddns.io/subdomain/{domain}?full=1"
             resp = self.session.get(url, timeout=10)
             if resp.status_code == 200:
-                matches = re.findall(r'(?:https?://)?([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
+                matches = regex_cache.findall(r'(?:https?://)?([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
                 for m in matches:
                     all_subdomains.add(m.lower())
         except Exception:
@@ -794,7 +797,7 @@ class OriginIPEngine:
                 if 'v=spf1' in txt_str:
                     # ip4: and ip6: directives - these MAY reveal origin IP
                     # if the site sends mail from the same server
-                    ip4_matches = re.findall(r'ip4:([\d./]+)', txt_str)
+                    ip4_matches = regex_cache.findall(r'ip4:([\d./]+)', txt_str)
                     for ip_range in ip4_matches:
                         if '/' in ip_range:
                             # CIDR range - record the range info
@@ -808,7 +811,7 @@ class OriginIPEngine:
                                 found_ips.append({'ip': ip_range, 'source': 'SPF-TXT',
                                                 'ip_type': 'spf', 'note': 'Mail sender IP - unlikely origin'})
                 # Include/redirect directives - these are ALWAYS third-party mail providers
-                include_matches = re.findall(r'include:([a-zA-Z0-9._-]+)', txt_str)
+                include_matches = regex_cache.findall(r'include:([a-zA-Z0-9._-]+)', txt_str)
                 for inc_host in include_matches:
                     try:
                         inc_ip = socket.gethostbyname(inc_host)
@@ -821,7 +824,7 @@ class OriginIPEngine:
                         pass
                 # Look for any IP addresses in TXT records (not SPF)
                 if 'v=spf1' not in txt_str:
-                    all_ips = re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', txt_str)
+                    all_ips = regex_cache.findall('ipv4', txt_str)
                     for ip in all_ips:
                         if self._is_valid_public_ip(ip):
                             self._add_ip(ip, 'TXT-Record', 'low', {'txt_record': txt_str[:100]})
@@ -964,7 +967,7 @@ class OriginIPEngine:
                         timestamp = row[0] if len(row) > 0 else ''
                         original_url = row[1] if len(row) > 1 else ''
                         # Check for IP addresses in the original URL
-                        ips_in_url = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', original_url)
+                        ips_in_url = regex_cache.findall('ipv4', original_url)
                         for ip in ips_in_url:
                             if self._is_valid_public_ip(ip):
                                 self._add_ip(ip, f'Wayback-URL({timestamp})', 'medium',
@@ -992,7 +995,7 @@ class OriginIPEngine:
             url = f"https://viewdns.info/iphistory/?domain={domain}"
             resp = self.session.get(url, timeout=10)
             if resp.status_code == 200:
-                ips = re.findall(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', resp.text)
+                ips = regex_cache.findall('ipv4', resp.text)
                 for ip in ips:
                     if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
                         self._add_ip(ip, 'ViewDNS-IPHistory', 'medium')
@@ -1227,7 +1230,7 @@ class OriginIPEngine:
                 for dkim in dkim_records:
                     dkim_str = str(dkim).strip('"')
                     # Look for IPs in DKIM record
-                    ips = re.findall(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', dkim_str)
+                    ips = regex_cache.findall('ipv4', dkim_str)
                     for ip in ips:
                         if self._is_valid_public_ip(ip):
                             self._add_ip(ip, f'DKIM({selector})', 'low', {'dkim_record': dkim_str})
@@ -1283,7 +1286,7 @@ class OriginIPEngine:
                     combined = body + ' ' + headers_str
 
                     # Look for IP addresses
-                    ips = re.findall(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', combined)
+                    ips = regex_cache.findall('ipv4', combined)
                     for ip in ips:
                         if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
                             return ip, path, resp.status_code
@@ -1333,14 +1336,14 @@ class OriginIPEngine:
                 if resp.status_code == 200:
                     body = resp.text
                     # Search for internal/private IPs that may be in the page
-                    private_ips = re.findall(
+                    private_ips = regex_cache.findall(
                         r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|'
                         r'172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|'
                         r'192\.168\.\d{1,3}\.\d{1,3})\b',
                         body
                     )
                     # Also search for public IPs
-                    all_ips = re.findall(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', body)
+                    all_ips = regex_cache.findall('ipv4', body)
                     results = []
                     for ip in all_ips:
                         if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
@@ -1388,14 +1391,14 @@ class OriginIPEngine:
                 resp = self.session.get(url, timeout=10, verify=False)
                 if resp.status_code == 200:
                     # Look for IP addresses in sitemap content
-                    ips = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', resp.text)
+                    ips = regex_cache.findall('ipv4', resp.text)
                     for ip in ips:
                         if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
                             self._add_ip(ip, f'Sitemap({sitemap_path})', 'low')
                             found_ips.append({'ip': ip, 'source': f'Sitemap({sitemap_path})'})
 
                     # Also look for direct IP URLs in sitemap
-                    ip_urls = re.findall(r'https?://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', resp.text)
+                    ip_urls = regex_cache.findall(r'https?://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', resp.text)
                     for ip in ip_urls:
                         if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
                             self._add_ip(ip, f'Sitemap-URL({sitemap_path})', 'medium')
@@ -1409,7 +1412,7 @@ class OriginIPEngine:
             url = f"https://{domain}/robots.txt"
             resp = self.session.get(url, timeout=10, verify=False)
             if resp.status_code == 200:
-                ips = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', resp.text)
+                ips = regex_cache.findall('ipv4', resp.text)
                 for ip in ips:
                     if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
                         self._add_ip(ip, 'Robots.txt', 'low')
@@ -1454,7 +1457,7 @@ class OriginIPEngine:
                 resource_urls.append(urljoin(url, img['src']))
 
             # Also check inline scripts and the HTML itself for IP patterns
-            all_ips = re.findall(r'https?://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', html)
+            all_ips = regex_cache.findall(r'https?://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', html)
             for ip in all_ips:
                 if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
                     self._add_ip(ip, 'HTML-Resource-Link', 'medium')
@@ -1468,7 +1471,7 @@ class OriginIPEngine:
                     r = session.get(res_url, timeout=8, verify=False)
                     if r.status_code == 200:
                         # Search for IP addresses in the resource
-                        ips = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', r.text)
+                        ips = regex_cache.findall('ipv4', r.text)
                         resource_results = []
                         for ip in ips:
                             if self._is_valid_public_ip(ip) and not self._is_cdn_ip(ip):
@@ -1652,7 +1655,7 @@ class OriginIPEngine:
                 result['org'] = data.get('org', '')
                 if asn:
                     # Extract ASN number
-                    asn_match = re.search(r'AS(\d+)', asn)
+                    asn_match = regex_cache.search(r'AS(\d+)', asn)
                     if asn_match:
                         result['asn'] = asn_match.group(1)
         except Exception:
@@ -1946,9 +1949,9 @@ class OriginIPEngine:
                 if 'v=DMARC1' in dmarc_str:
                     result['dmarc_info'] = {
                         'record': dmarc_str,
-                        'policy': re.search(r'p=([a-z]+)', dmarc_str),
-                        'subdomain_policy': re.search(r'sp=([a-z]+)', dmarc_str),
-                        'pct': re.search(r'pct=(\d+)', dmarc_str),
+                        'policy': regex_cache.search(r'p=([a-z]+)', dmarc_str),
+                        'subdomain_policy': regex_cache.search(r'sp=([a-z]+)', dmarc_str),
+                        'pct': regex_cache.search(r'pct=(\d+)', dmarc_str),
                     }
         except Exception:
             pass

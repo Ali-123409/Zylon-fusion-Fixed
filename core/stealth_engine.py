@@ -35,9 +35,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS, REQUEST_DELAY,
-    COMMON_DIRS, API_ENDPOINTS
+    API_ENDPOINTS, COMMON_DIRS, DEFAULT_TIMEOUT, MAX_THREADS, REQUEST_DELAY, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLORS
@@ -200,9 +200,9 @@ class StealthEngine:
     """
 
     def __init__(self, session=None, profile='cautious'):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(STEALTH_USER_AGENTS)})
-        self.session.verify = False
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        # SSL verification handled by shared_session
         self.profile = profile
         self.profile_config = STEALTH_PROFILES.get(profile, STEALTH_PROFILES['cautious'])
         self.lock = threading.Lock()

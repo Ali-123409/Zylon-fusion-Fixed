@@ -39,8 +39,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS, DATA_DIR
+    DEFAULT_TIMEOUT, MAX_THREADS, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -458,11 +459,8 @@ class PayloadDBEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
-        })
+        self.session = shared_session
+        # SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
         self.lock = threading.Lock()
@@ -686,7 +684,7 @@ class PayloadDBEngine:
             for url in urls:
                 for regex in regexes:
                     try:
-                        if re.search(regex, url, re.IGNORECASE):
+                        if regex_cache.search(regex, url, re.IGNORECASE):
                             matched_urls.append(url)
                             break
                     except re.error:

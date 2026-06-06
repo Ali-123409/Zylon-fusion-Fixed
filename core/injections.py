@@ -16,18 +16,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, MAX_THREADS
+from core.shared_infra import shared_session, regex_cache, oob_provider, PayloadInjector
 
 
 class InjectionArsenal:
     """Advanced Injection Testing Engine for Bug Bounty Hunters"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        pass
 
     def _rotate_ua(self):
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        # User-Agent rotation handled by shared_session
+        pass
 
     # ========================================================================
     # SSRF (Server-Side Request Forgery) Scanner

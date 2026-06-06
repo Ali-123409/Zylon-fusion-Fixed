@@ -33,6 +33,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLORS
@@ -66,9 +67,9 @@ class DDoSTestingEngine:
     """
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = False
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        # SSL verification handled by shared_session
         self.results = {}
         self._stop_flag = threading.Event()
 

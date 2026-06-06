@@ -29,6 +29,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # ANSI COLORS (Termux compatible)
 # ============================================================================
@@ -212,13 +214,7 @@ class DalfoxEngine:
         self.threads = threads
         self.callback_url = callback_url
         self.output_format = output_format
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.findings = []
         self._lock = Lock()
         self._generate_markers()
@@ -229,7 +225,7 @@ class DalfoxEngine:
         self.marker = f"dfx{rand}"
         self.marker_regex = re.compile(re.escape(self.marker), re.IGNORECASE)
 
-    def _send_request(self, url, method=None, data=None, headers=None, param_name=None, param_value=None):
+    def _send_request(self, url, method=None, data=None, headers=None, param_name=None, param_value=None, json_body=None):
         """Send HTTP request with error handling and rate limiting"""
         try:
             m = method or self.method
@@ -241,6 +237,14 @@ class DalfoxEngine:
                 resp = self.session.get(url, params=params, headers=h,
                                        cookies=self.cookies, timeout=self.timeout,
                                        allow_redirects=True)
+            elif json_body is not None:
+                # JSON body injection via PayloadInjector
+                injection = PayloadInjector.inject_json(url, param_name or 'q', param_value or '', method=m)
+                h = {**h, **injection.get('headers', {})}
+                resp = self.session.request(injection['method'], injection['url'],
+                                           json=injection['json'], headers=h,
+                                           cookies=self.cookies, timeout=self.timeout,
+                                           allow_redirects=True)
             else:
                 post_data = dict(self.data)
                 if param_name and param_value is not None:
@@ -294,7 +298,7 @@ class DalfoxEngine:
             rf'<script[^>]*>[^<]*{re.escape(param_value[:15])}',
         ]
         for p in js_patterns:
-            if re.search(p, text, re.IGNORECASE):
+            if regex_cache.search(p, text, re.IGNORECASE):
                 return "javascript"
         # Check for HTML attribute context
         attr_patterns = [
@@ -304,13 +308,13 @@ class DalfoxEngine:
             rf'value\s*=\s*["\']?{re.escape(param_value[:20])}',
         ]
         for p in attr_patterns:
-            if re.search(p, text, re.IGNORECASE):
+            if regex_cache.search(p, text, re.IGNORECASE):
                 return "html_attribute"
         # Check for URL context
-        if re.search(rf'href\s*=\s*["\']?[^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
+        if regex_cache.search(rf'href\s*=\s*["\']?[^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
             return "url"
         # Check for CSS context
-        if re.search(rf'style\s*=\s*["\'][^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
+        if regex_cache.search(rf'style\s*=\s*["\'][^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
             return "css"
         return "html_body"
 
@@ -709,9 +713,9 @@ class DalfoxEngine:
         text = resp.text
 
         # Phase 1: Extract and analyze inline scripts
-        script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', text,
+        script_blocks = regex_cache.findall(r'<script[^>]*>(.*?)</script>', text,
                                   re.IGNORECASE | re.DOTALL)
-        external_scripts = re.findall(r'<script[^>]*src=["\']([^"\']+)["\']', text,
+        external_scripts = regex_cache.findall(r'<script[^>]*src=["\']([^"\']+)["\']', text,
                                      re.IGNORECASE)
 
         all_js = '\n'.join(script_blocks)
@@ -725,14 +729,14 @@ class DalfoxEngine:
                 rf'document\.{re.escape(src_name)}\b' if "." in source else rf'\b{re.escape(source)}\b',
             ]
             for p in patterns:
-                if re.search(p, all_js):
+                if regex_cache.search(p, all_js):
                     results['details']['sources_found'].append(source)
                     break
 
         # Phase 3: Find DOM sinks
         for sink in DALFOX_DOM_SINKS:
             sink_name = sink.split(".")[-1] if "." in sink else sink
-            if re.search(rf'\b{re.escape(sink_name)}\s*\(', all_js):
+            if regex_cache.search(rf'\b{re.escape(sink_name)}\s*\(', all_js):
                 results['details']['sinks_found'].append(sink)
 
         # Phase 4: Detect source->sink flows

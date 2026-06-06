@@ -35,8 +35,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
+    COMMON_DIRS, DEFAULT_TIMEOUT, MAX_THREADS, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -127,12 +128,8 @@ class CredentialEngine:
         self.threads = threads
         self.proxy = proxy
         self.delay = delay
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else
-                'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
+        self.session = shared_session
+        # SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
         self.lock = threading.Lock()

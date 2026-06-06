@@ -28,6 +28,9 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, framework_discovery
+from core.var import TAKEOVER_SIGNATURES
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -206,29 +209,13 @@ class SubdomainAdvancedEngine:
         self.wordlist = wordlist or ADVANCED_SUBDOMAIN_WORDLIST
         self.proxy = proxy
         self.output_dir = output_dir or os.path.join(os.path.expanduser("~"), ".zylon", "results")
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': random.choice([
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            ])
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.found_subdomains = set()
         self.subdomain_sources = {}  # subdomain -> [sources]
         self.live_subdomains = []
         self.takeover_vulnerable = []
         self.cloud_assets_found = []
-
-        # Import TAKEOVER_SIGNATURES from var
-        try:
-            from core.var import TAKEOVER_SIGNATURES
-            self.takeover_signatures = TAKEOVER_SIGNATURES
-        except ImportError:
-            self.takeover_signatures = {}
+        self.takeover_signatures = TAKEOVER_SIGNATURES
 
     # ========================================================================
     # HELPER METHODS
@@ -255,14 +242,14 @@ class SubdomainAdvancedEngine:
         # Must end with our domain
         if subdomain.endswith(f".{self.domain}") or subdomain == self.domain:
             # Basic validation
-            if re.match(r'^[a-zA-Z0-9._-]+$', subdomain):
+            if regex_cache.match(r'^[a-zA-Z0-9._-]+$', subdomain):
                 return subdomain
         return None
 
     def _extract_subdomains_from_text(self, text):
         """Extract subdomains from response text using regex"""
         pattern = rf'([a-zA-Z0-9._-]+\.{re.escape(self.domain)})'
-        matches = re.findall(pattern, text)
+        matches = regex_cache.findall(pattern, text)
         validated = set()
         for match in matches:
             sub = self._validate_subdomain(match)
@@ -589,7 +576,7 @@ class SubdomainAdvancedEngine:
                     probe_result["status_codes"].append(resp.status_code)
                     # Try to extract title
                     try:
-                        title_match = re.search(r'<title[^>]*>(.*?)</title>', resp.text, re.IGNORECASE | re.DOTALL)
+                        title_match = regex_cache.search(r'<title[^>]*>(.*?)</title>', resp.text, re.IGNORECASE | re.DOTALL)
                         if title_match:
                             probe_result["titles"].append(title_match.group(1).strip()[:100])
                     except Exception:

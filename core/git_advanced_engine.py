@@ -38,6 +38,8 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
 
+from core.shared_infra import shared_session, regex_cache
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -280,7 +282,7 @@ class GitAdvancedEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
+        self.session = shared_session
         self.session.verify = False
         self.session.headers.update({
             'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
@@ -397,7 +399,7 @@ class GitAdvancedEngine:
                 if item["path"] == ".git/config":
                     result["details"]["git_config_content"] = item["content"]
                     # Extract remote URL
-                    remote_match = re.search(r'url\s*=\s*(.+)', item["content"])
+                    remote_match = regex_cache.search(r'url\s*=\s*(.+)', item["content"])
                     if remote_match:
                         remote_url = remote_match.group(1).strip()
                         self._print(f"  [!!!] Git remote URL exposed: {remote_url}", RED)
@@ -799,7 +801,7 @@ class GitAdvancedEngine:
                 if resp.status_code == 200:
                     # Simple parsing of results (GitHub returns HTML)
                     # Look for repository references
-                    repo_matches = re.findall(r'href="/([^/]+/[^/]+)/blob/([^"]+)"', resp.text)
+                    repo_matches = regex_cache.findall(r'href="/([^/]+/[^/]+)/blob/([^"]+)"', resp.text)
                     seen_repos = set()
                     for repo, path in repo_matches[:5]:
                         if repo not in seen_repos:
@@ -1086,7 +1088,7 @@ class GitAdvancedEngine:
         secrets = []
         for secret_name, config in SECRET_PATTERNS.items():
             try:
-                matches = re.findall(config["pattern"], text)
+                matches = regex_cache.findall(config["pattern"], text)
                 for match in matches[:3]:  # Limit matches per pattern
                     secrets.append({
                         "type": secret_name,

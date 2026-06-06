@@ -28,6 +28,8 @@ from datetime import datetime
 
 from core.var import USER_AGENTS
 
+from core.shared_infra import regex_cache, shared_session, oob_provider, PayloadInjector
+
 # ============================================================================
 # ANSI COLORS
 # ============================================================================

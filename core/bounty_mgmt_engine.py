@@ -35,9 +35,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS,
-    HOME_DIR, CONFIG_DIR, REPORTS_DIR
+    API_ENDPOINTS, COMMON_DIRS, CONFIG_DIR, DEFAULT_TIMEOUT, MAX_THREADS, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -106,11 +106,8 @@ class BountyMgmtEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
-        })
+        self.session = shared_session
+        # SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
         self.lock = threading.Lock()
@@ -214,7 +211,7 @@ class BountyMgmtEngine:
                 resp = self.session.get(scope_url, timeout=self.timeout, verify=False)
                 if resp.status_code == 200:
                     # Try to extract scope from page
-                    domains = re.findall(
+                    domains = regex_cache.findall(
                         r'(?:https?://)?([a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+)',
                         resp.text
                     )
@@ -224,7 +221,7 @@ class BountyMgmtEngine:
                             program["scope"]["domains"].append(domain)
 
                     # Detect IPs
-                    ips = re.findall(
+                    ips = regex_cache.findall(
                         r'\b(?:\d{1,3}\.){3}\d{1,3}\b',
                         resp.text
                     )
@@ -264,7 +261,7 @@ class BountyMgmtEngine:
         }
 
         # If it's a domain
-        if re.match(r'^[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)+$', scope_url):
+        if regex_cache.match(r'^[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)+$', scope_url):
             scope["domains"].append(scope_url)
 
         # If it's a wildcard
@@ -274,11 +271,11 @@ class BountyMgmtEngine:
             scope["domains"].append(base_domain)
 
         # If it's an IP
-        elif re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', scope_url):
+        elif regex_cache.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', scope_url):
             scope["ips"].append(scope_url)
 
         # If it's a CIDR
-        elif re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$', scope_url):
+        elif regex_cache.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$', scope_url):
             scope["cidrs"].append(scope_url)
 
         # If it's a URL, extract domain
@@ -912,7 +909,7 @@ class BountyMgmtEngine:
             try:
                 resp = self.session.get(scope_url, timeout=self.timeout, verify=False)
                 if resp.status_code == 200:
-                    discovered = re.findall(
+                    discovered = regex_cache.findall(
                         r'(?:https?://)?([a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+)',
                         resp.text
                     )
@@ -1020,7 +1017,7 @@ class BountyMgmtEngine:
                 if resp.status_code < 400:
                     discovered_urls.append(url)
                     # Extract links from page
-                    links = re.findall(r'href=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
+                    links = regex_cache.findall(r'href=["\']([^"\']+)["\']', resp.text, re.IGNORECASE)
                     for link in links[:20]:
                         full_url = urljoin(url, link)
                         if domain in full_url:

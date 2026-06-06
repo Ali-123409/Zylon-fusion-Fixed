@@ -40,6 +40,8 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
 
+from core.shared_infra import OOBProvider, PayloadInjector, shared_session
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -188,7 +190,7 @@ class OASTEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
+        self.session = shared_session
         self.session.verify = False
         self.session.headers.update({
             'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
@@ -202,6 +204,10 @@ class OASTEngine:
         self.payload_registry = {}  # payload_id -> metadata
         self.interactions_log = []  # All interactions
 
+        # Try to use cloud OOB provider instead of hardcoded localhost
+        self.oob_provider = OOBProvider()
+        self.oob_provider.initialize()
+
     def _print(self, msg, color=CYAN):
         """Thread-safe colored print"""
         with self.lock:
@@ -209,6 +215,13 @@ class OASTEngine:
 
     def _detect_external_ip(self):
         """Try to detect external IP for callback configuration"""
+        # Try OOB provider first
+        if self.oob_provider.provider and self.oob_provider.provider != 'local':
+            callback_url = self.oob_provider.get_callback_url(self.generate_payload_id())
+            if callback_url and '127.0.0.1' not in callback_url:
+                from urllib.parse import urlparse
+                return urlparse(callback_url).hostname
+        # Fallback to ipify
         try:
             resp = requests.get('https://api.ipify.org', timeout=5)
             if resp.status_code == 200:
@@ -388,6 +401,14 @@ class OASTEngine:
                     # Also test as POST parameter
                     try:
                         self.session.post(url, data={test_param: payload},
+                                         timeout=self.timeout, verify=False,
+                                         allow_redirects=False)
+                    except Exception:
+                        pass
+
+                    # Also test as JSON body
+                    try:
+                        self.session.post(url, json={test_param: payload},
                                          timeout=self.timeout, verify=False,
                                          allow_redirects=False)
                     except Exception:
@@ -584,6 +605,8 @@ class OASTEngine:
                         pass
 
                     # Header injection (X-Forwarded-For, User-Agent)
+                    # TODO: This should use shared_session in the future
+                    # to avoid thread-unsafe cookie modifications on self.session
                     try:
                         header_payloads = {
                             'X-Forwarded-For': payload,

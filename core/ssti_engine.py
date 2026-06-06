@@ -16,9 +16,10 @@ import time
 import base64
 import random
 import string
-import requests
 import urllib3
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
+
+from core.shared_infra import shared_session, PayloadInjector, regex_cache
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -262,24 +263,28 @@ class SSTIEngine:
         self.detected_engine = None
         self.injectable_params = []
     
-    def _make_request(self, url, method='GET', params=None, data=None, headers=None, cookies=None):
+    def _make_request(self, url, method='GET', params=None, data=None, headers=None, cookies=None, json_data=None):
         """Make HTTP request with configuration"""
         try:
-            proxies = {'http': self.proxy, 'https': self.proxy} if self.proxy else None
-            resp = requests.request(
-                method=method,
-                url=url,
-                params=params,
-                data=data,
-                headers=headers or self.headers,
-                cookies=cookies or self.cookies,
-                proxies=proxies,
-                timeout=self.timeout,
-                verify=False,
-                allow_redirects=True
-            )
+            req_headers = headers or self.headers
+            req_cookies = cookies or self.cookies
+            req_kwargs = {
+                'timeout': self.timeout,
+                'verify': False,
+                'allow_redirects': True,
+                'headers': req_headers,
+                'cookies': req_cookies,
+            }
+            if self.proxy:
+                req_kwargs['proxies'] = {'http': self.proxy, 'https': self.proxy}
+            if json_data is not None:
+                resp = shared_session.post(url, json=json_data, **req_kwargs)
+            elif method.upper() == 'GET':
+                resp = shared_session.get(url, params=params, **req_kwargs)
+            else:
+                resp = shared_session.post(url, data=data, **req_kwargs)
             return resp
-        except requests.RequestException as e:
+        except Exception:
             return None
     
     def _get_baseline(self):
@@ -408,6 +413,13 @@ class SSTIEngine:
         elif inject_type == 'post':
             data = dict(self.data)
             data[param_name] = payload
+            self._make_request(self.target_url, 'POST', data=data)
+            # Also try JSON body injection
+            try:
+                self._make_request(self.target_url, 'POST', json_data={param_name: payload},
+                                   headers={**self.headers, 'Content-Type': 'application/json'})
+            except Exception:
+                pass
             return self._make_request(self.target_url, 'POST', data=data)
         
         elif inject_type == 'header':
@@ -450,7 +462,7 @@ class SSTIEngine:
         
         for engine, patterns in error_patterns.items():
             for pattern in patterns:
-                if re.search(pattern, text, re.IGNORECASE):
+                if regex_cache.search(pattern, text, re.IGNORECASE):
                     return engine
         
         return None
@@ -567,7 +579,7 @@ class SSTIEngine:
         ]
         
         for pattern in patterns:
-            match = re.search(pattern, text)
+            match = regex_cache.search(pattern, text)
             if match:
                 return match.group(0)
         

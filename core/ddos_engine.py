@@ -40,6 +40,8 @@ from urllib.parse import urlparse
 
 import requests     # High-level HTTP library — used for rate limit tests
 
+from core.shared_infra import shared_session, regex_cache
+
 # ============================================================================
 # USER AGENTS POOL
 # ============================================================================
@@ -70,7 +72,7 @@ class DDoSDefenseEngine:
     """
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
+        self.session = session or shared_session
         self.results = {}
         self._stop_flag = threading.Event()
 

@@ -38,8 +38,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
+    DEFAULT_TIMEOUT, MAX_THREADS, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -188,12 +189,8 @@ class SessionSecurityEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else
-                'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
+        self.session = shared_session
+        # SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
         self.lock = threading.Lock()
@@ -346,7 +343,7 @@ class SessionSecurityEngine:
 
             # Decode timestamp
             try:
-                ts_int = int(timestamp_b64, 16) if re.match(r'^[0-9a-f]+$', timestamp_b64, re.I) else int(timestamp_b64)
+                ts_int = int(timestamp_b64, 16) if regex_cache.match(r'^[0-9a-f]+$', timestamp_b64, re.I) else int(timestamp_b64)
                 dt = datetime.fromtimestamp(ts_int)
                 result["details"]["timestamp"] = {
                     "raw": ts_int,
@@ -647,21 +644,21 @@ class SessionSecurityEngine:
             session_id = cookie_value.strip()
 
             # Analyze the session ID format
-            if re.match(r'^[a-f0-9]{32}$', session_id, re.I):
+            if regex_cache.match(r'^[a-f0-9]{32}$', session_id, re.I):
                 result["details"]["signature_algorithm"] = "MD5"
                 result["findings"].append({
                     "type": "md5_session_id",
                     "severity": "Low",
                     "description": "Session ID appears to be MD5 hash - consider if predictable",
                 })
-            elif re.match(r'^[a-f0-9]{40}$', session_id, re.I):
+            elif regex_cache.match(r'^[a-f0-9]{40}$', session_id, re.I):
                 result["details"]["signature_algorithm"] = "SHA1"
                 result["findings"].append({
                     "type": "sha1_session_id",
                     "severity": "Low",
                     "description": "Session ID appears to be SHA1 hash",
                 })
-            elif re.match(r'^[a-f0-9]{64}$', session_id, re.I):
+            elif regex_cache.match(r'^[a-f0-9]{64}$', session_id, re.I):
                 result["details"]["signature_algorithm"] = "SHA256"
 
             # Check for Django CSRF token pattern

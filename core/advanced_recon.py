@@ -22,6 +22,7 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, MAX_THREADS,
     REQUEST_DELAY
 )
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, framework_discovery
 
 # DNS resolver compatibility (dnspython < 2.0 uses query, >= 2.0 uses resolve)
 try:
@@ -34,16 +35,11 @@ class AdvancedRecon:
     """Bug Bounty Grade Advanced Reconnaissance Engine"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
         self.crawled_urls = set()
         self.url_params = defaultdict(set)
         self.js_endpoints = set()
         self.api_endpoints = set()
-
-    def _rotate_ua(self):
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
 
     # ========================================================================
     # DEEP WEB CRAWLER - Multi-threaded recursive spider
@@ -78,7 +74,6 @@ class AdvancedRecon:
             visited.add(url)
 
             try:
-                self._rotate_ua()
                 resp = self.session.get(url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
                 if resp.status_code != 200:
                     continue
@@ -136,7 +131,7 @@ class AdvancedRecon:
                     results['js_files'].append(js_url)
 
                 # Extract emails
-                emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text)
+                emails = regex_cache.findall('email', resp.text)
                 results['emails'].extend(emails)
 
                 # Extract API endpoints from inline scripts
@@ -155,7 +150,7 @@ class AdvancedRecon:
                     r'["\'](/graphql)["\']',
                 ]
                 for pattern in api_patterns:
-                    matches = re.findall(pattern, resp.text)
+                    matches = regex_cache.findall(pattern, resp.text)
                     for match in matches:
                         full_url = urljoin(url, match)
                         self.api_endpoints.add(full_url)
@@ -176,6 +171,18 @@ class AdvancedRecon:
             len(results['urls']) + len(results['forms']) +
             len(results['js_files']) + len(results['api_endpoints'])
         )
+
+        # Modern framework discovery for SPA endpoints
+        try:
+            fw_results = framework_discovery.discover(base_url)
+            for technique, endpoints in fw_results.items():
+                for ep in endpoints:
+                    full_url = urljoin(base_url, ep)
+                    self.api_endpoints.add(full_url)
+                    results['api_endpoints'].append(full_url)
+            results['api_endpoints'] = list(set(results['api_endpoints']))
+        except Exception:
+            pass
 
         return results
 
@@ -240,7 +247,6 @@ class AdvancedRecon:
         # Test each parameter
         for param in param_wordlist:
             try:
-                self._rotate_ua()
                 results['tested'] += 1
 
                 # Test with different values
@@ -607,7 +613,7 @@ class AdvancedRecon:
             r'endpoint:\s*["\']([^"\']+)["\']',
         ]
         for pattern in endpoint_patterns:
-            matches = re.findall(pattern, content)
+            matches = regex_cache.findall(pattern, content)
             results['endpoints'].extend(matches)
 
         # Hidden parameters in JS
@@ -618,10 +624,10 @@ class AdvancedRecon:
             r'query:\s*{([^}]+)}',
         ]
         for pattern in param_patterns:
-            matches = re.findall(pattern, content)
+            matches = regex_cache.findall(pattern, content)
             for match in matches:
                 # Extract key names
-                keys = re.findall(r'["\']?(\w+)["\']?\s*:', match)
+                keys = regex_cache.findall(r'["\']?(\w+)["\']?\s*:', match)
                 results['hidden_params'].extend(keys)
 
         # Secrets
@@ -636,7 +642,7 @@ class AdvancedRecon:
             (r'-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----', 'Private Key'),
         ]
         for pattern, stype in secret_patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
+            matches = regex_cache.findall(pattern, content, re.IGNORECASE)
             for match in matches[:3]:
                 results['secrets'].append(f'[{stype}] {str(match)[:60]}')
 
@@ -647,7 +653,7 @@ class AdvancedRecon:
             r'["\'](wss?://[^"\']+)["\']',
         ]
         for pattern in url_patterns:
-            matches = re.findall(pattern, content)
+            matches = regex_cache.findall(pattern, content)
             results['internal_urls'].extend(matches)
 
     # ========================================================================
@@ -660,7 +666,6 @@ class AdvancedRecon:
 
         def probe(url):
             try:
-                self._rotate_ua()
                 resp = self.session.get(url, timeout=8, verify=VERIFY_SSL, allow_redirects=False)
                 return url, resp.status_code, resp.headers.get('Location', ''), len(resp.text)
             except Exception:

@@ -13,9 +13,10 @@ import sys
 import time
 import random
 import string
-import requests
 import urllib3
 from urllib.parse import urlparse, quote
+
+from core.shared_infra import shared_session, WAFEvasionMixin, regex_cache
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -142,7 +143,7 @@ class WAFFingerprinter:
         return detected
 
 
-class WAFBypassEngine:
+class WAFEvasionEngine(WAFEvasionMixin):
     """WAF Bypass Generation Engine"""
     
     # SQLi bypass techniques
@@ -241,7 +242,7 @@ class WAFBypassEngine:
             
             # Case alternation
             if technique['name'] == 'Case Alternation':
-                words = re.findall(r'\b\w+\b', original_payload)
+                words = regex_cache.findall(r'\b\w+\b', original_payload)
                 for word in words:
                     if word.lower() in ['select', 'union', 'from', 'where', 'and', 'or', 'insert', 'update', 'delete', 'drop', 'table']:
                         alt = random.choice(technique['payloads'])
@@ -303,7 +304,7 @@ class WAFBypassEngine:
             else:
                 payload = bypass_payload
             
-            resp = requests.request(
+            resp = shared_session.request(
                 method=method,
                 url=url,
                 params={'q': payload} if method == 'GET' else None,
@@ -364,14 +365,14 @@ def run_waf_scan(console=None):
     
     # Send normal request
     try:
-        normal_resp = requests.get(url.strip(), timeout=10, verify=False)
+        normal_resp = shared_session.get(url.strip(), timeout=10, verify=False)
     except Exception as e:
         console.print(f"[red][-] Connection error: {e}[/red]")
         return
     
     # Send malicious request
     try:
-        test_resp = requests.get(url.strip(), params={'q': "' OR 1=1-- <script>alert(1)</script>"},
+        test_resp = shared_session.get(url.strip(), params={'q': "' OR 1=1-- <script>alert(1)</script>"},
                                 timeout=10, verify=False)
     except Exception:
         test_resp = normal_resp

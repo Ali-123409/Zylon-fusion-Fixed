@@ -31,6 +31,8 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -264,17 +266,7 @@ class DirsearchEngine:
         self.wordlist = wordlist or DEFAULT_WORDLIST
         self.output_dir = output_dir or os.path.join(os.path.expanduser("~"), ".zylon", "results")
 
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': random.choice([
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            ])
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
 
         self.results = []
         self.found_paths = set()

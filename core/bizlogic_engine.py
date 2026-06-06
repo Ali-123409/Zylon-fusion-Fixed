@@ -28,6 +28,7 @@ import hashlib
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Thread, Event
+from core.shared_infra import shared_session
 
 # ============================================================================
 # ANSI COLORS (Termux compatible)
@@ -202,7 +203,7 @@ class BizLogicEngine:
         self.timeout = timeout
         self.threads = threads
         self.auth_token = auth_token
-        self.session = requests.Session()
+        self.session = shared_session
         self.session.verify = False
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36',

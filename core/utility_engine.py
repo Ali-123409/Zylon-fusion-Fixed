@@ -26,6 +26,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, urljoin
 
+from core.shared_infra import shared_session, regex_cache
+
 # ============================================================================
 # OAST / INTERACTSH CONFIGURATION
 # ============================================================================
@@ -111,11 +113,8 @@ class UtilityEngine:
         self.timeout = timeout
         self.threads = threads
         self.callback_domain = callback_domain or "oastify.com"
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
+        self.session = shared_session
+        # User-Agent rotation and SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
 
@@ -254,7 +253,7 @@ class UtilityEngine:
                                     "password": password,
                                 })
                                 break
-                        elif success_pattern and re.search(success_pattern, resp.text):
+                        elif success_pattern and regex_cache.search(success_pattern, resp.text):
                             results["successful_logins"].append({
                                 "username": username,
                                 "password": password,
@@ -341,7 +340,7 @@ class UtilityEngine:
             }
 
             for field, pattern in patterns.items():
-                match = re.search(pattern, text, re.IGNORECASE)
+                match = regex_cache.search(pattern, text, re.IGNORECASE)
                 if match:
                     results["metadata_found"][field] = match.group(1)
                     if field in ["author", "creator", "gps_lat", "gps_lon"]:
@@ -378,7 +377,7 @@ class UtilityEngine:
             if resp and resp.status_code == 200:
                 # Extract words from page content
                 text = re.sub(r'<[^>]+>', ' ', resp.text)  # Strip HTML
-                words = re.findall(r'[a-zA-Z]{3,20}', text)
+                words = regex_cache.findall(r'[a-zA-Z]{3,20}', text)
                 unique_words = list(set(w.lower() for w in words if len(w) >= 3))
 
                 # Generate mutations (BOPSCRK-style)

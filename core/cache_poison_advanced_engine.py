@@ -39,6 +39,8 @@ from core.var import (
     USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS
 )
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -178,7 +180,7 @@ VARY_ABUSE_TESTS = [
         "compress, gzip",
     ]},
     {"description": "Vary: User-Agent (UA-based cache split)", "header": "User-Agent", "values": [
-        "Mozilla/5.0 (compatible; ZylonCacheTest/1.0)",
+        "Mozilla/5.0 (compatible; " + random.choice(USER_AGENTS)[:30] + ")",
         "Googlebot/2.1 (+http://www.google.com/bot.html)",
     ]},
     {"description": "Vary: Cookie (session-based cache split)", "header": "Cookie", "values": [
@@ -195,13 +197,7 @@ class CachePoisonAdvancedEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
         self.lock = threading.Lock()
         self._baseline_cache = {}
 
@@ -828,7 +824,7 @@ class CachePoisonAdvancedEngine:
 
         baseline_sensitive = False
         for pattern in sensitive_patterns:
-            if re.search(pattern, baseline_resp.text, re.IGNORECASE):
+            if regex_cache.search(pattern, baseline_resp.text, re.IGNORECASE):
                 baseline_sensitive = True
                 break
 
@@ -864,7 +860,7 @@ class CachePoisonAdvancedEngine:
                 # Check for sensitive data in cached response
                 sensitive_found = False
                 for pattern in sensitive_patterns:
-                    if re.search(pattern, resp.text, re.IGNORECASE):
+                    if regex_cache.search(pattern, resp.text, re.IGNORECASE):
                         sensitive_found = True
                         break
 

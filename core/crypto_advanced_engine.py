@@ -34,6 +34,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLORS
@@ -85,9 +86,8 @@ class CryptoAdvancedEngine:
     """
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({'User-Agent': USER_AGENTS[0]})
-        self.session.verify = False
+        self.session = shared_session
+        # User-Agent rotation and SSL verification handled by shared_session
 
     # ========================================================================
     # AUTOMATIC DECODING
@@ -193,7 +193,7 @@ class CryptoAdvancedEngine:
         detected = []
 
         # Base64 detection
-        if re.match(r'^[A-Za-z0-9+/]{4,}={0,2}$', text) and len(text) % 4 == 0:
+        if regex_cache.match(r'^[A-Za-z0-9+/]{4,}={0,2}$', text) and len(text) % 4 == 0:
             try:
                 decoded = base64.b64decode(text)
                 if decoded and len(decoded) > 0:
@@ -206,7 +206,7 @@ class CryptoAdvancedEngine:
                 pass
 
         # Base32 detection
-        if re.match(r'^[A-Z2-7]+=*$', text.upper()) and len(text) % 8 <= 7:
+        if regex_cache.match(r'^[A-Z2-7]+=*$', text.upper()) and len(text) % 8 <= 7:
             try:
                 padded = text + '=' * ((8 - len(text) % 8) % 8)
                 decoded = base64.b32decode(padded.upper())
@@ -216,17 +216,17 @@ class CryptoAdvancedEngine:
                 pass
 
         # Hex detection
-        if re.match(r'^[0-9a-fA-F]+$', text) and len(text) % 2 == 0:
+        if regex_cache.match(r'^[0-9a-fA-F]+$', text) and len(text) % 2 == 0:
             detected.append({'type': 'Hex', 'confidence': 85})
-        elif re.match(r'^[0-9a-fA-F\s]+$', text):
+        elif regex_cache.match(r'^[0-9a-fA-F\s]+$', text):
             detected.append({'type': 'Hex (with spaces)', 'confidence': 70})
 
         # URL encoding detection
-        if '%' in text and re.search(r'%[0-9A-Fa-f]{2}', text):
+        if '%' in text and regex_cache.search(r'%[0-9A-Fa-f]{2}', text):
             detected.append({'type': 'URL Encoding', 'confidence': 95})
 
         # HTML entity detection
-        if '&' in text and (';' in text) and re.search(r'&#?\w+;', text):
+        if '&' in text and (';' in text) and regex_cache.search(r'&#?\w+;', text):
             detected.append({'type': 'HTML Entities', 'confidence': 90})
 
         # ROT13 detection (if text has letter substitution pattern)
@@ -243,11 +243,11 @@ class CryptoAdvancedEngine:
             })
 
         # Binary detection
-        if re.match(r'^[01\s]+$', text):
+        if regex_cache.match(r'^[01\s]+$', text):
             detected.append({'type': 'Binary', 'confidence': 90})
 
         # JWT detection
-        if re.match(r'^eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$', text):
+        if regex_cache.match(r'^eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$', text):
             detected.append({'type': 'JWT Token', 'confidence': 95})
 
         # Hash detection
@@ -419,7 +419,7 @@ class CryptoAdvancedEngine:
         # Try to decode from hex first
         raw = None
         try:
-            if re.match(r'^[0-9a-fA-F]+$', ciphertext) and len(ciphertext) % 2 == 0:
+            if regex_cache.match(r'^[0-9a-fA-F]+$', ciphertext) and len(ciphertext) % 2 == 0:
                 raw = bytes.fromhex(ciphertext)
             else:
                 raw = ciphertext.encode('utf-8', errors='ignore')
@@ -950,7 +950,7 @@ class CryptoAdvancedEngine:
         results = []
         try:
             clean = text.replace(' ', '').replace('0x', '').replace('\\x', '')
-            if re.match(r'^[0-9a-fA-F]+$', clean) and len(clean) % 2 == 0 and len(clean) >= 2:
+            if regex_cache.match(r'^[0-9a-fA-F]+$', clean) and len(clean) % 2 == 0 and len(clean) >= 2:
                 decoded = bytes.fromhex(clean).decode('utf-8', errors='ignore')
                 if decoded and len(decoded) > 0:
                     results.append(decoded)
@@ -1021,7 +1021,7 @@ class CryptoAdvancedEngine:
         results = []
         try:
             clean = text.replace(' ', '')
-            if re.match(r'^[01]+$', clean) and len(clean) % 8 == 0:
+            if regex_cache.match(r'^[01]+$', clean) and len(clean) % 8 == 0:
                 decoded = ''
                 for i in range(0, len(clean), 8):
                     byte = clean[i:i+8]
@@ -1039,7 +1039,7 @@ class CryptoAdvancedEngine:
             parts = text.split()
             decoded = ''
             for part in parts:
-                if re.match(r'^[0-7]+$', part):
+                if regex_cache.match(r'^[0-7]+$', part):
                     val = int(part, 8)
                     if 0 <= val < 256:
                         decoded += chr(val)
@@ -1202,7 +1202,7 @@ class CryptoAdvancedEngine:
             score += 10
 
         # Common word presence
-        words = re.findall(r'\b[a-z]+\b', text.lower())
+        words = regex_cache.findall(r'\b[a-z]+\b', text.lower())
         if words:
             common_count = sum(1 for w in words if w in COMMON_WORDS)
             word_ratio = common_count / len(words)
@@ -1280,21 +1280,21 @@ class CryptoAdvancedEngine:
         results = []
         t = text.strip().lower()
 
-        if re.match(r'^[a-f0-9]{32}$', t):
+        if regex_cache.match(r'^[a-f0-9]{32}$', t):
             results.append({'type': 'MD5/NTLM Hash', 'confidence': 75})
-        elif re.match(r'^[a-f0-9]{40}$', t):
+        elif regex_cache.match(r'^[a-f0-9]{40}$', t):
             results.append({'type': 'SHA1 Hash', 'confidence': 75})
-        elif re.match(r'^[a-f0-9]{64}$', t):
+        elif regex_cache.match(r'^[a-f0-9]{64}$', t):
             results.append({'type': 'SHA256 Hash', 'confidence': 75})
-        elif re.match(r'^[a-f0-9]{128}$', t):
+        elif regex_cache.match(r'^[a-f0-9]{128}$', t):
             results.append({'type': 'SHA512 Hash', 'confidence': 75})
-        elif re.match(r'^\$2[aby]\$', t):
+        elif regex_cache.match(r'^\$2[aby]\$', t):
             results.append({'type': 'bcrypt Hash', 'confidence': 95})
-        elif re.match(r'^\$6\$', t):
+        elif regex_cache.match(r'^\$6\$', t):
             results.append({'type': 'SHA-512-Crypt Hash', 'confidence': 95})
-        elif re.match(r'^\$1\$', t):
+        elif regex_cache.match(r'^\$1\$', t):
             results.append({'type': 'MD5-Crypt Hash', 'confidence': 95})
-        elif re.match(r'^\*[a-f0-9]{40}$', t):
+        elif regex_cache.match(r'^\*[a-f0-9]{40}$', t):
             results.append({'type': 'MySQL5 Hash', 'confidence': 90})
 
         return results

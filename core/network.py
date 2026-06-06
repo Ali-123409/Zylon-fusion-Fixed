@@ -16,9 +16,9 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, DEFAULT_PORTS,
-    QUICK_PORTS, MAX_THREADS
+    DEFAULT_PORTS, DEFAULT_TIMEOUT, MAX_THREADS, QUICK_PORTS, USER_AGENTS, VERIFY_SSL
 )
+from core.shared_infra import shared_session, regex_cache
 
 # DNS resolver compatibility (dnspython < 2.0 uses query, >= 2.0 uses resolve)
 try:
@@ -31,9 +31,9 @@ class NetworkEngine:
     """Advanced Network Scanning Engine - Termux Non-Root Compatible"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
+        # User-Agent rotation handled by shared_session
+        pass
 
     # ========================================================================
     # DNS RESOLUTION

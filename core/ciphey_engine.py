@@ -20,6 +20,8 @@ import hmac as hmac_module
 from collections import deque
 from urllib.parse import unquote, unquote_plus
 
+from core.shared_infra import shared_session, regex_cache
+
 # ============================================================================
 # PLAINTEXT DETECTION
 # ============================================================================
@@ -88,7 +90,7 @@ class PlaintextChecker:
             score += 10
         
         # Check 2: Common English word presence
-        words = re.findall(r'\b[a-z]+\b', text.lower())
+        words = regex_cache.findall(r'\b[a-z]+\b', text.lower())
         if words:
             word_match = sum(1 for w in words if w in cls.COMMON_WORDS)
             word_ratio = word_match / len(words) if words else 0
@@ -101,7 +103,7 @@ class PlaintextChecker:
         
         # Check 3: Pattern matching
         for pattern in cls.PLAINTEXT_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
+            if regex_cache.search(pattern, text, re.IGNORECASE):
                 score += 10
                 break
         
@@ -178,7 +180,7 @@ class Base64Decoder(BaseDecoder):
         clean = text.strip().replace('\n', '').replace(' ', '')
         if len(clean) % 4 != 0:
             return False
-        return bool(re.match(r'^[A-Za-z0-9+/=]+$', clean))
+        return bool(regex_cache.match(r'^[A-Za-z0-9+/=]+$', clean))
     
     @classmethod
     def decode(cls, text):
@@ -205,7 +207,7 @@ class Base64URLDecoder(BaseDecoder):
         if len(text) < 4:
             return False
         clean = text.strip().replace('\n', '').replace(' ', '')
-        return bool(re.match(r'^[A-Za-z0-9_-]=*$', clean)) and '-' in clean or '_' in clean
+        return bool(regex_cache.match(r'^[A-Za-z0-9_-]=*$', clean)) and '-' in clean or '_' in clean
     
     @classmethod
     def decode(cls, text):
@@ -232,7 +234,7 @@ class Base32Decoder(BaseDecoder):
         clean = text.strip().replace('\n', '').replace(' ', '').replace('=', '')
         if len(clean) < 8:
             return False
-        return bool(re.match(r'^[A-Z2-7]+$', clean))
+        return bool(regex_cache.match(r'^[A-Z2-7]+$', clean))
     
     @classmethod
     def decode(cls, text):
@@ -258,7 +260,7 @@ class HexDecoder(BaseDecoder):
         clean = text.strip().replace(' ', '').replace('0x', '').replace('\\x', '').replace(':', '').replace(';', '')
         if len(clean) < 2 or len(clean) % 2 != 0:
             return False
-        return bool(re.match(r'^[0-9a-fA-F]+$', clean))
+        return bool(regex_cache.match(r'^[0-9a-fA-F]+$', clean))
     
     @classmethod
     def decode(cls, text):
@@ -734,7 +736,7 @@ class HashIdentifier:
         for name, pattern, length in cls.HASH_PATTERNS:
             if length > 0 and len(clean) != length:
                 continue
-            if re.match(pattern, clean):
+            if regex_cache.match(pattern, clean):
                 matches.append(name)
         
         # Special checks

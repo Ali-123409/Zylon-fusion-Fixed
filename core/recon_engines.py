@@ -152,7 +152,7 @@ class LinkFinderEngine:
                 return []
             
             # Find JS files in HTML
-            js_links = re.findall(r'(?:src|href)\s*=\s*["\']([^"\']*\.js[^"\']*)["\']', resp.text)
+            js_links = regex_cache.findall(r'(?:src|href)\s*=\s*["\']([^"\']*\.js[^"\']*)["\']', resp.text)
             
             for js_link in js_links[:20]:
                 js_url = urljoin(target, js_link)
@@ -167,7 +167,7 @@ class LinkFinderEngine:
                     
                     # Extract URLs/endpoints
                     for pattern in self.URL_PATTERNS:
-                        matches = re.findall(pattern, js_content)
+                        matches = regex_cache.findall(pattern, js_content)
                         for match in matches:
                             match = match.strip('"\'')
                             if match not in endpoints and len(match) > 5:
@@ -175,7 +175,7 @@ class LinkFinderEngine:
                     
                     # Extract secrets
                     for secret_name, secret_pattern in self.SECRET_PATTERNS.items():
-                        secret_matches = re.findall(secret_pattern, js_content)
+                        secret_matches = regex_cache.findall(secret_pattern, js_content)
                         for sm in secret_matches:
                             secrets.append({
                                 'type': secret_name,
@@ -187,7 +187,7 @@ class LinkFinderEngine:
             
             # Also extract from inline scripts
             for pattern in self.URL_PATTERNS:
-                matches = re.findall(pattern, resp.text)
+                matches = regex_cache.findall(pattern, resp.text)
                 for match in matches:
                     match = match.strip('"\'')
                     if match not in endpoints and len(match) > 5:
@@ -195,7 +195,7 @@ class LinkFinderEngine:
             
             # Extract secrets from inline scripts
             for secret_name, secret_pattern in self.SECRET_PATTERNS.items():
-                secret_matches = re.findall(secret_pattern, resp.text)
+                secret_matches = regex_cache.findall(secret_pattern, resp.text)
                 for sm in secret_matches:
                     secrets.append({
                         'type': secret_name,
@@ -300,6 +300,8 @@ class ArjunEngine:
 
 # Needed for random in ArjunEngine
 import random
+
+from core.shared_infra import shared_session, regex_cache
 
 
 # ============================================================================
@@ -621,7 +623,7 @@ class TehqeeqEngine:
         return results
     
     def _extract_title(self, html):
-        match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        match = regex_cache.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
         return match.group(1).strip() if match else 'N/A'
     
     def _detect_tech(self, resp):

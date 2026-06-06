@@ -20,6 +20,8 @@ import time
 from collections import OrderedDict
 from datetime import datetime
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # JWT CORE FUNCTIONS
 # ============================================================================

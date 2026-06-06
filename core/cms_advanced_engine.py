@@ -31,6 +31,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLORS
@@ -410,7 +411,7 @@ CMS_SIGNATURES = {
     "DotNetNuke": {
         "indicators": [
             {"meta": '<meta name="generator" content="DotNetNuke'},
-            {"header": "X-DNN', 'pattern': '.*"},
+            {"header": "X-DNN", "pattern": ".*"},
         ],
     },
     "Sitecore": {
@@ -599,7 +600,7 @@ class CMSAdvancedEngine:
         self.target_url = target_url.rstrip('/') if target_url else None
         self.threads = threads
         self.timeout = timeout
-        self.session = requests.Session()
+        self.session = shared_session
         self.session.verify = False
         self.session.headers.update({
             'User-Agent': random.choice(USER_AGENTS)
@@ -682,7 +683,7 @@ class CMSAdvancedEngine:
                 if "header" in indicator:
                     header_name = indicator["header"]
                     if header_name in homepage_headers:
-                        if re.match(indicator["pattern"], homepage_headers[header_name]):
+                        if regex_cache.match(indicator["pattern"], homepage_headers[header_name]):
                             detected = True
                             detection_method = f"header:{header_name}"
                             break
@@ -726,7 +727,7 @@ class CMSAdvancedEngine:
                 if "version_path" in sigs:
                     vresp = self._get(sigs["version_path"])
                     if vresp:
-                        vmatch = re.search(sigs.get("version_regex", r'([\d.]+)'), vresp.text)
+                        vmatch = regex_cache.search(sigs.get("version_regex", r'([\d.]+)'), vresp.text)
                         if vmatch:
                             version = vmatch.group(1)
 
@@ -824,7 +825,7 @@ class CMSAdvancedEngine:
             for author_id in range(1, 6):
                 resp = self._get(f"/?author={author_id}")
                 if resp and resp.status_code == 200:
-                    match = re.search(r'/author/([^/]+)/', resp.text)
+                    match = regex_cache.search(r'/author/([^/]+)/', resp.text)
                     if match:
                         results["users"].append({
                             "id": author_id,
@@ -902,7 +903,7 @@ class CMSAdvancedEngine:
             resp = self._get(f"/wp-content/plugins/{plugin}/readme.txt")
             if resp and resp.status_code == 200:
                 version = None
-                vmatch = re.search(r'Stable tag:\s*([\d.]+)', resp.text)
+                vmatch = regex_cache.search(r'Stable tag:\s*([\d.]+)', resp.text)
                 if vmatch:
                     version = vmatch.group(1)
                 results["plugins"].append({
@@ -920,7 +921,7 @@ class CMSAdvancedEngine:
             resp = self._get(f"/wp-content/themes/{theme}/style.css")
             if resp and resp.status_code == 200:
                 version = None
-                vmatch = re.search(r'Version:\s*([\d.]+)', resp.text)
+                vmatch = regex_cache.search(r'Version:\s*([\d.]+)', resp.text)
                 if vmatch:
                     version = vmatch.group(1)
                 results["themes"].append({

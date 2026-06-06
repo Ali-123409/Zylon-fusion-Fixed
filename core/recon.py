@@ -21,12 +21,14 @@ from core.var import (
 )
 import random
 
+from core.shared_infra import shared_session, regex_cache, framework_discovery
+
 
 class ReconEngine:
     """Advanced Reconnaissance Engine - omino + wizard + Zylon fusion"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
+        self.session = session or shared_session
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
         self.session.verify = VERIFY_SSL
         self.cache = {}
@@ -312,7 +314,7 @@ class ReconEngine:
             resp = self.session.get(url, timeout=10, headers={'Accept': 'text/html'})
             if resp.status_code == 200:
                 subs = set()
-                matches = re.findall(r'(?:https?://)?([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
+                matches = regex_cache.findall(r'(?:https?://)?([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
                 for m in matches:
                     subs.add(m.lower())
                 return subs
@@ -336,7 +338,7 @@ class ReconEngine:
                     resp = self.session.post(url, data=data, headers=headers, timeout=15)
                     # Parse results
                     subs = set()
-                    matches = re.findall(r'([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
+                    matches = regex_cache.findall(r'([a-zA-Z0-9._-]+\.' + re.escape(domain) + r')', resp.text)
                     for m in matches:
                         subs.add(m.lower())
                     return subs
@@ -579,7 +581,18 @@ class ReconEngine:
 
             technologies.sort(key=lambda x: x['confidence'], reverse=True)
 
-            return {'technologies': technologies, 'total': len(technologies)}
+            result = {'technologies': technologies, 'total': len(technologies)}
+
+            # Modern SPA Framework Discovery
+            try:
+                spa_results = framework_discovery.discover(url)
+                for category, endpoints in spa_results.items():
+                    if endpoints:
+                        result[f'spa_{category}'] = endpoints
+            except Exception:
+                pass
+
+            return result
 
         except Exception as e:
             return {'technologies': [], 'error': str(e)[:100]}
@@ -690,7 +703,7 @@ class ReconEngine:
                 result['css_files'].append(urljoin(url, tag['href']))
 
             # Extract emails
-            emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text)
+            emails = regex_cache.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text)
             result['emails'] = list(set(emails))
 
             # Deduplicate

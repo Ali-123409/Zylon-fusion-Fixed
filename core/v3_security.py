@@ -37,12 +37,15 @@ except ImportError:
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT, VERIFY_SSL, MAX_THREADS
 
+from core.shared_infra import shared_session, regex_cache, WAFEvasionMixin
 
-class V3SecurityEngine:
+
+class V3SecurityEngine(WAFEvasionMixin):
     """V3.0 Security Engine: 20 Advanced Bug Bounty Modules"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
+        super().__init__()
+        self.session = session or shared_session
         self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
         self.session.verify = VERIFY_SSL
 
@@ -250,7 +253,7 @@ class V3SecurityEngine:
                 for script in soup.find_all('script'):
                     if script.string and 'graphql' in script.string.lower():
                         # Try to extract URL
-                        urls = re.findall(r'["\']([^"\']*graphql[^"\']*)["\']', script.string, re.I)
+                        urls = regex_cache.findall(r'["\']([^"\']*graphql[^"\']*)["\']', script.string, re.I)
                         for u in urls:
                             endpoints.append(urljoin(url, u))
         except Exception:
@@ -328,7 +331,7 @@ class V3SecurityEngine:
 
                 # Check for source-sink patterns
                 for pattern, desc, severity in dangerous_patterns:
-                    matches = re.finditer(pattern, js_content, re.IGNORECASE | re.DOTALL)
+                    matches = regex_cache.compile(pattern, re.IGNORECASE | re.DOTALL).finditer(js_content)
                     for match in matches:
                         # Get surrounding context
                         start = max(0, match.start() - 80)
@@ -370,7 +373,7 @@ class V3SecurityEngine:
             for script in soup.find_all('script'):
                 if script.string and len(script.string) > 50:
                     for pattern, desc, severity in dangerous_patterns:
-                        if re.search(pattern, script.string, re.IGNORECASE | re.DOTALL):
+                        if regex_cache.search(pattern, script.string, re.IGNORECASE | re.DOTALL):
                             result['vulnerable'] = True
                             result['findings'].append({
                                 'type': 'DOM XSS in Inline Script',
@@ -396,7 +399,7 @@ class V3SecurityEngine:
                 js_files.append(js_url)
 
             # Inline references to JS
-            for match in re.finditer(r'["\']([^"\']*\.js[^"\']*)["\']', resp.text):
+            for match in regex_cache.compile(r'["\']([^"\']*\.js[^"\']*)["\']').finditer(resp.text):
                 js_url = urljoin(url, match.group(1))
                 js_files.append(js_url)
         except Exception:
@@ -442,7 +445,7 @@ class V3SecurityEngine:
             resp = self.session.get(bing_url, headers=headers, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             if resp.status_code == 200:
                 # Extract domains from search results
-                domain_pattern = re.compile(r'https?://([a-zA-Z0-9._-]+)')
+                domain_pattern = regex_cache.compile(r'https?://([a-zA-Z0-9._-]+)')
                 found = domain_pattern.findall(resp.text)
                 # Filter to only domain names (not bing itself)
                 filtered = [d for d in found if 'bing' not in d.lower() and 'microsoft' not in d.lower()
@@ -974,7 +977,7 @@ class V3SecurityEngine:
                 has_csrf = False
                 for form in soup.find_all('form'):
                     csrf_fields = form.find_all('input', {
-                        'name': re.compile(r'csrf|token|_token|authenticity', re.I)
+                        'name': regex_cache.compile(r'csrf|token|_token|authenticity', re.I)
                     })
                     if csrf_fields:
                         has_csrf = True
@@ -1154,7 +1157,7 @@ class V3SecurityEngine:
             self._rotate_ua()
             resp = self.session.get(url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             # Check if tokens are in URL (from Referer leaks)
-            if re.search(r'[?&](access_token|token|code|id_token)=', resp.url):
+            if regex_cache.search(r'[?&](access_token|token|code|id_token)=', resp.url):
                 result['vulnerable'] = True
                 result['findings'].append({
                     'type': 'Token in URL Fragment',
@@ -1444,7 +1447,7 @@ class V3SecurityEngine:
                 resp = self.session.get(shodan_url, headers=headers, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
                 if resp.status_code == 200:
                     # Extract domain results
-                    domain_pattern = re.compile(r'([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})')
+                    domain_pattern = regex_cache.compile(r'([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})')
                     domains = domain_pattern.findall(resp.text)
                     filtered = [d for d in domains if d.count('.') >= 1 and len(d) < 100
                               and 'shodan' not in d.lower()]
@@ -1473,7 +1476,7 @@ class V3SecurityEngine:
             resp = self.session.get(search_url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             if resp.status_code == 200:
                 # Extract pastebin URLs
-                pb_urls = re.findall(r'pastebin\.com/([a-zA-Z0-9]{8})', resp.text)
+                pb_urls = regex_cache.findall(r'pastebin\.com/([a-zA-Z0-9]{8})', resp.text)
                 pb_urls = list(set(pb_urls))[:10]
 
                 for pb_id in pb_urls:
@@ -1503,7 +1506,7 @@ class V3SecurityEngine:
             self._rotate_ua()
             resp = self.session.get(search_url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             if resp.status_code == 200:
-                gist_urls = re.findall(r'gist\.github\.com/([a-zA-Z0-9/_-]+)', resp.text)
+                gist_urls = regex_cache.findall(r'gist\.github\.com/([a-zA-Z0-9/_-]+)', resp.text)
                 result['sources']['github_gist'] = len(set(gist_urls)[:5])
         except Exception:
             pass
@@ -1514,7 +1517,7 @@ class V3SecurityEngine:
             self._rotate_ua()
             resp = self.session.get(search_url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             if resp.status_code == 200:
-                rentry_urls = re.findall(r'rentry\.co/([a-zA-Z0-9_-]+)', resp.text)
+                rentry_urls = regex_cache.findall(r'rentry\.co/([a-zA-Z0-9_-]+)', resp.text)
                 result['sources']['rentry'] = len(set(rentry_urls)[:5])
         except Exception:
             pass
@@ -1538,7 +1541,7 @@ class V3SecurityEngine:
 
         for stype, pattern_list in patterns.items():
             for pattern in pattern_list:
-                if re.search(pattern, text, re.I):
+                if regex_cache.search(pattern, text, re.I):
                     sensitive.append(stype)
                     break
         return sensitive
@@ -1571,7 +1574,7 @@ class V3SecurityEngine:
                 resp = self.session.get(search_url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
                 if resp.status_code == 200:
                     # Find short URLs
-                    short_patterns = re.findall(
+                    short_patterns = regex_cache.findall(
                         r'(https?://(?:bit\.ly|t\.co|tinyurl\.com|goo\.gl|ow\.ly|is\.gd)/[a-zA-Z0-9]+)',
                         resp.text
                     )
@@ -1715,7 +1718,7 @@ class V3SecurityEngine:
                 result['sitemap']['found'] = True
 
                 # Parse sitemap URLs
-                urls = re.findall(r'<loc>(.*?)</loc>', resp.text)
+                urls = regex_cache.findall(r'<loc>(.*?)</loc>', resp.text)
                 result['sitemap']['urls'] = urls[:100]
                 result['sitemap']['total'] = len(urls)
 
@@ -1901,7 +1904,7 @@ class V3SecurityEngine:
             self._rotate_ua()
             resp = self.session.get(url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             # Find WebSocket URLs in JavaScript
-            ws_pattern = re.findall(r'(?:new\s+WebSocket|ws:|wss:)\s*\(?["\']([^"\']+)["\']', resp.text)
+            ws_pattern = regex_cache.findall(r'(?:new\s+WebSocket|ws:|wss:)\s*\(?["\']([^"\']+)["\']', resp.text)
             for ws_match in ws_pattern:
                 if ws_match.startswith('/'):
                     ws_urls.append(f"{ws_base}{ws_match}")
@@ -2215,7 +2218,7 @@ class V3SecurityEngine:
             if script.string and 'http://' in script.string:
                 # Check for XHR/fetch to HTTP
                 if any(x in script.string.lower() for x in ['xmlhttprequest', 'fetch(', 'ajax']):
-                    http_urls = re.findall(r'http://[^\s"\'<>]+', script.string)
+                    http_urls = regex_cache.findall(r'http://[^\s"\'<>]+', script.string)
                     for h_url in http_urls:
                         result['vulnerable'] = True
                         result['active'].append({
@@ -2298,7 +2301,7 @@ class V3SecurityEngine:
             self._rotate_ua()
             resp = self.session.get(url, timeout=DEFAULT_TIMEOUT, verify=VERIFY_SSL)
             # Find JS files and check for source maps
-            js_urls = re.findall(r'src=["\']([^"\']*\.js[^"\']*)["\']', resp.text)
+            js_urls = regex_cache.findall(r'src=["\']([^"\']*\.js[^"\']*)["\']', resp.text)
             for js_url in js_urls[:10]:
                 full_js = urljoin(url, js_url)
                 # Check for .map file
@@ -2330,7 +2333,7 @@ class V3SecurityEngine:
                              'X-Runtime', 'X-Version', 'X-API-Version']
             for header in version_headers:
                 value = resp.headers.get(header, '')
-                if value and re.search(r'\d+\.\d+', value):
+                if value and regex_cache.search(r'\d+\.\d+', value):
                     result['findings'].append({
                         'type': 'Server Version Disclosure',
                         'header': header,
@@ -2375,7 +2378,7 @@ class V3SecurityEngine:
                 r'Warning:.+in .+\.php',
             ]
             for pattern in trace_patterns:
-                if re.search(pattern, resp.text):
+                if regex_cache.search(pattern, resp.text):
                     result['vulnerable'] = True
                     result['findings'].append({
                         'type': 'Stack Trace Disclosure',
@@ -2439,7 +2442,7 @@ class V3SecurityEngine:
         ]
 
         for pattern, desc, severity in disclosure_patterns:
-            if re.search(pattern, resp.text, re.I):
+            if regex_cache.search(pattern, resp.text, re.I):
                 result['vulnerable'] = True
                 result['findings'].append({
                     'type': desc,

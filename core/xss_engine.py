@@ -17,7 +17,6 @@ Capabilities:
 Termux Compatible | No Root Required | Python 3.13+
 """
 
-import requests
 import re
 import time
 import random
@@ -25,6 +24,8 @@ import string
 import urllib.parse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from core.shared_infra import shared_session, PayloadInjector, regex_cache
 
 # ============================================================================
 # XSS PAYLOAD DATABASE (from XSStrike + Xenotix + Custom)
@@ -180,13 +181,9 @@ class XSSEngine:
         self.timeout = timeout
         self.threads = threads
         self.callback_url = callback_url
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
+        self.session = shared_session
         if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+            self.session._session.proxies = {'http': proxy, 'https': proxy}
         self.findings = []
         self.marker_prefix = "zylon"
         self._generate_markers()
@@ -197,13 +194,16 @@ class XSSEngine:
         self.marker = f"{self.marker_prefix}{rand}"
         self.marker_regex = re.compile(re.escape(self.marker), re.IGNORECASE)
 
-    def _send_request(self, url, method=None, data=None, headers=None):
+    def _send_request(self, url, method=None, data=None, headers=None, json_data=None):
         """Send HTTP request with error handling"""
         try:
             m = method or self.method
             d = data or self.data
             h = headers or self.headers
-            if m == "GET":
+            if json_data is not None:
+                resp = self.session.post(url, json=json_data, headers=h,
+                                        cookies=self.cookies, timeout=self.timeout)
+            elif m == "GET":
                 resp = self.session.get(url, params=d, headers=h,
                                        cookies=self.cookies, timeout=self.timeout)
             else:
@@ -214,13 +214,33 @@ class XSSEngine:
             return None
 
     def _inject_payload(self, payload, param=None):
-        """Inject XSS payload into target parameter"""
+        """Inject XSS payload into target parameter via GET, POST, JSON body, and headers"""
         p = param or self.parameter
         if not p:
             return None
+        # GET parameter injection
         sep = "&" if "?" in self.target_url else "?"
         url = f"{self.target_url}{sep}{p}={urllib.parse.quote(payload, safe='')}"
-        return self._send_request(url, method="GET")
+        resp = self._send_request(url, method="GET")
+
+        # JSON body injection
+        try:
+            self.session.post(self.target_url, json={p: payload},
+                             headers={**self.headers, 'Content-Type': 'application/json'},
+                             cookies=self.cookies, timeout=self.timeout)
+        except Exception:
+            pass
+
+        # Header injection via PayloadInjector (User-Agent, Referer)
+        try:
+            for header_name in ['User-Agent', 'Referer']:
+                inj = PayloadInjector.inject_header(self.target_url, header_name, payload)
+                self.session.get(inj['url'], headers={**self.headers, **inj.get('headers', {})},
+                                cookies=self.cookies, timeout=self.timeout)
+        except Exception:
+            pass
+
+        return resp
 
     def _check_reflection(self, payload, response):
         """Check if payload is reflected in response"""
@@ -251,7 +271,7 @@ class XSSEngine:
             rf'<script[^>]*>[^<]*{re.escape(param_value[:15])}',
         ]
         for p in js_patterns:
-            if re.search(p, text, re.IGNORECASE):
+            if regex_cache.search(p, text, re.IGNORECASE):
                 return "javascript"
 
         # Check for HTML attribute context
@@ -261,15 +281,15 @@ class XSSEngine:
             rf'src\s*=\s*["\']?{re.escape(param_value[:20])}',
         ]
         for p in attr_patterns:
-            if re.search(p, text, re.IGNORECASE):
+            if regex_cache.search(p, text, re.IGNORECASE):
                 return "html_attribute"
 
         # Check for URL context
-        if re.search(rf'href\s*=\s*["\']?[^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
+        if regex_cache.search(rf'href\s*=\s*["\']?[^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
             return "url"
 
         # Check for CSS context
-        if re.search(rf'style\s*=\s*["\'][^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
+        if regex_cache.search(rf'style\s*=\s*["\'][^"\']*{re.escape(param_value[:20])}', text, re.IGNORECASE):
             return "css"
 
         return "html_body"
@@ -380,7 +400,7 @@ class XSSEngine:
                 rf'document\.{re.escape(source.split(".")[-1])}' if "." in source else '',
             ]
             for p in patterns:
-                if p and re.search(p, text):
+                if p and regex_cache.search(p, text):
                     results["sources_found"].append(source)
                     break
 
@@ -393,7 +413,7 @@ class XSSEngine:
         for source in results["sources_found"]:
             for sink in results["sinks_found"]:
                 # Simple heuristic: both appear in same <script> block
-                script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', text,
+                script_blocks = regex_cache.findall(r'<script[^>]*>(.*?)</script>', text,
                                           re.IGNORECASE | re.DOTALL)
                 for block in script_blocks:
                     src_name = source.split(".")[-1] if "." in source else source

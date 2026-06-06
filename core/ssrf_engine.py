@@ -21,6 +21,8 @@ from urllib.parse import quote_plus, urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple, Generator
 
+from core.shared_infra import shared_session, oob_provider, regex_cache
+
 try:
     import requests
 except ImportError:
@@ -325,10 +327,7 @@ class SSRFDetector:
         self.timeout = timeout
         self.proxy = proxy
         self.verify_ssl = verify_ssl
-        self.session = requests.Session()
-        self.session.verify = verify_ssl
-        if proxy:
-            self.session.proxies = {"http": proxy, "https": proxy}
+        self.session = shared_session
         self.baseline_response = None
         self.baseline_text = ""
 
@@ -384,7 +383,7 @@ class SSRFDetector:
             if diff.strip():
                 # Check for known SSRF response patterns
                 for pattern in self.SSRF_INDICATORS:
-                    if re.search(pattern, diff, re.IGNORECASE):
+                    if regex_cache.search(pattern, diff, re.IGNORECASE):
                         results["vulnerable"] = True
                         results["findings"].append({
                             "test": name,
@@ -500,10 +499,7 @@ class CloudMetadataExtractor:
         self.timeout = timeout
         self.proxy = proxy
         self.bypass_level = bypass_level
-        self.session = requests.Session()
-        self.session.verify = False
-        if proxy:
-            self.session.proxies = {"http": proxy, "https": proxy}
+        self.session = shared_session
 
     def _send_ssrf(self, value: str, extra_headers: Dict = None) -> Optional[str]:
         """Send SSRF request and return response text."""
@@ -633,10 +629,7 @@ class SSRFFileReader:
         self.param = param
         self.timeout = timeout
         self.proxy = proxy
-        self.session = requests.Session()
-        self.session.verify = False
-        if proxy:
-            self.session.proxies = {"http": proxy, "https": proxy}
+        self.session = shared_session
 
     def _send_ssrf(self, value: str) -> Optional[str]:
         """Send SSRF request and return response text."""
@@ -685,7 +678,7 @@ class SSRFFileReader:
                         r"MemTotal",                         # /proc/meminfo
                     ]
                     for pattern in known_patterns:
-                        if re.search(pattern, diff):
+                        if regex_cache.search(pattern, diff):
                             results["read"][filepath] = diff[:2000]
                             break
                     else:
@@ -723,10 +716,7 @@ class SSRFPortScanner:
         self.timeout = timeout
         self.proxy = proxy
         self.max_workers = max_workers
-        self.session = requests.Session()
-        self.session.verify = False
-        if proxy:
-            self.session.proxies = {"http": proxy, "https": proxy}
+        self.session = shared_session
 
     def _scan_port(self, port: int, baseline: str) -> Dict:
         """Scan a single port through SSRF."""
@@ -845,10 +835,7 @@ class SSRFNetworkScanner:
         self.timeout = timeout
         self.proxy = proxy
         self.max_workers = max_workers
-        self.session = requests.Session()
-        self.session.verify = False
-        if proxy:
-            self.session.proxies = {"http": proxy, "https": proxy}
+        self.session = shared_session
 
     def _expand_cidr(self, cidr: str) -> List[str]:
         """Expand CIDR notation to list of IPs."""

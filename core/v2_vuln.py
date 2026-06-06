@@ -15,18 +15,18 @@ from bs4 import BeautifulSoup
 import random
 
 from core.var import *
+from core.shared_infra import shared_session, regex_cache
 
 
 class V2VulnEngine:
     """V2.0 Vulnerability: API Fuzzer, Rate Limit, Sensitive Files"""
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
-        self.session.headers.update({'User-Agent': USER_AGENTS[0]})
-        self.session.verify = VERIFY_SSL
+        self.session = session or shared_session
 
     def _rotate_ua(self):
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
+        # User-Agent rotation handled by shared_session
+        pass
 
     # ========================================================================
     # API ENDPOINT DISCOVERY + FUZZER

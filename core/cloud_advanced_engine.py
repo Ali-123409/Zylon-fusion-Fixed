@@ -40,8 +40,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import (
-    USER_AGENTS, DEFAULT_TIMEOUT, MAX_THREADS, CLOUD_BUCKET_PATTERNS
+    DEFAULT_TIMEOUT, MAX_THREADS, USER_AGENTS
 )
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
 
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
@@ -373,12 +374,8 @@ class CloudAdvancedEngine:
         self.threads = threads
         self.timeout = timeout
         self.lock = threading.Lock()
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': USER_AGENTS[0] if USER_AGENTS else
-                'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
+        self.session = shared_session
+        # SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
 
@@ -1131,7 +1128,7 @@ class CloudAdvancedEngine:
 
                 for cred_name, cred_config in CLOUD_CREDENTIAL_PATTERNS.items():
                     try:
-                        matches = re.findall(cred_config["regex"], content)
+                        matches = regex_cache.findall(cred_config["regex"], content)
                         if matches:
                             # Deduplicate
                             unique_matches = list(set(matches))[:5]
@@ -1155,7 +1152,7 @@ class CloudAdvancedEngine:
                 # Check for .env key-value pairs
                 if path.startswith("/.env"):
                     env_pattern = r"(?i)(AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|DATABASE_URL|SECRET_KEY|API_KEY|PRIVATE_KEY|TOKEN)\s*[=:]\s*[\"']?([^\s\"']+)"
-                    env_matches = re.findall(env_pattern, content)
+                    env_matches = regex_cache.findall(env_pattern, content)
                     for key, value in env_matches:
                         cred_finding = {
                             "type": "env_credential",

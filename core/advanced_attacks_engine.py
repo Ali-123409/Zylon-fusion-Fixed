@@ -18,6 +18,7 @@ import json
 import requests
 import urllib3
 from urllib.parse import urlparse, urljoin
+from core.shared_infra import shared_session, regex_cache, oob_provider
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

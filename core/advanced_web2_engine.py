@@ -22,6 +22,8 @@ import hashlib
 from datetime import datetime
 from urllib.parse import quote, urlparse
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 # ============================================================================
 # SSTI ADDITIONAL PAYLOADS (from Tplmap + SSTI-Finder)
 # ============================================================================
@@ -142,13 +144,7 @@ class AdvancedWebEngine:
         self.headers = headers or {}
         self.cookies = cookies or {}
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36'
-        })
-        if proxy:
-            self.session.proxies = {'http': proxy, 'https': proxy}
+        self.session = shared_session
 
     def _inject(self, payload, param=None):
         """Inject payload into parameter"""
@@ -158,9 +154,16 @@ class AdvancedWebEngine:
         try:
             if self.method == "GET":
                 return self.session.get(url, timeout=self.timeout)
-            else:
+            elif self.method == "POST":
                 return self.session.post(self.target_url, data={p: payload},
                                         timeout=self.timeout)
+            elif self.method == "PUT":
+                return self.session.put(self.target_url, data={p: payload},
+                                       timeout=self.timeout)
+            elif self.method == "DELETE":
+                return self.session.delete(url, timeout=self.timeout)
+            else:
+                return self.session.request(self.method, url, timeout=self.timeout)
         except Exception:
             return None
 

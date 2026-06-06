@@ -30,6 +30,8 @@ import threading
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from core.shared_infra import shared_session, regex_cache, oob_provider, PayloadInjector
+
 # ============================================================================
 # ANSI COLOR CODES (Termux-compatible)
 # ============================================================================
@@ -299,11 +301,8 @@ class LFIAdvancedEngine:
         self.proxy = proxy
         self.timeout = timeout
         self.threads = threads
-        self.session = requests.Session()
-        self.session.verify = False
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36'
-        })
+        self.session = shared_session
+        # User-Agent rotation and SSL verification handled by shared_session
         if proxy:
             self.session.proxies = {'http': proxy, 'https': proxy}
         self.findings = []
@@ -360,7 +359,7 @@ class LFIAdvancedEngine:
             if file_type and sig_name != file_type:
                 continue
             for pattern in patterns:
-                if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
+                if regex_cache.search(pattern, text, re.IGNORECASE | re.MULTILINE):
                     matches.append(sig_name)
                     break
         return list(set(matches))
@@ -381,7 +380,7 @@ class LFIAdvancedEngine:
             r'(%3[A-F]|%2[F-B]|%3[0-9]|[A-Za-z0-9+/=]){20,}',  # URL-encoded base64
         ]
         for pattern in b64_patterns:
-            match = re.search(pattern, content)
+            match = regex_cache.search(pattern, content)
             if match:
                 try:
                     decoded = base64.b64decode(match.group()).decode('utf-8', errors='ignore')
@@ -613,10 +612,10 @@ class LFIAdvancedEngine:
 
                         elif "version" in file_path and "proc" in file_path:
                             # Extract kernel version
-                            kernel_match = re.search(r'Linux version ([^\s]+)', content)
+                            kernel_match = regex_cache.search(r'Linux version ([^\s]+)', content)
                             if kernel_match:
                                 results["details"]["kernel"] = kernel_match.group(1)
-                            gcc_match = re.search(r'gcc version ([^\s]+)', content)
+                            gcc_match = regex_cache.search(r'gcc version ([^\s]+)', content)
                             if gcc_match:
                                 results["details"].setdefault("services", []).append(f"gcc {gcc_match.group(1)}")
 
@@ -624,7 +623,7 @@ class LFIAdvancedEngine:
                             results["details"]["hostname"] = content.split("\n")[0].strip()
 
                         elif "resolv" in file_path:
-                            nameservers = re.findall(r'nameserver\s+([\d.]+)', content)
+                            nameservers = regex_cache.findall(r'nameserver\s+([\d.]+)', content)
                             if nameservers:
                                 results["details"]["network_info"] = nameservers
 
@@ -870,7 +869,7 @@ class LFIAdvancedEngine:
                             r"groups=\d+",
                         ]
                         for pattern in cmd_indicators:
-                            if re.search(pattern, text):
+                            if regex_cache.search(pattern, text):
                                 results["vulnerable"] = True
                                 results["details"]["rce_achieved"] = True
                                 results["details"]["log_path_found"] = log_path
@@ -893,7 +892,7 @@ class LFIAdvancedEngine:
                             r"Mozilla/", r"200\s+\d+",
                         ]
                         for sig in log_sigs:
-                            if re.search(sig, text):
+                            if regex_cache.search(sig, text):
                                 results["vulnerable"] = True
                                 results["findings"].append({
                                     "type": "log_file_readable",
@@ -967,7 +966,7 @@ class LFIAdvancedEngine:
             resp = self._inject_payload(payload, parameter)
             if resp and resp.status_code == 200:
                 sigs = self._check_signatures(resp.text, "proc_environ")
-                env_matches = re.findall(r'(\w+)=([^\x00\n]+)', resp.text)
+                env_matches = regex_cache.findall(r'(\w+)=([^\x00\n]+)', resp.text)
                 if sigs or (env_matches and len(env_matches) > 3):
                     results["vulnerable"] = True
                     results["details"]["environ_leaked"] = True

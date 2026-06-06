@@ -17,6 +17,8 @@ import requests
 import urllib3
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
+from core.shared_infra import shared_session, regex_cache, PayloadInjector
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ============================================================================
@@ -188,10 +190,9 @@ class NoSQLEngine:
     
     def _make_request(self, url=None, method=None, params=None, data=None,
                       json_data=None, headers=None, cookies=None):
-        """Make HTTP request"""
+        """Make HTTP request using shared session"""
         try:
-            proxies = {'http': self.proxy, 'https': self.proxy} if self.proxy else None
-            resp = requests.request(
+            resp = shared_session.request(
                 method=method or self.method,
                 url=url or self.target_url,
                 params=params or self.params,
@@ -199,13 +200,12 @@ class NoSQLEngine:
                 json=json_data,
                 headers=headers or self.headers,
                 cookies=cookies or self.cookies,
-                proxies=proxies,
                 timeout=self.timeout,
                 verify=False,
                 allow_redirects=True
             )
             return resp
-        except requests.RequestException:
+        except Exception:
             return None
     
     def _get_baseline(self):

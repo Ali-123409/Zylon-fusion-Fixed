@@ -31,6 +31,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from core.var import USER_AGENTS, DEFAULT_TIMEOUT
+from core.shared_infra import shared_session, regex_cache
 
 # ============================================================================
 # ANSI COLORS
@@ -220,9 +221,9 @@ class HashAdvancedEngine:
     """
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({'User-Agent': random.choice(USER_AGENTS)})
-        self.session.verify = False
+        self.session = shared_session
+        # User-Agent rotation handled by shared_session
+        # SSL verification handled by shared_session
 
     # ========================================================================
     # HASH IDENTIFICATION
@@ -247,7 +248,7 @@ class HashAdvancedEngine:
         # Check each hash type
         for name, info in HASH_TYPES.items():
             # Check by regex pattern
-            if info.get('regex') and re.match(info['regex'], hash_string):
+            if info.get('regex') and regex_cache.match(info['regex'], hash_string):
                 confidence = 70
                 # Boost confidence if length matches exactly
                 if info.get('length') and len(hash_string) == info['length']:
@@ -347,13 +348,13 @@ class HashAdvancedEngine:
 
     def _detect_charset(self, hash_string):
         """Detect the character set used in the hash"""
-        if re.match(r'^[a-f0-9]+$', hash_string):
+        if regex_cache.match(r'^[a-f0-9]+$', hash_string):
             return 'hexadecimal_lowercase'
-        elif re.match(r'^[A-F0-9]+$', hash_string):
+        elif regex_cache.match(r'^[A-F0-9]+$', hash_string):
             return 'hexadecimal_uppercase'
-        elif re.match(r'^[a-zA-Z0-9+/=]+$', hash_string):
+        elif regex_cache.match(r'^[a-zA-Z0-9+/=]+$', hash_string):
             return 'base64'
-        elif re.match(r'^[a-zA-Z0-9./$]+$', hash_string):
+        elif regex_cache.match(r'^[a-zA-Z0-9./$]+$', hash_string):
             return 'unix_crypt'
         return 'mixed'
 
@@ -798,7 +799,7 @@ class HashAdvancedEngine:
                 )
                 tried_services.append("hashtoolkit.com")
                 if resp.status_code == 200:
-                    match = re.search(r'resolved-text[^>]*>([^<]+)<', resp.text)
+                    match = regex_cache.search(r'resolved-text[^>]*>([^<]+)<', resp.text)
                     if match:
                         cracked = True
                         plaintext = match.group(1).strip()

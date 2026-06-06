@@ -162,7 +162,7 @@ class WebSocketEngine:
         self.timeout = timeout
         self.threads = threads
         self.proxy = proxy
-        self.session = requests.Session()
+        self.session = shared_session
         self.session.verify = False
         self.session.headers.update({
             'User-Agent': USER_AGENTS[0] if USER_AGENTS else 'Mozilla/5.0'
@@ -812,16 +812,25 @@ class WebSocketEngine:
         self._print(f"  [*] Test 2: Rapid connection test...", CYAN)
         connections_made = 0
         max_conns = 20  # Conservative limit for testing
-        for i in range(max_conns):
-            try:
-                if ws_lib:
-                    ws = ws_lib.create_connection(ws_url, timeout=5)
-                    connections_made += 1
-                    # Don't close immediately - hold connection
-                else:
+        ws_connections = []
+        try:
+            for i in range(max_conns):
+                try:
+                    if ws_lib:
+                        ws = ws_lib.create_connection(ws_url, timeout=5)
+                        connections_made += 1
+                        ws_connections.append(ws)
+                    else:
+                        break
+                except Exception:
                     break
-            except Exception:
-                break
+        finally:
+            # Close all test connections to prevent FD leak
+            for ws_conn in ws_connections:
+                try:
+                    ws_conn.close()
+                except Exception:
+                    pass
 
         flood_result = {"test": "connection_flood", "connections_made": connections_made}
         result["details"]["tests_run"].append(flood_result)
@@ -1192,6 +1201,7 @@ class WebSocketEngine:
 # ============================================================================
 
 from concurrent.futures import ThreadPoolExecutor, as_completed as as_completed_ws
+from core.shared_infra import shared_session
 
 ThreadPoolExecutorWS = ThreadPoolExecutor
 
